@@ -61,4 +61,15 @@ public sealed class AdminApiClient(HttpClient httpClient)
     public async Task<DashboardSnapshotResponse> GetDashboardSnapshotAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<DashboardSnapshotResponse>("/admin/dashboard/snapshot", cancellationToken)
         ?? new DashboardSnapshotResponse([], [], DateTimeOffset.UtcNow);
+
+    public async Task<OperationsStatusResponse> GetOperationsStatusAsync(CancellationToken cancellationToken = default) =>
+        await _httpClient.GetFromJsonAsync<OperationsStatusResponse>("/admin/operations/status", cancellationToken)
+        ?? new OperationsStatusResponse(
+            DateTimeOffset.UtcNow,
+            new OperationalSignalDto("Authentication", "Unknown", "No response was returned.", "Retry the request."),
+            new OperationalSignalDto("Rate limiting", "Unknown", "No response was returned.", "Retry the request."),
+            new OperationalSignalDto("Retry / backoff", "Unknown", "No response was returned.", "Retry the request."),
+            new OperationalSignalDto("Background jobs", "Unknown", "No response was returned.", "Retry the request."),
+            new InfrastructureStatusDto("Unknown", "Unknown", "Unknown", "Unknown"),
+            []);
 }

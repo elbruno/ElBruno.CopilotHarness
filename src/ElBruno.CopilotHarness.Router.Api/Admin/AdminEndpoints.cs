@@ -1,13 +1,20 @@
 using System.Text.Json.Nodes;
 using ElBruno.CopilotHarness.Router.Core.Persistence;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 namespace ElBruno.CopilotHarness.Router.Api.Admin;
 
 public static class AdminEndpoints
 {
-    public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder endpoints)
+    public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder endpoints, bool requireAuthorization)
     {
         var group = endpoints.MapGroup("/admin");
+
+        if (requireAuthorization)
+        {
+            group.RequireAuthorization("AdminOnly");
+        }
 
         group.MapGet("/setup/state", async (IRoutingConfigurationStore store, CancellationToken cancellationToken) =>
         {
@@ -290,6 +297,50 @@ public static class AdminEndpoints
                 snapshot.ConnectedClients.Select(ToConnectedClientDto).ToList(),
                 snapshot.LiveRequests.Select(ToLiveRequestDto).ToList(),
                 now));
+        });
+
+        group.MapGet("/operations/status", async (
+            HealthCheckService healthCheckService,
+            IOptions<PersistenceOptions> persistenceOptions,
+            IHostEnvironment environment,
+            CancellationToken cancellationToken) =>
+        {
+            var report = await healthCheckService.CheckHealthAsync(cancellationToken);
+            var healthChecks = report.Entries
+                .Select(entry => new OperationalHealthDto(
+                    entry.Key,
+                    entry.Value.Status.ToString(),
+                    entry.Value.Description ?? entry.Value.Exception?.Message ?? "No additional details."))
+                .ToList();
+
+            return Results.Ok(new OperationsStatusResponse(
+                DateTimeOffset.UtcNow,
+                new OperationalSignalDto(
+                    "Authentication",
+                    "Not configured",
+                    "The Phase 6 auth surface is not enabled in this build.",
+                    "Wire an identity provider before turning on admin authentication."),
+                new OperationalSignalDto(
+                    "Rate limiting",
+                    "Disabled",
+                    "No rate limiter is registered yet.",
+                    "Add a request budget and expose counters from the gateway."),
+                new OperationalSignalDto(
+                    "Retry / backoff",
+                    "Partial",
+                    "Shared HttpClient resilience is enabled, but app-specific backoff is not tuned.",
+                    "Refine the retry policy when production traffic rules are available."),
+                new OperationalSignalDto(
+                    "Background jobs",
+                    "Not configured",
+                    "No schedulers or workers are registered in the current app graph.",
+                    "Add a queue-backed worker and surface queue depth here."),
+                new InfrastructureStatusDto(
+                    "SQLite",
+                    "None",
+                    persistenceOptions.Value.DatabasePath,
+                    environment.EnvironmentName),
+                healthChecks));
         });
 
         group.MapGet("/clients/connected", (IClientRequestActivityStore requestActivityStore) =>

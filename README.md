@@ -34,6 +34,7 @@ An intelligent BYOK harness for GitHub Copilot. The repo currently includes:
 ```powershell
 dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryEndpoint https://<your-foundry-endpoint>
 dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryApiKey <your-api-key>
+dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:AdminApiKey <optional-admin-bearer-token>
 ```
 
 ### Run

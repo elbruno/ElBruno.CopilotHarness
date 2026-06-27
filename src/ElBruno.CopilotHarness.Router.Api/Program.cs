@@ -1,7 +1,14 @@
+using System.Threading.RateLimiting;
+using ElBruno.CopilotHarness.Router.Api.BackgroundJobs;
 using ElBruno.CopilotHarness.Router.Api;
 using ElBruno.CopilotHarness.Router.Api.Admin;
 using ElBruno.CopilotHarness.Router.Core;
 using ElBruno.CopilotHarness.Router.Core.Persistence;
+using ElBruno.CopilotHarness.Router.Api.Infrastructure;
+using ElBruno.CopilotHarness.Router.Api.RateLimiting;
+using ElBruno.CopilotHarness.Router.Api.Security;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -11,6 +18,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.Services.AddOpenApi();
+builder.Services.AddOptions<BackendOptions>()
+    .Bind(builder.Configuration.GetSection(BackendOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services
     .AddOptions<FoundryOptions>()
     .Bind(builder.Configuration.GetSection(FoundryOptions.SectionName))
@@ -41,13 +52,85 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-builder.Services.AddDbContext<HarnessDbContext>((serviceProvider, options) =>
+var persistenceOptions = builder.Configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>() ?? new PersistenceOptions();
+var redisConnectionString = builder.Configuration.GetConnectionString("redis");
+var postgresConnectionString = builder.Configuration.GetConnectionString("copilotharness");
+var adminApiKey = builder.Configuration["Backend:Auth:AdminApiKey"];
+var rateLimitingEnabled = builder.Configuration.GetValue("Backend:RateLimiting:Enabled", true);
+var rateLimitingPermitLimit = builder.Configuration.GetValue("Backend:RateLimiting:PermitLimit", 200);
+var rateLimitingWindowSeconds = builder.Configuration.GetValue("Backend:RateLimiting:WindowSeconds", 60);
+
+if (persistenceOptions.Provider == DatabaseProvider.PostgreSql &&
+    string.IsNullOrWhiteSpace(persistenceOptions.ConnectionString) &&
+    !string.IsNullOrWhiteSpace(postgresConnectionString))
 {
-    var persistenceOptions = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    persistenceOptions = new PersistenceOptions
+    {
+        Provider = persistenceOptions.Provider,
+        DatabasePath = persistenceOptions.DatabasePath,
+        ConnectionString = postgresConnectionString
+    };
+}
+
+builder.Services.AddDbContext<HarnessDbContext>((_, options) =>
+{
     var contentRootPath = builder.Environment.ContentRootPath;
-    options.UseSqlite(persistenceOptions.BuildConnectionString(contentRootPath));
+    var connectionString = persistenceOptions.BuildConnectionString(contentRootPath);
+
+    if (persistenceOptions.Provider == DatabaseProvider.PostgreSql)
+    {
+        options.UseNpgsql(connectionString);
+    }
+    else
+    {
+        options.UseSqlite(connectionString);
+    }
+
     options.ConfigureWarnings(warnings =>
         warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
+});
+
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnectionString;
+        options.InstanceName = "copilotharness:";
+    });
+}
+
+if (!string.IsNullOrWhiteSpace(adminApiKey))
+{
+    builder.Services
+        .AddAuthentication(ApiKeyAuthenticationOptions.SchemeName)
+        .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
+            ApiKeyAuthenticationOptions.SchemeName,
+            options => options.ExpectedApiKey = adminApiKey!);
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("AdminOnly", policy => policy.RequireAuthenticatedUser());
+    });
+}
+else
+{
+    builder.Services.AddAuthorization();
+}
+
+builder.Services.AddRateLimiter(options =>
+{
+    if (!rateLimitingEnabled)
+    {
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(_ =>
+            RateLimitPartition.GetNoLimiter("disabled"));
+        return;
+    }
+
+    var window = TimeSpan.FromSeconds(rateLimitingWindowSeconds);
+
+    options.GlobalLimiter = BackendRateLimiter.CreateGlobalLimiter(rateLimitingPermitLimit, window);
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
 builder.Services.AddScoped<IRoutingConfigurationStore, RoutingConfigurationStore>();
@@ -76,6 +159,9 @@ builder.Services.AddHttpClient("foundry-health", (_, client) =>
 
 builder.Services.AddHealthChecks()
     .AddCheck<FoundryEndpointHealthCheck>("foundry-endpoint", HealthStatus.Degraded, ["ready"]);
+builder.Services.AddSingleton<IBackgroundJobQueue, ChannelBackgroundJobQueue>();
+builder.Services.AddSingleton<BackendWarmupJob>();
+builder.Services.AddHostedService<QueuedBackgroundJobProcessor>();
 
 var app = builder.Build();
 
@@ -84,6 +170,27 @@ using (var scope = app.Services.CreateScope())
     var initializer = scope.ServiceProvider.GetRequiredService<SqliteRoutingStoreInitializer>();
     await initializer.InitializeAsync(CancellationToken.None);
 }
+
+using (var scope = app.Services.CreateScope())
+{
+    var queue = scope.ServiceProvider.GetRequiredService<IBackgroundJobQueue>();
+    await queue.EnqueueAsync(
+        async (services, cancellationToken) =>
+        {
+            var warmup = services.GetRequiredService<BackendWarmupJob>();
+            await warmup.RunAsync(services, cancellationToken);
+        },
+        CancellationToken.None);
+}
+
+var adminAuthEnabled = !string.IsNullOrWhiteSpace(adminApiKey);
+if (adminAuthEnabled)
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
+
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
@@ -237,7 +344,8 @@ app.MapPost("/v1/chat/completions", async (
 });
 
 app.MapDefaultEndpoints();
-app.MapAdminEndpoints();
+
+app.MapAdminEndpoints(adminAuthEnabled);
 
 app.Run();
 return;

@@ -32,3 +32,10 @@ dotnet test .\ElBruno.CopilotHarness.slnx
 - Review the connected clients and live requests sections.
 - Inspect trace details from `/admin/traces/{traceId}`.
 - Open the Judge app to replay historical prompts and review evaluation reports.
+
+## Inspect Phase 6 operations
+
+- Open the Admin **Operations** page at `/operations`.
+- Review auth, rate limiting, retry/backoff, and background job readiness.
+- Check the infrastructure card for current storage/caching assumptions.
+- Open the Judge root page (`/`) to confirm benchmark storage and run status.

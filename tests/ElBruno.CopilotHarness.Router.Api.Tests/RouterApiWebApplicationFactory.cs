@@ -12,25 +12,52 @@ namespace ElBruno.CopilotHarness.Router.Api.Tests;
 public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _dbPath;
+    private readonly IReadOnlyDictionary<string, string?> _configurationOverrides;
+    private readonly string? _adminApiKey;
 
     public RouterApiWebApplicationFactory()
+        : this(null)
     {
-        var directory = Path.Combine(AppContext.BaseDirectory, "App_Data");
+    }
+
+    private RouterApiWebApplicationFactory(IReadOnlyDictionary<string, string?>? configurationOverrides)
+    {
+        var directory = @"C:\src\ElBruno.CopilotHarness\src\ElBruno.CopilotHarness.Router.Api\App_Data";
         Directory.CreateDirectory(directory);
         _dbPath = Path.Combine(directory, $"admin-tests-{Guid.NewGuid():N}.db");
+        _configurationOverrides = configurationOverrides ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        _adminApiKey = _configurationOverrides.TryGetValue("Backend:Auth:AdminApiKey", out var adminApiKey)
+            ? adminApiKey
+            : null;
     }
+
+    public static RouterApiWebApplicationFactory Create(IReadOnlyDictionary<string, string?>? configurationOverrides = null) =>
+        new(configurationOverrides);
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting(WebHostDefaults.ApplicationKey, Guid.NewGuid().ToString("N"));
+        foreach (var overrideEntry in _configurationOverrides)
+        {
+            builder.UseSetting(overrideEntry.Key, overrideEntry.Value);
+        }
+
         builder.ConfigureAppConfiguration((_, configurationBuilder) =>
         {
-            configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Foundry:Endpoint"] = "https://unit.test",
                 ["Foundry:ApiKey"] = "test-key",
                 ["Persistence:DatabasePath"] = _dbPath
-            });
+            };
+
+            foreach (var overrideEntry in _configurationOverrides)
+            {
+                settings[overrideEntry.Key] = overrideEntry.Value;
+            }
+
+            configurationBuilder.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureServices(services =>
@@ -43,6 +70,18 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
                 .AddHttpClient<FoundryChatCompletionsClient>()
                 .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(CreateResponse));
         });
+    }
+
+    public HttpClient CreateAuthenticatedClient()
+    {
+        var client = CreateClient();
+
+        if (!string.IsNullOrWhiteSpace(_adminApiKey))
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _adminApiKey);
+        }
+
+        return client;
     }
 
     private static HttpResponseMessage CreateResponse(HttpRequestMessage request)

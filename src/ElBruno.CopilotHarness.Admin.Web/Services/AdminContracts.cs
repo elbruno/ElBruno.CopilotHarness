@@ -81,3 +81,29 @@ public sealed record DashboardSnapshotResponse(
     IReadOnlyList<ConnectedClientDto> ConnectedClients,
     IReadOnlyList<LiveRequestDto> LiveRequests,
     DateTimeOffset GeneratedAtUtc);
+
+public sealed record OperationalSignalDto(
+    string Name,
+    string State,
+    string Details,
+    string Recommendation);
+
+public sealed record InfrastructureStatusDto(
+    string Storage,
+    string Cache,
+    string DatabasePath,
+    string EnvironmentName);
+
+public sealed record OperationalHealthDto(
+    string Name,
+    string Status,
+    string Details);
+
+public sealed record OperationsStatusResponse(
+    DateTimeOffset GeneratedAtUtc,
+    OperationalSignalDto Authentication,
+    OperationalSignalDto RateLimiting,
+    OperationalSignalDto Backoff,
+    OperationalSignalDto BackgroundJobs,
+    InfrastructureStatusDto Infrastructure,
+    IReadOnlyList<OperationalHealthDto> HealthChecks);

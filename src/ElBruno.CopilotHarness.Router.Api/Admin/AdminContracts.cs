@@ -99,6 +99,32 @@ public sealed record DashboardSnapshotResponse(
     IReadOnlyList<LiveRequestDto> LiveRequests,
     DateTimeOffset GeneratedAtUtc);
 
+public sealed record OperationalSignalDto(
+    string Name,
+    string State,
+    string Details,
+    string Recommendation);
+
+public sealed record InfrastructureStatusDto(
+    string Storage,
+    string Cache,
+    string DatabasePath,
+    string EnvironmentName);
+
+public sealed record OperationalHealthDto(
+    string Name,
+    string Status,
+    string Details);
+
+public sealed record OperationsStatusResponse(
+    DateTimeOffset GeneratedAtUtc,
+    OperationalSignalDto Authentication,
+    OperationalSignalDto RateLimiting,
+    OperationalSignalDto Backoff,
+    OperationalSignalDto BackgroundJobs,
+    InfrastructureStatusDto Infrastructure,
+    IReadOnlyList<OperationalHealthDto> HealthChecks);
+
 public sealed record RoutingTraceContextFactDto(string Key, string Value);
 
 public sealed record ClassificationTraceDto(string Intent, string Complexity, double Confidence, string Reasoning);

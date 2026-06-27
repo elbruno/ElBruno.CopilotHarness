@@ -12,6 +12,7 @@ ElBruno.CopilotHarness is a BYOK harness built on .NET 10, ASP.NET Core, .NET As
 - **Admin.Web**: operator UI for setup, models, rules, validation, and dashboards.
 - **Judge.Web**: separate AI judge app for prompt replay, manual benchmarks, and evaluation reports.
 - **ServiceDefaults**: shared Aspire/Otel/health defaults.
+- **Phase 6 backend foundation**: PostgreSQL, Redis, bearer auth for admin endpoints, rate limiting, and queued background jobs.
 
 ## Boundaries
 
@@ -20,6 +21,7 @@ ElBruno.CopilotHarness is a BYOK harness built on .NET 10, ASP.NET Core, .NET As
 - Judge features live in a separate application and do not change router semantics.
 - Secrets stay in Aspire external parameters or user secrets.
 - Phase 5 features are separate and not mixed into the router runtime surfaces.
+- Phase 6 backend concerns stay additive and do not change the OpenAI-compatible router contract.
 
 ## Data flow
 

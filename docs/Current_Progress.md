@@ -10,6 +10,7 @@ Last updated: 2026-06-27
 - Phase 3: complete
 - Phase 4: complete
 - Phase 5: core complete
+- Phase 6: backend foundations in place
 
 ## Current focus
 
@@ -19,7 +20,7 @@ Last updated: 2026-06-27
 
 ## Next planned phase
 
-- Phase 6 - Production Backend
+- Phase 7 - VS Code Extension
 
 ## Key links
 

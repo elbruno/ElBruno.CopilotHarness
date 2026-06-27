@@ -28,6 +28,10 @@ Liveness check.
 
 Returns connected clients and live requests for the Admin dashboard.
 
+### `GET /admin/operations/status`
+
+Returns the Phase 6 operational readiness snapshot for auth, rate limiting, backoff, background jobs, and infrastructure.
+
 ### `GET /admin/traces/{traceId}`
 
 Returns routing trace details for a routed request.
@@ -41,6 +45,10 @@ Returns current connected client summary.
 Returns live/recent routed requests.
 
 ## Judge
+
+### `GET /`
+
+Returns the Judge operations dashboard with benchmark and storage status.
 
 ### `POST /judge/prompt-records/import`
 
@@ -74,3 +82,5 @@ Returns benchmark results and model summaries.
 
 - All compatibility additions are additive and preserve existing response shapes.
 - Refer to `docs/Phase4_Client_Compatibility.md` for client detection details.
+- Admin routes require bearer auth when `Backend:Auth:AdminApiKey` is configured.
+- Requests are subject to configurable rate limiting.

@@ -1,0 +1,90 @@
+@page "/operations"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Operations</PageTitle>
+
+<h1>Phase 6 Operations</h1>
+<p>Minimal production-backend readiness view for auth, rate limiting, backoff, and background jobs.</p>
+
+@if (_operations is null)
+{
+    <p>Loading operational status...</p>
+}
+else
+{
+    <div class="cards">
+        <article class="card">
+            <h3>@_operations.Authentication.Name</h3>
+            <p class="metric">@_operations.Authentication.State</p>
+            <p class="muted">@_operations.Authentication.Details</p>
+            <p>@_operations.Authentication.Recommendation</p>
+        </article>
+        <article class="card">
+            <h3>@_operations.RateLimiting.Name</h3>
+            <p class="metric">@_operations.RateLimiting.State</p>
+            <p class="muted">@_operations.RateLimiting.Details</p>
+            <p>@_operations.RateLimiting.Recommendation</p>
+        </article>
+        <article class="card">
+            <h3>@_operations.Backoff.Name</h3>
+            <p class="metric">@_operations.Backoff.State</p>
+            <p class="muted">@_operations.Backoff.Details</p>
+            <p>@_operations.Backoff.Recommendation</p>
+        </article>
+        <article class="card">
+            <h3>@_operations.BackgroundJobs.Name</h3>
+            <p class="metric">@_operations.BackgroundJobs.State</p>
+            <p class="muted">@_operations.BackgroundJobs.Details</p>
+            <p>@_operations.BackgroundJobs.Recommendation</p>
+        </article>
+    </div>
+
+    <div class="two-column">
+        <article class="card">
+            <h3>Infrastructure</h3>
+            <p><strong>Storage:</strong> @_operations.Infrastructure.Storage</p>
+            <p><strong>Cache:</strong> @_operations.Infrastructure.Cache</p>
+            <p><strong>Database path:</strong> @_operations.Infrastructure.DatabasePath</p>
+            <p><strong>Environment:</strong> @_operations.Infrastructure.EnvironmentName</p>
+        </article>
+
+        <article class="card">
+            <h3>Health checks</h3>
+            @if (_operations.HealthChecks.Count == 0)
+            {
+                <p>No health checks were returned.</p>
+            }
+            else
+            {
+                <div class="model-list">
+                    @foreach (var check in _operations.HealthChecks)
+                    {
+                        <div>
+                            <strong>@check.Name</strong>
+                            <span class="status-pill @GetStatusClass(check.Status)">@check.Status</span>
+                            <div class="muted">@check.Details</div>
+                        </div>
+                    }
+                </div>
+            }
+        </article>
+    </div>
+
+    <p class="muted">Snapshot: @_operations.GeneratedAtUtc.ToLocalTime().ToString("u")</p>
+}
+
+@code {
+    private ElBruno.CopilotHarness.Admin.Web.Services.OperationsStatusResponse? _operations;
+
+    protected override async Task OnInitializedAsync() =>
+        _operations = await Api.GetOperationsStatusAsync();
+
+    private static string GetStatusClass(string status) =>
+        status.ToLowerInvariant() switch
+        {
+            "healthy" => "status-good",
+            "degraded" => "status-warn",
+            "unhealthy" => "status-bad",
+            _ => "status-neutral"
+        };
+}
