@@ -5,8 +5,7 @@ namespace ElBruno.CopilotHarness.Router.Api;
 public sealed class FoundryOptions
 {
     public const string SectionName = "Foundry";
-    public const string DeploymentName = "gpt-5-mini";
-    public const string ApiVersion = "2024-10-21";
+    public const string DefaultApiVersion = "2024-10-21";
 
     [Required]
     public string Endpoint { get; init; } = string.Empty;

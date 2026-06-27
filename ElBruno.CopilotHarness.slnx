@@ -4,4 +4,7 @@
     <Project Path="src/ElBruno.CopilotHarness.Router.Api/ElBruno.CopilotHarness.Router.Api.csproj" />
     <Project Path="src/ElBruno.CopilotHarness.ServiceDefaults/ElBruno.CopilotHarness.ServiceDefaults.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ElBruno.CopilotHarness.Router.Api.Tests/ElBruno.CopilotHarness.Router.Api.Tests.csproj" />
+  </Folder>
 </Solution>
