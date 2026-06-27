@@ -18,9 +18,24 @@ ElBruno.CopilotHarness is a BYOK harness for GitHub Copilot with:
 - .NET 10 SDK
 - Aspire CLI (`aspire`)
 
-### Configure Aspire parameters
+### Configure Aspire parameters (one-time)
 
-Provide `FoundryEndpoint` and `FoundryApiKey` as Aspire external parameters or environment variables.
+Run these commands **once** inside the AppHost project folder before the first `aspire run`.
+Aspire saves them locally so you are never prompted again.
+
+```powershell
+cd src/ElBruno.CopilotHarness.AppHost
+
+aspire secret set FoundryEndpoint "https://<your-resource>.openai.azure.com/openai/v1"
+aspire secret set FoundryApiKey   "<your-azure-foundry-api-key>"
+aspire secret set AdminApiKey     "<any-password-you-choose>"
+```
+
+| Parameter | What it is |
+|---|---|
+| `FoundryEndpoint` | Azure AI Foundry base URL (ends in `/openai/v1`) |
+| `FoundryApiKey` | Azure AI Foundry API key |
+| `AdminApiKey` | A password **you invent** — protects the admin endpoints. Any string works. |
 
 ### Start
 

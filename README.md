@@ -59,21 +59,32 @@ Route every GitHub Copilot request through your own infrastructure. Choose which
 - A GitHub Copilot subscription
 - An Azure AI Foundry endpoint + API key (for upstream model calls)
 
-### 1 — Run the system
+### 1 — Save your secrets (one-time setup)
+
+Run these commands **once** before the first `aspire run`.  
+Aspire saves them locally — you will never be prompted again.
+
+```powershell
+cd src/ElBruno.CopilotHarness.AppHost
+
+aspire secret set FoundryEndpoint "https://<your-resource>.openai.azure.com/openai/v1"
+aspire secret set FoundryApiKey   "<your-azure-foundry-api-key>"
+aspire secret set AdminApiKey     "<any-password-you-choose>"
+```
+
+| Parameter | What it is |
+|---|---|
+| `FoundryEndpoint` | Your Azure AI Foundry base URL (from the Azure portal, ends in `/openai/v1`) |
+| `FoundryApiKey` | Your Azure AI Foundry API key |
+| `AdminApiKey` | A password **you create** — protects the admin API. Any string works (e.g. `my-local-admin-key`) |
+
+> **Tip:** `AdminApiKey` is not an external service key — it is a secret you invent to secure the harness admin endpoints. Set it to anything memorable.
+
+### 2 — Run the system
 
 ```powershell
 aspire run
 ```
-
-### 2 — Configure secrets
-
-When prompted by Aspire, provide:
-
-| Parameter | Description |
-|---|---|
-| `FoundryEndpoint` | Your Azure AI Foundry base URL |
-| `FoundryApiKey` | Your Azure AI Foundry API key |
-| `AdminApiKey` | Optional bearer token for admin endpoints |
 
 ### 3 — Set up BYOK in GitHub Copilot
 
