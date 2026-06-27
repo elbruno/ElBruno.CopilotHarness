@@ -43,6 +43,30 @@ aspire secret set AdminApiKey     "<any-password-you-choose>"
 aspire run
 ```
 
+### Configure BYOK in VS Code (current flow)
+
+The old **GitHub Copilot: Advanced → Custom endpoint** path is no longer the supported VS Code UX.
+Use the model manager flow instead:
+
+1. Open **Copilot Chat** in VS Code.
+2. In the chat input area, open the model picker.
+3. Click **Manage Models** (or run **Chat: Manage Language Models** from the Command Palette).
+4. Click **Add Models** and choose **Custom Endpoint**.
+5. Configure the endpoint with your running harness:
+   - API type: **Chat Completions**
+   - URL: `<Router.Api URL>/v1/chat/completions` (for example `http://localhost:5117/v1/chat/completions`)
+   - Model id: one of the router profiles (for example `gpt-5-mini`)
+6. Save and select that model in the chat model picker.
+
+If you're using Copilot Business or Enterprise, ensure your org policy enables:
+**Bring Your Own Language Model Key in VS Code**.
+
+If **Custom Endpoint** does not appear in the provider list, update VS Code (or use VS Code Insiders) and reopen **Manage Language Models**.
+
+Official references:
+- https://code.visualstudio.com/docs/agent-customization/language-models#_add-a-custom-endpoint-model
+- https://docs.github.com/en/copilot/how-tos/use-ai-models/change-the-chat-model#adding-more-models
+
 ## VS Code extension
 
 1. Open `src/ElBruno.CopilotHarness.VSCode` in VS Code.

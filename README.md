@@ -86,12 +86,26 @@ aspire secret set AdminApiKey     "<any-password-you-choose>"
 aspire run
 ```
 
-### 3 — Set up BYOK in GitHub Copilot
+<a id="3--set-up-byok-in-github-copilot"></a>
+### 3 — Set up BYOK in GitHub Copilot (VS Code)
 
-1. Open the Aspire dashboard and copy the **Router.Api** URL (e.g. `https://localhost:7xxx`).
-2. In VS Code, open Settings → **GitHub Copilot** → **Advanced** → **Custom endpoint**.
-3. Set the endpoint to `https://localhost:7xxx/v1` and leave the model as `gpt-5-mini`.
-4. Copilot requests will now route through your harness.
+1. Start the harness with `aspire run` and copy the **Router.Api** URL from the Aspire dashboard (for example `http://localhost:5117`).
+2. In VS Code, open **Copilot Chat** and then open the model picker at the bottom of chat.
+3. Select **Manage Models** (or run **Chat: Manage Language Models** from the Command Palette).
+4. Select **Add Models** and choose **Custom Endpoint**.
+5. Configure the model to call your harness endpoint:
+   - API type: **Chat Completions**
+   - URL: `<Router.Api URL>/v1/chat/completions` (for example `http://localhost:5117/v1/chat/completions`)
+   - Model id/name: use one configured by the router (for example `gpt-5-mini`)
+6. Save the model configuration, pick this model in Copilot Chat, and send a prompt.
+
+> **Notes**
+> - If your organization manages Copilot policies, make sure **Bring Your Own Language Model Key in VS Code** is enabled.
+> - The previous **GitHub Copilot: Advanced → Custom endpoint** settings flow is obsolete.
+> - If **Custom Endpoint** is not listed, update VS Code (or use VS Code Insiders), then reopen **Manage Language Models**.
+> - Official docs:
+>   - https://code.visualstudio.com/docs/agent-customization/language-models#_add-a-custom-endpoint-model
+>   - https://docs.github.com/en/copilot/how-tos/use-ai-models/change-the-chat-model#adding-more-models
 
 ---
 
@@ -115,3 +129,19 @@ aspire run
 ```powershell
 dotnet test .\ElBruno.CopilotHarness.slnx
 ```
+
+---
+
+## 👋 About the author
+
+Hi! I'm **ElBruno** 🧡, a passionate developer and content creator exploring AI, .NET, and modern development practices.
+
+**Made with ❤️ by [ElBruno](https://github.com/elbruno)**
+
+If you like this project, consider following my work across platforms:
+
+- 📻 **Podcast**: [No Tienen Nombre](https://notienenombre.com) — Spanish-language episodes on AI, development, and tech culture
+- 💻 **Blog**: [ElBruno.com](https://elbruno.com) — Deep dives on embeddings, RAG, .NET, and local AI
+- 📺 **YouTube**: [youtube.com/elbruno](https://www.youtube.com/elbruno) — Demos, tutorials, and live coding
+- 🔗 **LinkedIn**: [@elbruno](https://www.linkedin.com/in/elbruno/) — Professional updates and insights
+- 𝕏 **Twitter**: [@elbruno](https://www.x.com/elbruno) — Quick tips, releases, and tech news

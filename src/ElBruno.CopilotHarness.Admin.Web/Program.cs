@@ -1,5 +1,6 @@
 using ElBruno.CopilotHarness.Admin.Web.Components;
 using ElBruno.CopilotHarness.Admin.Web.Services;
+using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,8 +9,15 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddHttpClient<AdminApiClient>((serviceProvider, client) =>
 {
-    var baseUrl = serviceProvider.GetRequiredService<IConfiguration>()["AdminApi:BaseUrl"] ?? "http://router-api";
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var baseUrl = configuration["AdminApi:BaseUrl"] ?? "http://router-api";
+    var apiKey = configuration["AdminApi:ApiKey"];
+
     client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+    if (!string.IsNullOrWhiteSpace(apiKey))
+    {
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+    }
 });
 
 var app = builder.Build();
@@ -27,6 +35,7 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapGet("/favicon.ico", () => Results.NoContent());
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapDefaultEndpoints();

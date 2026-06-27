@@ -51,6 +51,7 @@ builder.AddProject<Projects.ElBruno_CopilotHarness_Judge_Web>("judge-web")
 
 builder.AddProject<Projects.ElBruno_CopilotHarness_Admin_Web>("admin-web")
     .WithReference(routerApi)
+    .WithEnvironment("AdminApi__ApiKey", adminApiKey)
     .WaitFor(routerApi);
 
 builder.Build().Run();

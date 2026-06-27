@@ -141,6 +141,9 @@ app.MapGet("/", async (
     return Results.Content(html.ToString(), "text/html");
 });
 
+app.MapGet("/benchmarks", () => Results.Redirect("/", permanent: false));
+app.MapGet("/favicon.ico", () => Results.NoContent());
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
