@@ -9,6 +9,10 @@ This is a known dependency advisory warning in the current package set and does 
 
 If the AppHost asks for Foundry values, start it with `aspire run` and provide `FoundryEndpoint` and `FoundryApiKey` as Aspire external parameters or environment variables.
 
+## Running with PostgreSQL + Redis (optional)
+
+The harness defaults to SQLite — no Docker required. To use PostgreSQL and Redis instead (production-like setup), set `UseContainers=true` in `appsettings.json` of the AppHost or as an environment variable before running.
+
 ## Router returns 4xx for malformed input
 
 The router uses OpenAI-style error envelopes for invalid JSON or unsupported request payloads. Check the request body shape and endpoint.

@@ -18,7 +18,7 @@ The full harness uses .NET Aspire to orchestrate multiple services. Run everythi
 aspire run
 ```
 
-**What Docker is used for:** Docker is required if you want to run PostgreSQL or Redis as backing services in the Aspire AppHost. If you only have Docker Desktop installed and running, Aspire will start those containers automatically. Without Docker, Aspire falls back to in-process equivalents or skips optional containers — the Router API and Admin dashboard will still start.
+**No Docker required by default.** The harness uses SQLite for persistence out of the box. Docker is only needed if you want PostgreSQL + Redis for a production-like setup — set `UseContainers=true` in the AppHost configuration to opt in.
 
 ## Running just the router (no Docker)
 
