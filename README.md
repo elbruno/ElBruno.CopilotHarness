@@ -28,24 +28,25 @@ Route every GitHub Copilot request through your own infrastructure. Choose which
 
 ## Screenshots
 
-> 📸 **Screenshots coming soon — want to contribute one?** See below.
+### Aspire Dashboard — all services healthy
 
-The following screenshots are planned. Each one shows a key part of the harness in action:
+![Aspire Dashboard](docs/images/aspire-dashboard.png)
 
-| Screenshot | What it shows | Target file |
-|---|---|---|
-| Aspire Dashboard | All services running with health status and OpenTelemetry traces | `docs/images/aspire-dashboard.png` |
-| Admin — Live Routing Dashboard | Connected Copilot clients, live request stream, and model selections | `docs/images/admin-dashboard.png` |
-| Admin — Rules Editor | Rule list, priority order, and the inline rule editor | `docs/images/admin-rules.png` |
-| Admin — Approval Workflow | AI-recommended rule changes queued for human review | `docs/images/admin-approvals.png` |
-| Judge — Benchmark Results | Side-by-side model scores with AI Judge commentary | `docs/images/judge-benchmarks.png` |
+### Admin — Routing Dashboard
 
-### How to contribute a screenshot
+![Admin Dashboard](docs/images/admin-dashboard.png)
 
-1. Run the harness: `aspire run`
-2. Navigate to the relevant UI in your browser.
-3. Take a screenshot and save it as a PNG to `docs/images/<filename>.png` (match the target filename above).
-4. Open a PR — no code changes needed, just the image. Every screenshot makes the project more accessible to new contributors!
+### Admin — Rules Editor
+
+![Admin Rules](docs/images/admin-rules.png)
+
+### Admin — Model Registry
+
+![Admin Models](docs/images/admin-models.png)
+
+### Judge — Benchmark Results
+
+![Judge Benchmarks](docs/images/judge-benchmarks.png)
 
 ---
 

@@ -73,10 +73,11 @@ app.MapGet("/", async (
         .GroupBy(run => run.Status)
         .Select(group => new { Status = group.Key, Count = group.Count() })
         .ToListAsync(cancellationToken);
-    var latestRun = await dbContext.BenchmarkRuns
+    var latestRun = (await dbContext.BenchmarkRuns
         .AsNoTracking()
+        .ToListAsync(cancellationToken))
         .OrderByDescending(run => run.CreatedAtUtc)
-        .FirstOrDefaultAsync(cancellationToken);
+        .FirstOrDefault();
 
     var storagePath = persistenceOptions.Value.BuildConnectionString(app.Environment.ContentRootPath).Replace("Data Source=", string.Empty, StringComparison.OrdinalIgnoreCase);
     var html = new System.Text.StringBuilder();
