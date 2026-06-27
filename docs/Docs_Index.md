@@ -1,26 +1,42 @@
 # Documentation Index
 
+> One-stop navigation for the ElBruno.CopilotHarness project. All links are relative to the `docs/` folder unless otherwise noted.
+
+---
+
 ## Start here
 
-- `README.md` - repo goal, quick start, and links
-- `docs/Current_Progress.md` - phase status and current focus
-- `docs/User_Manual.md` - how to run and use the app
-- `docs/Architecture.md` - system overview and boundaries
-- `docs/API_Reference.md` - router and admin endpoints
-- `docs/Troubleshooting.md` - common issues and fixes
-- `docs/Runbook.md` - operational start/stop/reset steps
-- `docs/Contributing.md` - local dev and PR expectations
+| Doc | Description |
+|---|---|
+| [README](../README.md) | Project overview, fast start, and BYOK setup |
+| [Current Progress](Current_Progress.md) | Phase status at a glance — what's done, what's next |
+| [User Manual](User_Manual.md) | Full walkthrough: install, configure, and operate the harness |
+| [Architecture](Architecture.md) | System design, component boundaries, and data flow |
+| [API Reference](API_Reference.md) | All router and admin HTTP endpoints with request/response shapes |
+| [Troubleshooting](Troubleshooting.md) | Common issues and step-by-step fixes |
+| [Runbook](Runbook.md) | Operational playbook: start, stop, reset, inspect, and recover |
+| [Contributing](Contributing.md) | Local dev setup, workflow, Docker notes, and good-first-issue ideas |
+
+---
 
 ## Phase docs
 
-- `docs/Phase2_Admin.md`
-- `docs/Phase3_Harness_Intelligence.md`
-- `docs/Phase4_Client_Compatibility.md`
-- `docs/Phase4_MultiClient_Dashboard.md`
-- `docs/Phase5_AI_Judge.md`
-- `docs/Phase7_VSCode_Extension.md`
+| Doc | Description |
+|---|---|
+| [Phase 2 — Admin](Phase2_Admin.md) | Admin API and dashboard: model management and routing history |
+| [Phase 3 — Harness Intelligence](Phase3_Harness_Intelligence.md) | Rules engine, AI routing agents, and profile selection logic |
+| [Phase 4 — Client Compatibility](Phase4_Client_Compatibility.md) | OpenAI-compatible proxy layer and Copilot BYOK wiring |
+| [Phase 4 — Multi-Client Dashboard](Phase4_MultiClient_Dashboard.md) | Real-time multi-client view with SignalR and Blazor |
+| [Phase 5 — AI Judge](Phase5_AI_Judge.md) | Prompt replay, model benchmarking, and AI-scored quality evaluation |
+| [Phase 7 — VS Code Extension](Phase7_VSCode_Extension.md) | In-editor routing explainer and dashboard launcher |
+| [Phase 8 — Continuous Evaluation](Phase8_Continuous_Evaluation.md) | Shadow routing, confidence scoring, and human-approval workflow for rule changes |
+
+---
 
 ## Planning
 
-- `docs/PRD.md`
-- `docs/Copilot_Implementation_Prompt.md`
+| Doc | Description |
+|---|---|
+| [PRD](PRD.md) | Product Requirements Document — goals, phases, and success criteria |
+| [Copilot Implementation Prompt](Copilot_Implementation_Prompt.md) | Authoritative phase-by-phase implementation workflow for AI assistants |
+

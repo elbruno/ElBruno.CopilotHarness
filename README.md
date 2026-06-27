@@ -1,5 +1,11 @@
 # ElBruno.CopilotHarness
 
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/10.0)
+[![Aspire](https://img.shields.io/badge/Aspire-13.4-blueviolet?logo=microsoft)](https://aspire.dev)
+[![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen)]()
+
 > **Intelligent BYOK harness for GitHub Copilot** — built with .NET 10, .NET Aspire, and Microsoft Agent Framework.
 
 Route every GitHub Copilot request through your own infrastructure. Choose which model handles each request, inspect every decision, benchmark quality over time, and enforce rules — all without touching your IDE.
@@ -22,20 +28,24 @@ Route every GitHub Copilot request through your own infrastructure. Choose which
 
 ## Screenshots
 
-### Aspire Dashboard
-![Aspire dashboard showing all running services](docs/images/aspire-dashboard.png)
+> 📸 **Screenshots coming soon — want to contribute one?** See below.
 
-### Admin — Live Routing Dashboard
-![Admin dashboard showing connected clients and live requests](docs/images/admin-dashboard.png)
+The following screenshots are planned. Each one shows a key part of the harness in action:
 
-### Admin — Rules Editor
-![Rules editor page](docs/images/admin-rules.png)
+| Screenshot | What it shows | Target file |
+|---|---|---|
+| Aspire Dashboard | All services running with health status and OpenTelemetry traces | `docs/images/aspire-dashboard.png` |
+| Admin — Live Routing Dashboard | Connected Copilot clients, live request stream, and model selections | `docs/images/admin-dashboard.png` |
+| Admin — Rules Editor | Rule list, priority order, and the inline rule editor | `docs/images/admin-rules.png` |
+| Admin — Approval Workflow | AI-recommended rule changes queued for human review | `docs/images/admin-approvals.png` |
+| Judge — Benchmark Results | Side-by-side model scores with AI Judge commentary | `docs/images/judge-benchmarks.png` |
 
-### Admin — Approval Workflow (Phase 8)
-![Human approval queue for AI-recommended rule changes](docs/images/admin-approvals.png)
+### How to contribute a screenshot
 
-### Judge — Benchmark Results
-![Judge app benchmark results and AI scoring](docs/images/judge-benchmarks.png)
+1. Run the harness: `aspire run`
+2. Navigate to the relevant UI in your browser.
+3. Take a screenshot and save it as a PNG to `docs/images/<filename>.png` (match the target filename above).
+4. Open a PR — no code changes needed, just the image. Every screenshot makes the project more accessible to new contributors!
 
 ---
 

@@ -6,12 +6,44 @@
 - Work under `tests/` for automated tests.
 - Keep docs under `docs/`.
 
+## Project context
+
+Before diving in, it helps to read the [PRD](PRD.md) — it defines Phases 0–8 and the goals behind each one. Understanding the phase structure makes it much easier to know where a change belongs.
+
+## Running the full stack
+
+The full harness uses .NET Aspire to orchestrate multiple services. Run everything with:
+
+```powershell
+aspire run
+```
+
+**What Docker is used for:** Docker is required if you want to run PostgreSQL or Redis as backing services in the Aspire AppHost. If you only have Docker Desktop installed and running, Aspire will start those containers automatically. Without Docker, Aspire falls back to in-process equivalents or skips optional containers — the Router API and Admin dashboard will still start.
+
+## Running just the router (no Docker)
+
+The Router API can run standalone without Docker or the full Aspire stack. It uses a local SQLite database by default (see `src/ElBruno.CopilotHarness.Router.Api/appsettings.json` — `Persistence.DatabasePath`):
+
+```powershell
+cd src\ElBruno.CopilotHarness.Router.Api
+dotnet run
+```
+
+You'll need to supply `FoundryEndpoint` and `FoundryApiKey` as environment variables:
+
+```powershell
+$env:Foundry__Endpoint = "https://your-foundry.openai.azure.com/"
+$env:Foundry__ApiKey   = "your-api-key-here"
+```
+
+The router will be available at `https://localhost:7xxx/v1` — point your Copilot BYOK endpoint there.
+
 ## Expected workflow
 
 1. Make the smallest phase-appropriate change.
-2. Build the solution.
-3. Run tests.
-4. Update docs when behavior or architecture changes.
+2. Build the solution: `dotnet build .\ElBruno.CopilotHarness.slnx`
+3. Run tests: `dotnet test .\ElBruno.CopilotHarness.slnx`
+4. Update docs when behaviour or architecture changes.
 
 ## Rules
 
@@ -22,6 +54,17 @@
 ## Helpful commands
 
 ```powershell
-dotnet build .\ElBruno.CopilotHarness.slnx
-dotnet test .\ElBruno.CopilotHarness.slnx
+aspire run                                     # start the full stack
+dotnet build .\ElBruno.CopilotHarness.slnx    # build only
+dotnet test  .\ElBruno.CopilotHarness.slnx    # run all tests
 ```
+
+## Good first issue
+
+Looking for somewhere to start? Here are low-risk, high-value contributions:
+
+- **Add a screenshot** — run `aspire run`, navigate to any dashboard page, save a PNG to `docs/images/`, open a PR. No code required.
+- **Fix a typo or clarify a doc** — any file in `docs/` is fair game.
+- **Add a routing rule** — the rules engine in the Router API is data-driven; add a new rule in `appsettings.json` and document it in `docs/API_Reference.md`.
+- **Write a test for an untested edge case** — look for `// TODO: test` comments in `tests/`.
+
