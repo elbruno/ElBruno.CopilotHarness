@@ -5,9 +5,12 @@ var foundryApiKey = builder.AddParameter("FoundryApiKey", secret: true);
 var adminApiKey = builder.AddParameter("AdminApiKey", secret: true);
 var judgeDbPath = builder.AddParameter("JudgeDbPath", @"App_Data\copilotharness-judge.db");
 
-// useContainers=true wires PostgreSQL + Redis (requires Docker).
+// UseContainers=true wires PostgreSQL + Redis (requires Docker).
 // Default is false so the harness works with aspire run and no container runtime.
 var useContainers = builder.Configuration["UseContainers"] == "true";
+
+// Shared SQLite path used by Router.Api and Evaluation.Worker in no-Docker mode.
+const string sharedSqlitePath = @"App_Data\copilotharness-admin.db";
 
 var routerApi = builder.AddProject<Projects.ElBruno_CopilotHarness_Router_Api>("router-api")
     .WithEnvironment("Foundry__Endpoint", foundryEndpoint)
@@ -29,9 +32,17 @@ if (useContainers)
         .WithReference(routerDatabase)
         .WithReference(redis);
 
-    evaluationWorker.WithReference(routerDatabase);
+    evaluationWorker
+        .WithEnvironment("Persistence__Provider", "PostgreSql")
+        .WithReference(routerDatabase);
 }
-// else: SQLite (default) — no containers, no Docker required
+else
+{
+    // Default: SQLite — no containers, no Docker required.
+    // Both Router.Api and Evaluation.Worker share the same SQLite file.
+    routerApi.WithEnvironment("Persistence__DatabasePath", sharedSqlitePath);
+    evaluationWorker.WithEnvironment("Persistence__DatabasePath", sharedSqlitePath);
+}
 
 builder.AddProject<Projects.ElBruno_CopilotHarness_Judge_Web>("judge-web")
     .WithEnvironment("Foundry__Endpoint", foundryEndpoint)

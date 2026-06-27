@@ -5,12 +5,33 @@ using Microsoft.EntityFrameworkCore;
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
 
-// SQLite db — same path convention as Router.Api (data/harness.db relative to content root)
-var dbPath = Path.Combine(builder.Environment.ContentRootPath, "data", "harness.db");
-Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+// Resolve persistence — mirrors Router.Api convention.
+// In Docker mode (UseContainers=true in AppHost), Aspire injects the PostgreSQL
+// connection string as ConnectionStrings:copilotharness via WithReference.
+// In SQLite mode (default), AppHost passes Persistence__DatabasePath.
+var postgresConnectionString = builder.Configuration.GetConnectionString("copilotharness");
 
-builder.Services.AddDbContext<HarnessDbContext>(options =>
-    options.UseSqlite($"Data Source={dbPath}"));
+if (!string.IsNullOrWhiteSpace(postgresConnectionString))
+{
+    // Docker mode: PostgreSQL
+    builder.Services.AddDbContext<HarnessDbContext>(options =>
+        options.UseNpgsql(postgresConnectionString));
+}
+else
+{
+    // No-Docker mode: SQLite, using the same path as Router.Api
+    var dbPath = builder.Configuration["Persistence:DatabasePath"]
+        ?? Path.Combine(builder.Environment.ContentRootPath, @"App_Data\copilotharness-admin.db");
+
+    var resolvedPath = Path.IsPathRooted(dbPath)
+        ? dbPath
+        : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, dbPath));
+
+    Directory.CreateDirectory(Path.GetDirectoryName(resolvedPath)!);
+
+    builder.Services.AddDbContext<HarnessDbContext>(options =>
+        options.UseSqlite($"Data Source={resolvedPath}"));
+}
 
 // Phase 8 stores
 builder.Services.AddScoped<BenchmarkStore>();

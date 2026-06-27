@@ -1,23 +1,53 @@
 # Runbook
 
+## Persistence modes
+
+The harness supports two modes. Choose based on your needs:
+
+| | **No-Docker (default)** | **Docker (production-like)** |
+|---|---|---|
+| Persistence | SQLite (`App_Data\copilotharness-admin.db`) | PostgreSQL container |
+| Cache | In-memory | Redis container |
+| Prerequisites | .NET 10 SDK, Aspire CLI | + Docker Desktop or Podman |
+| How to enable | Default — nothing to set | Set `UseContainers=true` in `src/AppHost/appsettings.json` |
+| Data shared across restarts | ✅ SQLite file persists | ✅ Docker volume persists |
+
 ## Start local environment
+
+### No-Docker (default)
 
 ```powershell
 aspire run
 ```
 
-This starts the Router, Admin, and Judge apps together.
+### Docker mode
+
+1. Start Docker Desktop (or Podman).
+2. Edit `src/ElBruno.CopilotHarness.AppHost/appsettings.json` — set `"UseContainers": "true"`.
+3. Run:
+
+```powershell
+aspire run
+```
+
+Aspire will pull and start `postgres` and `redis` containers automatically.
 
 ## Stop local environment
 
-Stop the AppHost process from the terminal or IDE.
+Stop the AppHost process from the terminal or IDE. Docker containers (if running) stop with it.
 
 ## Reset local admin data
 
-Delete the local SQLite file if you want a fresh seed:
+**SQLite mode** — delete the file:
 
 ```powershell
-Remove-Item .\App_Data\copilotharness-admin.db
+Remove-Item .\src\ElBruno.CopilotHarness.Router.Api\App_Data\copilotharness-admin.db
+```
+
+**Docker mode** — remove the named Docker volumes:
+
+```powershell
+docker volume rm copilotharness-postgres-data copilotharness-redis-data
 ```
 
 ## Validate
@@ -25,6 +55,8 @@ Remove-Item .\App_Data\copilotharness-admin.db
 ```powershell
 dotnet test .\ElBruno.CopilotHarness.slnx
 ```
+
+Tests always run against SQLite in-process — no Docker needed.
 
 ## Inspect telemetry
 
