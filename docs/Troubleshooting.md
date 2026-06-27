@@ -7,12 +7,7 @@ This is a known dependency advisory warning in the current package set and does 
 
 ## Foundry secrets missing
 
-If the AppHost asks for Foundry values, set:
-
-```powershell
-dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryEndpoint https://<your-foundry-endpoint>
-dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryApiKey <your-api-key>
-```
+If the AppHost asks for Foundry values, start it with `aspire run` and provide `FoundryEndpoint` and `FoundryApiKey` as Aspire external parameters or environment variables.
 
 ## Router returns 4xx for malformed input
 

@@ -91,7 +91,7 @@ Phase 2
 - Redis
 
 Secrets
-- Managed only through Aspire External Parameters / User Secrets.
+- Managed only through Aspire External Parameters.
 - Never stored in SQLite.
 
 ---

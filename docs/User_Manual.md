@@ -16,19 +16,16 @@ ElBruno.CopilotHarness is a BYOK harness for GitHub Copilot with:
 ### Prerequisites
 
 - .NET 10 SDK
-- Aspire tooling
+- Aspire CLI (`aspire`)
 
-### Configure secrets
+### Configure Aspire parameters
 
-```powershell
-dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryEndpoint https://<your-foundry-endpoint>
-dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryApiKey <your-api-key>
-```
+Provide `FoundryEndpoint` and `FoundryApiKey` as Aspire external parameters or environment variables.
 
 ### Start
 
 ```powershell
-dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
+aspire run
 ```
 
 ## VS Code extension

@@ -2,18 +2,45 @@
 
 BYOK harness for GitHub Copilot built with .NET 10 and .NET Aspire.
 
-## What it is
+## What it does
 
-An intelligent BYOK harness for GitHub Copilot. The repo currently includes:
+- Runs an Aspire AppHost for local orchestration
+- Exposes an OpenAI-compatible Router API
+- Ships Admin and Judge web apps
+- Uses EF Core persistence, OpenTelemetry, and Aspire external parameters
+- Targets GitHub Copilot BYOK-style clients with a single `gpt-5-mini` deployment
 
-- Aspire AppHost
-- Router API
-- Admin Web
-- Judge Web
-- SQLite + EF Core admin storage
-- Phase 0-7 routing, intelligence, judge, multi-client telemetry, and VS Code extension contracts
+## Fast start
 
-## Current projects
+### Prerequisites
+
+- .NET 10 SDK
+- Aspire CLI (`aspire`)
+- GitHub Copilot access in the client you want to point at the router
+
+### Run the system
+
+```powershell
+aspire run
+```
+
+### Configure BYOK
+
+1. Start the AppHost with `aspire run`.
+2. Open the Aspire dashboard and copy the Router.Api OpenAI-compatible endpoint.
+3. Point your GitHub Copilot BYOK client at that endpoint.
+4. Use the `gpt-5-mini` deployment name.
+5. Keep the upstream Foundry endpoint and API key in Aspire external parameters.
+
+### Configure Aspire parameters
+
+Provide these values through Aspire external parameters or environment variables:
+
+- `FoundryEndpoint`
+- `FoundryApiKey`
+- `AdminApiKey` (optional)
+
+## Project layout
 
 - `src/ElBruno.CopilotHarness.AppHost`
 - `src/ElBruno.CopilotHarness.ServiceDefaults`
@@ -21,55 +48,18 @@ An intelligent BYOK harness for GitHub Copilot. The repo currently includes:
 - `src/ElBruno.CopilotHarness.Router.Api`
 - `src/ElBruno.CopilotHarness.Admin.Web`
 - `src/ElBruno.CopilotHarness.Judge.Web`
+- `src/ElBruno.CopilotHarness.Evaluation.Worker`
 - `src/ElBruno.CopilotHarness.VSCode`
-
-## Quick start
-
-### Prerequisites
-
-- .NET 10 SDK
-- Aspire tooling
-
-### Configure secrets
-
-```powershell
-dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryEndpoint https://<your-foundry-endpoint>
-dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryApiKey <your-api-key>
-dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:AdminApiKey <optional-admin-bearer-token>
-```
-
-### Run
-
-```powershell
-dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
-```
-
-### VS Code extension
-
-```powershell
-cd .\src\ElBruno.CopilotHarness.VSCode
-npm install
-npm run compile
-```
-
-Open the folder in VS Code and press `F5` to run the extension host.
 
 ## Docs
 
-- `docs/Docs_Index.md`
 - `docs/Current_Progress.md`
 - `docs/User_Manual.md`
+- `docs/Docs_Index.md`
 - `docs/Architecture.md`
 - `docs/API_Reference.md`
 - `docs/Troubleshooting.md`
 - `docs/Runbook.md`
-- `docs/Contributing.md`
-- `docs/Phase2_Admin.md`
-- `docs/Phase3_Harness_Intelligence.md`
-- `docs/Phase4_Client_Compatibility.md`
-- `docs/Phase4_MultiClient_Dashboard.md`
-- `docs/Phase5_AI_Judge.md`
-- `docs/Phase7_VSCode_Extension.md`
 
 ## Validate
 

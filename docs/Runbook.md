@@ -3,7 +3,7 @@
 ## Start local environment
 
 ```powershell
-dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
+aspire run
 ```
 
 This starts the Router, Admin, and Judge apps together.

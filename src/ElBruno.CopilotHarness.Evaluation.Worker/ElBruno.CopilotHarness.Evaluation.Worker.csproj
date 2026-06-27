@@ -4,7 +4,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-ElBruno.CopilotHarness.Evaluation.Worker-a5086834-b280-4860-91ea-23a6f516c337</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
