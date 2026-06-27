@@ -48,6 +48,13 @@
       "created_at": "2026-06-27T10:02:42.707-04:00",
       "legacy_named": false,
       "status": "active"
+    },
+    "switch": {
+      "persistent_name": "Switch",
+      "universe": "The Matrix",
+      "created_at": "2026-06-27T13:10:34.516-04:00",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }
