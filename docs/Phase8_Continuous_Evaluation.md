@@ -143,3 +143,21 @@ The existing Rules Editor fetches confidence data from `GET /admin/rules/confide
 - Scheduler cycles are jittered to avoid thundering herd.
 - Empty states clearly distinguish "no data" from "backend not configured".
 - SQLite `DateTimeOffset` columns are sorted in-memory after `ToListAsync` to avoid EF Core limitations.
+
+## Evaluation.Worker (`ElBruno.CopilotHarness.Evaluation.Worker`)
+
+A dedicated .NET Worker Service (`net10.0`) that runs alongside Router.Api in the Aspire AppHost. It connects to the same database and runs two hosted services:
+
+### `ContinuousBenchmarkJob`
+Polls every **5 minutes** for `BenchmarkRuns` in `pending` status, advances them through `running` → `completed` (or `failed`). Plug in real LLM judge calls to replace the stub.
+
+### `RecommendationScheduler`
+Runs every **1 hour**, fetches all rule confidence scores, and logs a warning for any rule whose `ConfidenceScore` is below 0.80. Extend this to call `IApprovalWorkflowStore.CreateAsync` to auto-generate approval requests when rules degrade.
+
+### AppHost registration
+```csharp
+builder.AddProject<Projects.ElBruno_CopilotHarness_Evaluation_Worker>("evaluation-worker")
+    .WithReference(routerDatabase)
+    .WaitFor(routerApi);
+```
+

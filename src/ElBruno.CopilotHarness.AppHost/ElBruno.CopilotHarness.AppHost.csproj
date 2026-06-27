@@ -4,6 +4,7 @@
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.4.6" />
     <PackageReference Include="Aspire.Hosting.Redis" Version="13.4.6" />
     <ProjectReference Include="..\ElBruno.CopilotHarness.Admin.Web\ElBruno.CopilotHarness.Admin.Web.csproj" />
+    <ProjectReference Include="..\ElBruno.CopilotHarness.Evaluation.Worker\ElBruno.CopilotHarness.Evaluation.Worker.csproj" />
     <ProjectReference Include="..\ElBruno.CopilotHarness.Judge.Web\ElBruno.CopilotHarness.Judge.Web.csproj" />
     <ProjectReference Include="..\ElBruno.CopilotHarness.Router.Api\ElBruno.CopilotHarness.Router.Api.csproj" />
   </ItemGroup>

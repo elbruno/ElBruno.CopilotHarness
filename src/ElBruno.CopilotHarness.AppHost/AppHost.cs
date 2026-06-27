@@ -26,4 +26,8 @@ builder.AddProject<Projects.ElBruno_CopilotHarness_Admin_Web>("admin-web")
     .WithReference(routerApi)
     .WaitFor(routerApi);
 
+builder.AddProject<Projects.ElBruno_CopilotHarness_Evaluation_Worker>("evaluation-worker")
+    .WithReference(routerDatabase)
+    .WaitFor(routerApi);
+
 builder.Build().Run();

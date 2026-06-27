@@ -24,7 +24,9 @@ Last updated: 2026-06-27
 
 All 7 new EF Core entities, migration `202606270003_AddPhase8ContinuousEvaluation`, and idempotent `CREATE TABLE IF NOT EXISTS` bootstrap added.
 
-Test coverage: 12 new integration tests (`Phase8ContinuousEvaluationTests`). Full suite: **48/48 passing**.
+`Evaluation.Worker` background service added: `ContinuousBenchmarkJob` (5-min poll) and `RecommendationScheduler` (1-hour rule-confidence scan). Registered in AppHost.
+
+Test coverage: 12 new integration tests (`Phase8ContinuousEvaluationTests`). Full suite: **58/58 passing** (48 Router.Api + 10 Judge.Web).
 
 ## Current focus
 
