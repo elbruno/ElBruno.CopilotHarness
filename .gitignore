@@ -14,3 +14,9 @@
 *.user
 *.suo
 *.rsuser
+
+# SQLite runtime databases
+App_Data/
+*.db
+*.db-shm
+*.db-wal
