@@ -12,6 +12,23 @@ public sealed class SqliteRoutingStoreInitializer(
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await dbContext.Database.MigrateAsync(cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS RoutingExecutionTraces (
+                Id INTEGER NOT NULL CONSTRAINT PK_RoutingExecutionTraces PRIMARY KEY AUTOINCREMENT,
+                TraceId TEXT NOT NULL,
+                WorkflowEngine TEXT NOT NULL,
+                PayloadJson TEXT NOT NULL,
+                CreatedAtUtc TEXT NOT NULL
+            );
+            """,
+            cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_RoutingExecutionTraces_TraceId ON RoutingExecutionTraces (TraceId);",
+            cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS IX_RoutingExecutionTraces_CreatedAtUtc ON RoutingExecutionTraces (CreatedAtUtc);",
+            cancellationToken);
 
         if (!await dbContext.ModelProfiles.AnyAsync(cancellationToken))
         {

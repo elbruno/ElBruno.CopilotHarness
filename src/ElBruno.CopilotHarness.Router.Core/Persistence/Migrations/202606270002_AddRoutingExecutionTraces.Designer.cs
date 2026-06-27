@@ -1,6 +1,8 @@
 using System;
+using ElBruno.CopilotHarness.Router.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -8,9 +10,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ElBruno.CopilotHarness.Router.Core.Persistence.Migrations;
 
 [DbContext(typeof(HarnessDbContext))]
-partial class HarnessDbContextModelSnapshot : ModelSnapshot
+[Migration("202606270002_AddRoutingExecutionTraces")]
+partial class AddRoutingExecutionTraces
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -47,6 +50,37 @@ partial class HarnessDbContextModelSnapshot : ModelSnapshot
             b.ToTable("ModelProfiles", (string)null);
         });
 
+        modelBuilder.Entity("ElBruno.CopilotHarness.Router.Core.Persistence.RoutingExecutionTraceEntity", b =>
+        {
+            b.Property<long>("Id")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("INTEGER");
+
+            b.Property<DateTimeOffset>("CreatedAtUtc")
+                .HasColumnType("TEXT");
+
+            b.Property<string>("PayloadJson")
+                .HasMaxLength(32768)
+                .HasColumnType("TEXT");
+
+            b.Property<string>("TraceId")
+                .HasMaxLength(64)
+                .HasColumnType("TEXT");
+
+            b.Property<string>("WorkflowEngine")
+                .HasMaxLength(128)
+                .HasColumnType("TEXT");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CreatedAtUtc");
+
+            b.HasIndex("TraceId")
+                .IsUnique();
+
+            b.ToTable("RoutingExecutionTraces", (string)null);
+        });
+
         modelBuilder.Entity("ElBruno.CopilotHarness.Router.Core.Persistence.RoutingRuleSettingsEntity", b =>
         {
             b.Property<int>("Id")
@@ -80,37 +114,6 @@ partial class HarnessDbContextModelSnapshot : ModelSnapshot
             b.HasKey("Id");
 
             b.ToTable("RoutingRuleSettings", (string)null);
-        });
-
-        modelBuilder.Entity("ElBruno.CopilotHarness.Router.Core.Persistence.RoutingExecutionTraceEntity", b =>
-        {
-            b.Property<long>("Id")
-                .ValueGeneratedOnAdd()
-                .HasColumnType("INTEGER");
-
-            b.Property<DateTimeOffset>("CreatedAtUtc")
-                .HasColumnType("TEXT");
-
-            b.Property<string>("PayloadJson")
-                .HasMaxLength(32768)
-                .HasColumnType("TEXT");
-
-            b.Property<string>("TraceId")
-                .HasMaxLength(64)
-                .HasColumnType("TEXT");
-
-            b.Property<string>("WorkflowEngine")
-                .HasMaxLength(128)
-                .HasColumnType("TEXT");
-
-            b.HasKey("Id");
-
-            b.HasIndex("CreatedAtUtc");
-
-            b.HasIndex("TraceId")
-                .IsUnique();
-
-            b.ToTable("RoutingExecutionTraces", (string)null);
         });
 
         modelBuilder.Entity("ElBruno.CopilotHarness.Router.Core.Persistence.SetupStateEntity", b =>

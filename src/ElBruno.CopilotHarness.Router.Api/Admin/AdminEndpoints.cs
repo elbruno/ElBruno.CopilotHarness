@@ -148,7 +148,7 @@ public static class AdminEndpoints
 
         group.MapPost("/playground/evaluate", async (
             PlaygroundRequest request,
-            IRoutingConfigurationStore store,
+            IRequestRoutingService routingService,
             CancellationToken cancellationToken) =>
         {
             var jsonRequest = new JsonObject
@@ -178,8 +178,8 @@ public static class AdminEndpoints
             });
             jsonRequest["messages"] = messages;
 
-            var routingOptions = await store.GetRoutingOptionsAsync(cancellationToken);
-            var decision = BasicModelRouter.SelectModel(jsonRequest, routingOptions);
+            var routingSelection = await routingService.SelectModelWithTraceAsync(jsonRequest, cancellationToken);
+            var decision = routingSelection.Decision;
             jsonRequest["model"] = decision.Profile.Deployment;
 
             var promptCharacters = request.Prompt.Length + (request.SystemMessage?.Length ?? 0);
@@ -211,6 +211,97 @@ public static class AdminEndpoints
             checks.AddRange(validation.Warnings.Select(warning => new ValidationCheck("warning", true, warning)));
 
             return Results.Ok(new ValidationResponse(checks));
+        });
+
+        group.MapGet("/telemetry/clients", (IExecutionTraceStore traceStore, int? limit) =>
+        {
+            var normalizedLimit = Math.Clamp(limit ?? 200, 1, 500);
+            var traces = traceStore.GetRecent(normalizedLimit);
+            var now = DateTimeOffset.UtcNow;
+
+            var clients = traces
+                .GroupBy(trace => GetContextValue(trace, "request.client.id") ?? "unknown", StringComparer.OrdinalIgnoreCase)
+                .Select(grouped =>
+                {
+                    var ordered = grouped.OrderByDescending(item => item.CreatedAtUtc).ToList();
+                    var latest = ordered[0];
+                    var clientId = grouped.Key;
+
+                    return new ConnectedClientTelemetryDto(
+                        ClientId: clientId,
+                        DisplayName: GetClientDisplayName(clientId),
+                        Source: GetContextValue(latest, "request.client.source") ?? "unknown",
+                        Version: GetContextValue(latest, "request.client.version"),
+                        LastSeenUtc: latest.CreatedAtUtc,
+                        RequestsLastHour: grouped.Count(item => item.CreatedAtUtc >= now.AddHours(-1)),
+                        LastProfile: latest.Decision.ProfileName,
+                        LastDeployment: latest.Decision.Profile.Deployment);
+                })
+                .OrderByDescending(client => client.LastSeenUtc)
+                .ToList();
+
+            return Results.Ok(new ConnectedClientsResponse(now, clients));
+        });
+
+        group.MapGet("/telemetry/requests", (IExecutionTraceStore traceStore, int? limit) =>
+        {
+            var normalizedLimit = Math.Clamp(limit ?? 50, 1, 200);
+            var traces = traceStore.GetRecent(normalizedLimit);
+
+            var requests = traces
+                .OrderByDescending(trace => trace.CreatedAtUtc)
+                .Take(normalizedLimit)
+                .Select(trace =>
+                {
+                    var clientId = GetContextValue(trace, "request.client.id") ?? "unknown";
+                    return new LiveRequestTelemetryDto(
+                        TraceId: trace.TraceId,
+                        CreatedAtUtc: trace.CreatedAtUtc,
+                        Endpoint: GetContextValue(trace, "request.endpoint") ?? "unknown",
+                        ClientId: clientId,
+                        ClientDisplayName: GetClientDisplayName(clientId),
+                        ClientVersion: GetContextValue(trace, "request.client.version"),
+                        Profile: trace.Decision.ProfileName,
+                        Deployment: trace.Decision.Profile.Deployment,
+                        Reason: trace.Decision.Reason,
+                        ClassificationIntent: trace.Classification.Intent,
+                        ClassificationComplexity: trace.Classification.Complexity);
+                })
+                .ToList();
+
+            return Results.Ok(new LiveRequestsResponse(DateTimeOffset.UtcNow, requests));
+        });
+
+        group.MapGet("/traces/{traceId}", (string traceId, IExecutionTraceStore traceStore) =>
+        {
+            if (!traceStore.TryGet(traceId, out var trace))
+            {
+                return Results.NotFound();
+            }
+
+            return Results.Ok(ToRoutingTraceResponse(trace));
+        });
+
+        group.MapGet("/dashboard/snapshot", (IClientRequestActivityStore requestActivityStore) =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            var snapshot = requestActivityStore.GetSnapshot(now);
+            return Results.Ok(new DashboardSnapshotResponse(
+                snapshot.ConnectedClients.Select(ToConnectedClientDto).ToList(),
+                snapshot.LiveRequests.Select(ToLiveRequestDto).ToList(),
+                now));
+        });
+
+        group.MapGet("/clients/connected", (IClientRequestActivityStore requestActivityStore) =>
+        {
+            var snapshot = requestActivityStore.GetSnapshot(DateTimeOffset.UtcNow);
+            return Results.Ok(snapshot.ConnectedClients.Select(ToConnectedClientDto).ToList());
+        });
+
+        group.MapGet("/requests/live", (IClientRequestActivityStore requestActivityStore) =>
+        {
+            var snapshot = requestActivityStore.GetSnapshot(DateTimeOffset.UtcNow);
+            return Results.Ok(snapshot.LiveRequests.Select(ToLiveRequestDto).ToList());
         });
 
         return endpoints;
@@ -292,4 +383,57 @@ public static class AdminEndpoints
             updatedRules.PreferBigWhenSystemMessageExists,
             updatedRules.PreferStreamingProfileWhenStreaming), cancellationToken);
     }
+
+    private static RoutingTraceResponse ToRoutingTraceResponse(RoutingExecutionTrace trace) =>
+        new(
+            trace.TraceId,
+            trace.CreatedAtUtc,
+            trace.WorkflowEngine,
+            new ClassificationTraceDto(
+            trace.Classification.Intent,
+            trace.Classification.Complexity,
+            trace.Classification.Confidence,
+            trace.Classification.Reasoning),
+            new RuleAdvisorTraceDto(
+            trace.RuleAdvisor.SuggestedProfile,
+            trace.RuleAdvisor.Rationale),
+            new RoutingDecisionTraceDto(
+            trace.Decision.ProfileName,
+            trace.Decision.Profile.Deployment,
+            trace.Decision.Reason),
+            trace.Context.Select(contextFact => new RoutingTraceContextFactDto(contextFact.Key, contextFact.Value)).ToList(),
+            trace.Steps.Select(step => new RoutingWorkflowStepDto(step.Name, step.Outcome)).ToList());
+
+    private static ConnectedClientDto ToConnectedClientDto(ConnectedClientSnapshot snapshot) =>
+        new(
+            snapshot.Client,
+            snapshot.IsConnected,
+            snapshot.ActiveRequests,
+            snapshot.RequestsLastFiveMinutes,
+            snapshot.LastSeenAtUtc);
+
+    private static LiveRequestDto ToLiveRequestDto(LiveRequestSnapshot snapshot) =>
+        new(
+            snapshot.RequestId,
+            snapshot.Endpoint,
+            snapshot.Client,
+            snapshot.Stream,
+            snapshot.RequestedModel,
+            snapshot.SelectedProfile,
+            snapshot.SelectedDeployment,
+            snapshot.TraceId,
+            snapshot.StartedAtUtc,
+            snapshot.ElapsedMs);
+
+    private static string? GetContextValue(RoutingExecutionTrace trace, string key) =>
+        trace.Context.FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase))?.Value;
+
+    private static string GetClientDisplayName(string clientId) =>
+        clientId.ToLowerInvariant() switch
+        {
+            "vscode" => "VS Code",
+            "copilot-cli" => "Copilot CLI",
+            "copilot-app" => "Copilot App",
+            _ => "Unknown"
+        };
 }

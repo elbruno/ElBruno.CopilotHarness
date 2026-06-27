@@ -41,6 +41,32 @@ BYOK harness for GitHub Copilot built with .NET 10 and .NET Aspire.
   - `/admin/system/validation`
 - Router `/v1/chat/completions` remains OpenAI-compatible and now reads routing config from persisted store
 
+## Phase 3 intelligence additions
+
+- A Phase 3 routing workflow has been added in `Router.Api` with Microsoft Agent Framework-compatible orchestration primitives.
+- Routing now executes a deterministic intelligence pipeline:
+  - context providers (`requested-model`, `streaming`, `prompt-shape`)
+  - classification agent
+  - rule advisor agent
+  - final deterministic routing decision (preserving Phase 1/2 behavior)
+- Each routed request includes an execution trace id header:
+  - `x-harness-trace-id`
+- Admin API can inspect traces:
+  - `GET /admin/traces/{traceId}`
+
+See `docs/Phase3_Harness_Intelligence.md` for details.
+
+## Phase 4 multi-client dashboard additions
+
+- Router telemetry now captures client metadata and request endpoint for routed requests.
+- Admin API dashboard endpoint:
+  - `GET /admin/dashboard/snapshot`
+- Admin Web dashboard (`/`) now shows:
+  - connected clients for VS Code / Copilot CLI / Copilot App
+  - live routed requests (active + recent) with endpoint + selected profile + trace id
+
+See `docs/Phase4_MultiClient_Dashboard.md` and `docs/Phase4_Client_Compatibility.md` for details.
+
 ## Local run
 
 Configure secrets (AppHost user-secrets):
@@ -64,6 +90,7 @@ Phase 2 admin UI is available from the Aspire dashboard as `admin-web`, and dire
 - `/rules` (Rules Editor + “Generate my first rules”)
 - `/playground` (Routing Playground)
 - `/validation` (System Validation)
+- `/` now includes the Phase 4 telemetry dashboard (connected clients + live requests)
 
 See `docs/Phase2_Admin.md` for details.
 

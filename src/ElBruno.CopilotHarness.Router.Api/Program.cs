@@ -52,7 +52,15 @@ builder.Services.AddDbContext<HarnessDbContext>((serviceProvider, options) =>
 
 builder.Services.AddScoped<IRoutingConfigurationStore, RoutingConfigurationStore>();
 builder.Services.AddScoped<SqliteRoutingStoreInitializer>();
+builder.Services.AddScoped<IExecutionTraceStore, PersistentExecutionTraceStore>();
+builder.Services.AddScoped<IRequestContextProvider, RequestedModelContextProvider>();
+builder.Services.AddScoped<IRequestContextProvider, StreamingContextProvider>();
+builder.Services.AddScoped<IRequestContextProvider, PromptShapeContextProvider>();
+builder.Services.AddScoped<IClassificationAgent, DeterministicClassificationAgent>();
+builder.Services.AddScoped<IRuleAdvisorAgent, DeterministicRuleAdvisorAgent>();
+builder.Services.AddScoped<IRoutingWorkflow, MicrosoftAgentFrameworkRoutingWorkflow>();
 builder.Services.AddScoped<IRequestRoutingService, RequestRoutingService>();
+builder.Services.AddSingleton<IClientRequestActivityStore, InMemoryClientRequestActivityStore>();
 
 builder.Services.AddHttpClient<FoundryChatCompletionsClient>((serviceProvider, client) =>
 {
@@ -94,6 +102,7 @@ app.MapPost("/v1/responses", async (
     HttpContext context,
     FoundryChatCompletionsClient client,
     IRequestRoutingService routingService,
+    IClientRequestActivityStore requestActivityStore,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -111,41 +120,60 @@ app.MapPost("/v1/responses", async (
         return OpenAiApiUtilities.OpenAiBadRequest(mappingError ?? "Invalid responses request.");
     }
 
-    var routingDecision = await routingService.SelectModelAsync(chatPayload, cancellationToken);
-    chatPayload["model"] = routingDecision.Profile.Deployment;
+    var requestMetadata = OpenAiApiUtilities.BuildRequestMetadata(context.Request, responsesRequest);
+    var requestActivityId = requestActivityStore.Start(new ClientRequestStart(
+        "/v1/responses",
+        requestMetadata.Id,
+        false,
+        OpenAiApiUtilities.GetRequestedModel(chatPayload)));
 
-    logger.LogInformation(
-        "Responses compatibility routing selected profile {ProfileName} deployment {Deployment}. Reason: {Reason}",
-        routingDecision.ProfileName,
-        routingDecision.Profile.Deployment,
-        routingDecision.Reason);
-
-    using var upstreamResponse = await client.SendChatCompletionsAsync(
-        chatPayload,
-        routingDecision.Profile,
-        stream: false,
-        cancellationToken);
-
-    context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-    OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
-    OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingDecision);
-
-    var upstreamBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
-    if (!upstreamResponse.IsSuccessStatusCode)
+    try
     {
-        await context.Response.WriteAsync(upstreamBody, cancellationToken);
+        requestMetadata = OpenAiApiUtilities.BuildRequestMetadata(context.Request, responsesRequest, requestActivityId);
+        var routingSelection = await routingService.SelectModelWithTraceAsync(chatPayload, requestMetadata, cancellationToken);
+        requestActivityStore.MarkRouted(requestActivityId, routingSelection);
+
+        var routingDecision = routingSelection.Decision;
+        chatPayload["model"] = routingDecision.Profile.Deployment;
+
+        logger.LogInformation(
+            "Responses compatibility routing selected profile {ProfileName} deployment {Deployment}. Reason: {Reason}",
+            routingDecision.ProfileName,
+            routingDecision.Profile.Deployment,
+            routingDecision.Reason);
+
+        using var upstreamResponse = await client.SendChatCompletionsAsync(
+            chatPayload,
+            routingDecision.Profile,
+            stream: false,
+            cancellationToken);
+
+        context.Response.StatusCode = (int)upstreamResponse.StatusCode;
+        OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
+        OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
+
+        var upstreamBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
+        if (!upstreamResponse.IsSuccessStatusCode)
+        {
+            await context.Response.WriteAsync(upstreamBody, cancellationToken);
+            return Results.Empty;
+        }
+
+        var responsePayload = OpenAiCompatibilityMapper.CreateResponsesResponse(upstreamBody, routingDecision);
+        await context.Response.WriteAsJsonAsync(responsePayload, cancellationToken);
         return Results.Empty;
     }
-
-    var responsePayload = OpenAiCompatibilityMapper.CreateResponsesResponse(upstreamBody, routingDecision);
-    await context.Response.WriteAsJsonAsync(responsePayload, cancellationToken);
-    return Results.Empty;
+    finally
+    {
+        requestActivityStore.Complete(requestActivityId);
+    }
 });
 
 app.MapPost("/v1/chat/completions", async (
     HttpContext context,
     FoundryChatCompletionsClient client,
     IRequestRoutingService routingService,
+    IClientRequestActivityStore requestActivityStore,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -155,39 +183,57 @@ app.MapPost("/v1/chat/completions", async (
         return parseError;
     }
 
-    var routingDecision = await routingService.SelectModelAsync(requestBody!, cancellationToken);
-    requestBody!["model"] = routingDecision.Profile.Deployment;
-    var stream = requestBody["stream"]?.GetValue<bool>() ?? false;
-
-    logger.LogInformation(
-        "Routing decision selected profile {ProfileName} deployment {Deployment}. Reason: {Reason}",
-        routingDecision.ProfileName,
-        routingDecision.Profile.Deployment,
-        routingDecision.Reason);
-
-    var startedAt = DateTimeOffset.UtcNow;
-    using var upstreamResponse = await client.SendChatCompletionsAsync(
-        requestBody,
-        routingDecision.Profile,
+    var requestPayload = requestBody!;
+    var stream = requestPayload["stream"]?.GetValue<bool>() ?? false;
+    var requestMetadata = OpenAiApiUtilities.BuildRequestMetadata(context.Request, requestPayload);
+    var requestActivityId = requestActivityStore.Start(new ClientRequestStart(
+        "/v1/chat/completions",
+        requestMetadata.Id,
         stream,
-        cancellationToken);
-    var elapsedMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
+        OpenAiApiUtilities.GetRequestedModel(requestPayload)));
 
-    logger.LogInformation(
-        "Upstream chat completion call finished with status {StatusCode} in {ElapsedMs} ms. Stream={Stream}",
-        (int)upstreamResponse.StatusCode,
-        elapsedMs,
-        stream);
+    try
+    {
+        requestMetadata = OpenAiApiUtilities.BuildRequestMetadata(context.Request, requestPayload, requestActivityId);
+        var routingSelection = await routingService.SelectModelWithTraceAsync(requestPayload, requestMetadata, cancellationToken);
+        requestActivityStore.MarkRouted(requestActivityId, routingSelection);
+        var routingDecision = routingSelection.Decision;
+        requestPayload["model"] = routingDecision.Profile.Deployment;
 
-    context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-    OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
-    OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingDecision);
+        logger.LogInformation(
+            "Routing decision selected profile {ProfileName} deployment {Deployment}. Reason: {Reason}",
+            routingDecision.ProfileName,
+            routingDecision.Profile.Deployment,
+            routingDecision.Reason);
 
-    await using var responseStream = await upstreamResponse.Content.ReadAsStreamAsync(cancellationToken);
-    await responseStream.CopyToAsync(context.Response.Body, cancellationToken);
-    await context.Response.Body.FlushAsync(cancellationToken);
+        var startedAt = DateTimeOffset.UtcNow;
+        using var upstreamResponse = await client.SendChatCompletionsAsync(
+            requestPayload,
+            routingDecision.Profile,
+            stream,
+            cancellationToken);
+        var elapsedMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
 
-    return Results.Empty;
+        logger.LogInformation(
+            "Upstream chat completion call finished with status {StatusCode} in {ElapsedMs} ms. Stream={Stream}",
+            (int)upstreamResponse.StatusCode,
+            elapsedMs,
+            stream);
+
+        context.Response.StatusCode = (int)upstreamResponse.StatusCode;
+        OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
+        OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
+
+        await using var responseStream = await upstreamResponse.Content.ReadAsStreamAsync(cancellationToken);
+        await responseStream.CopyToAsync(context.Response.Body, cancellationToken);
+        await context.Response.Body.FlushAsync(cancellationToken);
+
+        return Results.Empty;
+    }
+    finally
+    {
+        requestActivityStore.Complete(requestActivityId);
+    }
 });
 
 app.MapDefaultEndpoints();

@@ -70,4 +70,31 @@ public sealed class AdminEndpointsTests : IClassFixture<RouterApiWebApplicationF
         Assert.True(setupState.IsCompleted);
         Assert.Equal("small", setupState.DefaultProfile);
     }
+
+    [Fact]
+    public async Task DashboardSnapshot_ReturnsConnectedClientsAndLiveRequests()
+    {
+        using var chatRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
+        {
+            Content = JsonContent.Create(new
+            {
+                model = "small",
+                messages = new[] { new { role = "user", content = "dashboard telemetry" } }
+            })
+        };
+        chatRequest.Headers.TryAddWithoutValidation("x-copilot-client", "copilot-cli");
+
+        var chatResponse = await _client.SendAsync(chatRequest);
+        chatResponse.EnsureSuccessStatusCode();
+
+        var dashboardResponse = await _client.GetAsync("/admin/dashboard/snapshot");
+        dashboardResponse.EnsureSuccessStatusCode();
+        var snapshot = await dashboardResponse.Content.ReadFromJsonAsync<DashboardSnapshotResponse>();
+
+        Assert.NotNull(snapshot);
+        var cliClient = snapshot.ConnectedClients.Single(client => client.Client == "copilot-cli");
+        Assert.True(cliClient.IsConnected);
+        Assert.True(cliClient.RequestsLastFiveMinutes >= 1);
+        Assert.Contains(snapshot.LiveRequests, request => request.Client == "copilot-cli");
+    }
 }

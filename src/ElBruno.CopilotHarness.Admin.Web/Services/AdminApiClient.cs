@@ -57,4 +57,8 @@ public sealed class AdminApiClient(HttpClient httpClient)
     public async Task<ValidationResponse> GetValidationAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<ValidationResponse>("/admin/system/validation", cancellationToken)
         ?? new ValidationResponse([]);
+
+    public async Task<DashboardSnapshotResponse> GetDashboardSnapshotAsync(CancellationToken cancellationToken = default) =>
+        await _httpClient.GetFromJsonAsync<DashboardSnapshotResponse>("/admin/dashboard/snapshot", cancellationToken)
+        ?? new DashboardSnapshotResponse([], [], DateTimeOffset.UtcNow);
 }

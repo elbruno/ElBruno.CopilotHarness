@@ -57,3 +57,27 @@ public sealed record ValidationCheck(
     string Message);
 
 public sealed record ValidationResponse(IReadOnlyList<ValidationCheck> Checks);
+
+public sealed record ConnectedClientDto(
+    string Client,
+    bool IsConnected,
+    int ActiveRequests,
+    int RequestsLastFiveMinutes,
+    DateTimeOffset? LastSeenAtUtc);
+
+public sealed record LiveRequestDto(
+    string RequestId,
+    string Endpoint,
+    string Client,
+    bool Stream,
+    string? RequestedModel,
+    string? SelectedProfile,
+    string? SelectedDeployment,
+    string? TraceId,
+    DateTimeOffset StartedAtUtc,
+    double ElapsedMs);
+
+public sealed record DashboardSnapshotResponse(
+    IReadOnlyList<ConnectedClientDto> ConnectedClients,
+    IReadOnlyList<LiveRequestDto> LiveRequests,
+    DateTimeOffset GeneratedAtUtc);

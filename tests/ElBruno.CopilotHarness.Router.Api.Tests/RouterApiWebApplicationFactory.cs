@@ -55,6 +55,12 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
             };
         }
 
+        var requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
+        if (requestBody.Contains("slow-live-check", StringComparison.OrdinalIgnoreCase))
+        {
+            Thread.Sleep(400);
+        }
+
         var acceptsStream = request.Headers.Accept.Any(static header =>
             string.Equals(header.MediaType, "text/event-stream", StringComparison.OrdinalIgnoreCase));
 

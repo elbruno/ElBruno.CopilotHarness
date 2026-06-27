@@ -90,7 +90,7 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
             .Any(message => string.Equals(GetStringValue(message["role"]), "system", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static int GetPromptCharacterCount(JsonObject requestBody)
+    internal static int GetPromptCharacterCount(JsonObject requestBody)
     {
         if (requestBody["messages"] is not JsonArray messages)
         {

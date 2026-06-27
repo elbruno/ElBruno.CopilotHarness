@@ -1,10 +1,75 @@
-﻿@page "/"
+@page "/"
 @inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+@implements IAsyncDisposable
 
 <PageTitle>Admin Dashboard</PageTitle>
 
-<h1>Phase 2 Admin</h1>
-<p>Use the Setup Wizard, then validate and tune routing behavior.</p>
+<h1>Phase 4 Dashboard</h1>
+<p>Connected clients and live requests for VS Code, Copilot CLI, and Copilot App.</p>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <p>@_error</p>
+}
+
+@if (_dashboard is null)
+{
+    <p>Loading client dashboard...</p>
+}
+else
+{
+    <h2>Connected clients</h2>
+    <div class="cards">
+        @foreach (var client in _dashboard.ConnectedClients)
+        {
+            <article class="card">
+                <h3>@client.Client</h3>
+                <p>@(client.IsConnected ? "Connected" : "Idle")</p>
+                <p>Active requests: @client.ActiveRequests</p>
+                <p>Requests (5m): @client.RequestsLastFiveMinutes</p>
+                <p>Last seen: @(client.LastSeenAtUtc?.ToLocalTime().ToString("u") ?? "-")</p>
+            </article>
+        }
+    </div>
+
+    <h2>Live requests (@_dashboard.LiveRequests.Count)</h2>
+    @if (_dashboard.LiveRequests.Count == 0)
+    {
+        <p>No live requests right now.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+            <tr>
+                <th>Client</th>
+                <th>Endpoint</th>
+                <th>Requested</th>
+                <th>Selected</th>
+                <th>Stream</th>
+                <th>Elapsed (ms)</th>
+                <th>Trace</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var live in _dashboard.LiveRequests)
+            {
+                <tr>
+                    <td>@live.Client</td>
+                    <td>@live.Endpoint</td>
+                    <td>@(live.RequestedModel ?? "-")</td>
+                    <td>@(live.SelectedProfile ?? "-")</td>
+                    <td>@live.Stream</td>
+                    <td>@Math.Round(live.ElapsedMs)</td>
+                    <td>@(live.TraceId ?? "-")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    <p>Snapshot: @_dashboard.GeneratedAtUtc.ToLocalTime().ToString("u")</p>
+}
 
 @if (_validation is null)
 {
@@ -25,10 +90,57 @@ else
 }
 
 @code {
+    private readonly CancellationTokenSource _dashboardLoopCancellation = new();
+    private Task? _dashboardLoopTask;
     private ElBruno.CopilotHarness.Admin.Web.Services.ValidationResponse? _validation;
+    private ElBruno.CopilotHarness.Admin.Web.Services.DashboardSnapshotResponse? _dashboard;
+    private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
+        await RefreshDashboardAsync();
         _validation = await Api.GetValidationAsync();
+        _dashboardLoopTask = RunDashboardLoopAsync(_dashboardLoopCancellation.Token);
+    }
+
+    private async Task RunDashboardLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await RefreshDashboardAsync(cancellationToken);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshDashboardAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _dashboard = await Api.GetDashboardSnapshotAsync(cancellationToken);
+            _error = null;
+        }
+        catch (Exception exception)
+        {
+            _error = $"Could not refresh dashboard: {exception.Message}";
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _dashboardLoopCancellation.Cancel();
+
+        if (_dashboardLoopTask is not null)
+        {
+            try
+            {
+                await _dashboardLoopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        _dashboardLoopCancellation.Dispose();
     }
 }
