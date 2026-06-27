@@ -2,11 +2,13 @@
   <Folder Name="/src/">
     <Project Path="src/ElBruno.CopilotHarness.Admin.Web/ElBruno.CopilotHarness.Admin.Web.csproj" />
     <Project Path="src/ElBruno.CopilotHarness.AppHost/ElBruno.CopilotHarness.AppHost.csproj" />
+    <Project Path="src/ElBruno.CopilotHarness.Judge.Web/ElBruno.CopilotHarness.Judge.Web.csproj" />
     <Project Path="src/ElBruno.CopilotHarness.Router.Api/ElBruno.CopilotHarness.Router.Api.csproj" />
     <Project Path="src/ElBruno.CopilotHarness.Router.Core/ElBruno.CopilotHarness.Router.Core.csproj" />
     <Project Path="src/ElBruno.CopilotHarness.ServiceDefaults/ElBruno.CopilotHarness.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ElBruno.CopilotHarness.Judge.Web.Tests/ElBruno.CopilotHarness.Judge.Web.Tests.csproj" />
     <Project Path="tests/ElBruno.CopilotHarness.Router.Api.Tests/ElBruno.CopilotHarness.Router.Api.Tests.csproj" />
   </Folder>
 </Solution>
