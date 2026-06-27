@@ -72,4 +72,101 @@ public sealed class AdminApiClient(HttpClient httpClient)
             new OperationalSignalDto("Background jobs", "Unknown", "No response was returned.", "Retry the request."),
             new InfrastructureStatusDto("Unknown", "Unknown", "Unknown", "Unknown"),
             []);
+
+    // ── Phase 8 – Continuous Evaluation ──────────────────────────────────────
+
+    public async Task<RecommendationsResponse> GetPendingRecommendationsAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<RecommendationsResponse>("/admin/recommendations/pending", cancellationToken)
+                ?? new RecommendationsResponse([]);
+        }
+        catch
+        {
+            return new RecommendationsResponse([]);
+        }
+    }
+
+    public async Task ApproveRecommendationAsync(ApprovalDecisionRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/admin/recommendations/decision", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<IReadOnlyList<TeamProfileDto>> GetTeamProfilesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<IReadOnlyList<TeamProfileDto>>("/admin/profiles/teams", cancellationToken)
+                ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public async Task CreateTeamProfileAsync(CreateTeamProfileRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/admin/profiles/teams", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteTeamProfileAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync($"/admin/profiles/teams/{Uri.EscapeDataString(name)}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<IReadOnlyList<ProjectProfileDto>> GetProjectProfilesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<IReadOnlyList<ProjectProfileDto>>("/admin/profiles/projects", cancellationToken)
+                ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public async Task CreateProjectProfileAsync(CreateProjectProfileRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/admin/profiles/projects", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteProjectProfileAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync($"/admin/profiles/projects/{Uri.EscapeDataString(name)}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<BenchmarkStatusResponse> GetBenchmarkStatusAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<BenchmarkStatusResponse>("/admin/benchmarks/status", cancellationToken)
+                ?? new BenchmarkStatusResponse("Not configured", null, null, [], []);
+        }
+        catch
+        {
+            return new BenchmarkStatusResponse("Not configured", null, null, [], []);
+        }
+    }
+
+    public async Task<RulesConfidenceResponse> GetRulesConfidenceAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<RulesConfidenceResponse>("/admin/rules/confidence", cancellationToken)
+                ?? new RulesConfidenceResponse([]);
+        }
+        catch
+        {
+            return new RulesConfidenceResponse([]);
+        }
+    }
 }

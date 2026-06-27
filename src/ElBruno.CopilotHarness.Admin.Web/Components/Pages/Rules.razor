@@ -4,7 +4,7 @@
 <PageTitle>Rules Editor</PageTitle>
 
 <h1>Rules Editor</h1>
-<p>Phase 2 supports deterministic basic routing rules.</p>
+<p>Phase 2 supports deterministic basic routing rules. Rule confidence indicators are provided by the Phase 8 Recommendation Agent.</p>
 
 <button @onclick="GenerateStarterRulesAsync">Generate my first rules</button>
 
@@ -32,13 +32,40 @@ else
     <p>@_status</p>
 }
 
+@if (_confidence is not null && _confidence.Items.Count > 0)
+{
+    <h2>Rule confidence</h2>
+    <p class="muted">Confidence levels from the Phase 8 Recommendation Agent. High confidence rules are well-supported by benchmark data.</p>
+    <div class="model-list">
+        @foreach (var item in _confidence.Items)
+        {
+            <div class="card confidence-row">
+                <div class="approval-header">
+                    <strong>@item.RuleKey</strong>
+                    <span class="confidence-pill @GetConfidenceClass(item.Confidence)">
+                        @FormatConfidence(item.Confidence)
+                    </span>
+                    <span class="muted">@item.Trend</span>
+                </div>
+                <div class="confidence-bar-track">
+                    <div class="confidence-bar-fill @GetConfidenceClass(item.Confidence)"
+                         style="width: @(Math.Round(item.Confidence * 100))%"></div>
+                </div>
+                <p class="muted">Last evaluated @item.LastEvaluatedAtUtc.ToLocalTime().ToString("u")</p>
+            </div>
+        }
+    </div>
+}
+
 @code {
     private MutableRules? _model;
     private string? _status;
+    private ElBruno.CopilotHarness.Admin.Web.Services.RulesConfidenceResponse? _confidence;
 
     protected override async Task OnInitializedAsync()
     {
         _model = new MutableRules(await Api.GetBasicRulesAsync());
+        _confidence = await Api.GetRulesConfidenceAsync();
     }
 
     private async Task GenerateStarterRulesAsync()
@@ -85,4 +112,15 @@ else
         public bool PreferBigWhenSystemMessageExists { get; set; }
         public bool PreferStreamingProfileWhenStreaming { get; set; }
     }
+
+    private static string GetConfidenceClass(double confidence) =>
+        confidence switch
+        {
+            >= 0.8 => "confidence-high",
+            >= 0.5 => "confidence-medium",
+            _ => "confidence-low"
+        };
+
+    private static string FormatConfidence(double confidence) =>
+        $"{Math.Round(confidence * 100)}%";
 }

@@ -7,6 +7,7 @@ public sealed class JudgeDbContext(DbContextOptions<JudgeDbContext> options) : D
     public DbSet<PromptRecordEntity> PromptRecords => Set<PromptRecordEntity>();
     public DbSet<BenchmarkRunEntity> BenchmarkRuns => Set<BenchmarkRunEntity>();
     public DbSet<BenchmarkResultEntity> BenchmarkResults => Set<BenchmarkResultEntity>();
+    public DbSet<RecommendationEntity> Recommendations => Set<RecommendationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +51,20 @@ public sealed class JudgeDbContext(DbContextOptions<JudgeDbContext> options) : D
         benchmarkResults.HasIndex(entity => entity.BenchmarkRunId);
         benchmarkResults.HasIndex(entity => entity.PromptRecordId);
         benchmarkResults.HasIndex(entity => entity.IsWinner);
+
+        var recommendations = modelBuilder.Entity<RecommendationEntity>();
+        recommendations.ToTable("Recommendations");
+        recommendations.HasKey(e => e.Id);
+        recommendations.Property(e => e.Id).ValueGeneratedNever();
+        recommendations.Property(e => e.Type).HasMaxLength(64);
+        recommendations.Property(e => e.Summary).HasMaxLength(256);
+        recommendations.Property(e => e.Rationale).HasMaxLength(2048);
+        recommendations.Property(e => e.SuggestedAction).HasMaxLength(512);
+        recommendations.Property(e => e.SuggestedProfileName).HasMaxLength(128);
+        recommendations.Property(e => e.Status).HasMaxLength(32);
+        recommendations.Property(e => e.ReviewNotes).HasMaxLength(1024);
+        recommendations.HasIndex(e => e.Status);
+        recommendations.HasIndex(e => e.GeneratedAtUtc);
     }
 }
 
@@ -103,6 +118,21 @@ public sealed class BenchmarkResultEntity
     public double TokenScore { get; set; }
     public double OverallScore { get; set; }
     public DateTimeOffset EvaluatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class RecommendationEntity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Type { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
+    public string Rationale { get; set; } = string.Empty;
+    public double Confidence { get; set; }
+    public string SuggestedAction { get; set; } = string.Empty;
+    public string? SuggestedProfileName { get; set; }
+    public string Status { get; set; } = "Pending";
+    public DateTimeOffset GeneratedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+    public string? ReviewNotes { get; set; }
 }
 
 public sealed class JudgeDatabaseInitializer(JudgeDbContext dbContext)

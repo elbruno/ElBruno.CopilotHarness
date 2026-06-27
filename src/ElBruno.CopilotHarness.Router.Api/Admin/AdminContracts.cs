@@ -175,3 +175,79 @@ public sealed record LiveRequestTelemetryDto(
 public sealed record LiveRequestsResponse(
     DateTimeOffset SnapshotUtc,
     IReadOnlyList<LiveRequestTelemetryDto> Requests);
+
+// ── Phase 8 – Continuous Evaluation ──────────────────────────────────────────
+
+public sealed record RuleRecommendationDto(
+    string Id,
+    string RuleKey,
+    string CurrentValue,
+    string RecommendedValue,
+    string Rationale,
+    double Confidence,
+    string Status,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record RecommendationsResponse(IReadOnlyList<RuleRecommendationDto> Recommendations);
+
+public sealed record ReviewRecommendationRequest(
+    string RecommendationId,
+    string Decision,
+    string? Reason);
+
+public sealed record AdminTeamProfileDto(
+    string Name,
+    string Description,
+    IReadOnlyList<string> PreferredModels,
+    bool IsDefault);
+
+public sealed record AdminCreateTeamRequest(
+    string Name,
+    string Description,
+    IReadOnlyList<string> PreferredModels,
+    bool IsDefault);
+
+public sealed record AdminProjectProfileDto(
+    string Name,
+    string TeamProfile,
+    IReadOnlyList<string> Tags,
+    string OverrideProfile);
+
+public sealed record AdminCreateProjectRequest(
+    string Name,
+    string TeamProfile,
+    IReadOnlyList<string> Tags,
+    string OverrideProfile);
+
+public sealed record AdminBenchmarkRunDto(
+    string Id,
+    string Status,
+    string Trigger,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? CompletedAtUtc,
+    int TotalTests,
+    int PassedTests,
+    int FailedTests);
+
+public sealed record BenchmarkStatusResponse(
+    string SchedulerStatus,
+    DateTimeOffset? LastRunAtUtc,
+    DateTimeOffset? NextRunAtUtc,
+    IReadOnlyList<AdminBenchmarkRunDto> RecentRuns,
+    IReadOnlyList<AdminBenchmarkResultDto> Results);
+
+public sealed record AdminBenchmarkResultDto(
+    string RunId,
+    string Profile,
+    double AvgLatencyMs,
+    double AvgTokens,
+    double JudgeScore,
+    string Summary);
+
+public sealed record AdminRuleConfidenceDto(
+    string RuleKey,
+    double Confidence,
+    string Trend,
+    DateTimeOffset LastEvaluatedAtUtc);
+
+public sealed record RulesConfidenceResponse(IReadOnlyList<AdminRuleConfidenceDto> Items);

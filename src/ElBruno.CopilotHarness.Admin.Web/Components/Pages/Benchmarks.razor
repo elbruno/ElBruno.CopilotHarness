@@ -1,0 +1,132 @@
+@page "/benchmarks"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Continuous Benchmarking</PageTitle>
+
+<h1>Continuous Benchmarking</h1>
+<p>Status and results for the Phase 8 continuous evaluation pipeline.</p>
+
+<button @onclick="RefreshAsync">Refresh</button>
+
+@if (_status is null)
+{
+    <p>Loading benchmark status...</p>
+}
+else
+{
+    <div class="cards">
+        <article class="card">
+            <h3>Scheduler</h3>
+            <p class="metric">@_status.SchedulerStatus</p>
+        </article>
+        <article class="card">
+            <h3>Last run</h3>
+            <p class="metric">@(_status.LastRunAtUtc?.ToLocalTime().ToString("u") ?? "—")</p>
+        </article>
+        <article class="card">
+            <h3>Next run</h3>
+            <p class="metric">@(_status.NextRunAtUtc?.ToLocalTime().ToString("u") ?? "—")</p>
+        </article>
+    </div>
+
+    <h2>Recent runs</h2>
+    @if (_status.RecentRuns.Count == 0)
+    {
+        <p class="muted">No benchmark runs recorded. The continuous evaluation scheduler has not executed yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Run ID</th>
+                    <th>Status</th>
+                    <th>Trigger</th>
+                    <th>Started</th>
+                    <th>Completed</th>
+                    <th>Tests</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var run in _status.RecentRuns)
+                {
+                    <tr>
+                        <td><code>@run.Id[..Math.Min(8, run.Id.Length)]</code></td>
+                        <td><span class="status-pill @GetRunStatusClass(run.Status)">@run.Status</span></td>
+                        <td>@run.Trigger</td>
+                        <td>@run.StartedAtUtc.ToLocalTime().ToString("u")</td>
+                        <td>@(run.CompletedAtUtc?.ToLocalTime().ToString("u") ?? "Running…")</td>
+                        <td>@run.TotalTests</td>
+                        <td class="status-good-text">@run.PassedTests</td>
+                        <td class="status-bad-text">@run.FailedTests</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h2>Results by profile</h2>
+    @if (_status.Results.Count == 0)
+    {
+        <p class="muted">No results available yet.</p>
+    }
+    else
+    {
+        <div class="cards">
+            @foreach (var result in _status.Results)
+            {
+                <article class="card">
+                    <h3>@result.Profile</h3>
+                    <p class="muted">Run: @result.RunId[..Math.Min(8, result.RunId.Length)]</p>
+                    <table>
+                        <tr><th>Avg latency</th><td>@Math.Round(result.AvgLatencyMs) ms</td></tr>
+                        <tr><th>Avg tokens</th><td>@Math.Round(result.AvgTokens)</td></tr>
+                        <tr>
+                            <th>Judge score</th>
+                            <td>
+                                <span class="confidence-pill @GetScoreClass(result.JudgeScore)">
+                                    @FormatScore(result.JudgeScore)
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                    <div class="confidence-bar-track" style="margin-top: 0.5rem;">
+                        <div class="confidence-bar-fill @GetScoreClass(result.JudgeScore)"
+                             style="width: @(Math.Round(result.JudgeScore * 100))%"></div>
+                    </div>
+                    <p class="muted">@result.Summary</p>
+                </article>
+            }
+        </div>
+    }
+}
+
+@code {
+    private ElBruno.CopilotHarness.Admin.Web.Services.BenchmarkStatusResponse? _status;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync() =>
+        _status = await Api.GetBenchmarkStatusAsync();
+
+    private static string GetRunStatusClass(string status) =>
+        status.ToLowerInvariant() switch
+        {
+            "completed" => "status-good",
+            "running" => "status-warn",
+            "failed" => "status-bad",
+            _ => "status-neutral"
+        };
+
+    private static string GetScoreClass(double score) =>
+        score switch
+        {
+            >= 0.8 => "confidence-high",
+            >= 0.5 => "confidence-medium",
+            _ => "confidence-low"
+        };
+
+    private static string FormatScore(double score) => $"{Math.Round(score * 100)}%";
+}

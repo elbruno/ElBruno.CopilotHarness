@@ -107,3 +107,81 @@ public sealed record OperationsStatusResponse(
     OperationalSignalDto BackgroundJobs,
     InfrastructureStatusDto Infrastructure,
     IReadOnlyList<OperationalHealthDto> HealthChecks);
+
+// ── Phase 8 – Continuous Evaluation ──────────────────────────────────────────
+
+public sealed record RuleRecommendationDto(
+    string Id,
+    string RuleKey,
+    string CurrentValue,
+    string RecommendedValue,
+    string Rationale,
+    double Confidence,
+    string Status,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record RecommendationsResponse(
+    IReadOnlyList<RuleRecommendationDto> Recommendations);
+
+public sealed record ApprovalDecisionRequest(
+    string RecommendationId,
+    string Decision,
+    string? Reason);
+
+public sealed record TeamProfileDto(
+    string Name,
+    string Description,
+    IReadOnlyList<string> PreferredModels,
+    bool IsDefault);
+
+public sealed record CreateTeamProfileRequest(
+    string Name,
+    string Description,
+    IReadOnlyList<string> PreferredModels,
+    bool IsDefault);
+
+public sealed record ProjectProfileDto(
+    string Name,
+    string TeamProfile,
+    IReadOnlyList<string> Tags,
+    string OverrideProfile);
+
+public sealed record CreateProjectProfileRequest(
+    string Name,
+    string TeamProfile,
+    IReadOnlyList<string> Tags,
+    string OverrideProfile);
+
+public sealed record BenchmarkRunDto(
+    string Id,
+    string Status,
+    string Trigger,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? CompletedAtUtc,
+    int TotalTests,
+    int PassedTests,
+    int FailedTests);
+
+public sealed record BenchmarkResultDto(
+    string RunId,
+    string Profile,
+    double AvgLatencyMs,
+    double AvgTokens,
+    double JudgeScore,
+    string Summary);
+
+public sealed record BenchmarkStatusResponse(
+    string SchedulerStatus,
+    DateTimeOffset? LastRunAtUtc,
+    DateTimeOffset? NextRunAtUtc,
+    IReadOnlyList<BenchmarkRunDto> RecentRuns,
+    IReadOnlyList<BenchmarkResultDto> Results);
+
+public sealed record RuleConfidenceDto(
+    string RuleKey,
+    double Confidence,
+    string Trend,
+    DateTimeOffset LastEvaluatedAtUtc);
+
+public sealed record RulesConfidenceResponse(
+    IReadOnlyList<RuleConfidenceDto> Items);

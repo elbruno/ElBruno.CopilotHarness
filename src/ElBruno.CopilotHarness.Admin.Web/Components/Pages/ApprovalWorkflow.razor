@@ -1,0 +1,160 @@
+@page "/approvals"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Approval Workflow</PageTitle>
+
+<h1>Rule Change Approvals</h1>
+<p>Review rule change recommendations from the Recommendation Agent. Approve or reject each one before it takes effect.</p>
+
+<button @onclick="RefreshAsync">Refresh</button>
+
+@if (!string.IsNullOrWhiteSpace(_status))
+{
+    <p class="muted">@_status</p>
+}
+
+@if (_recommendations is null)
+{
+    <p>Loading recommendations...</p>
+}
+else if (_recommendations.Count == 0)
+{
+    <p class="muted">No pending recommendations. The Recommendation Agent has not produced any rule change proposals, or Phase 8 backend is not yet configured.</p>
+}
+else
+{
+    <div class="approval-list">
+        @foreach (var rec in _recommendations)
+        {
+            <article class="card approval-card">
+                <div class="approval-header">
+                    <span class="approval-rule-key">@rec.RuleKey</span>
+                    <span class="confidence-pill @GetConfidenceClass(rec.Confidence)">
+                        Confidence @FormatConfidence(rec.Confidence)
+                    </span>
+                    <span class="status-pill @GetStatusClass(rec.Status)">@rec.Status</span>
+                </div>
+
+                <div class="approval-values">
+                    <div>
+                        <span class="muted">Current</span>
+                        <code>@rec.CurrentValue</code>
+                    </div>
+                    <div class="approval-arrow">→</div>
+                    <div>
+                        <span class="muted">Recommended</span>
+                        <code>@rec.RecommendedValue</code>
+                    </div>
+                </div>
+
+                <div class="confidence-bar-track">
+                    <div class="confidence-bar-fill @GetConfidenceClass(rec.Confidence)"
+                         style="width: @(Math.Round(rec.Confidence * 100))%"></div>
+                </div>
+
+                <p>@rec.Rationale</p>
+                <p class="muted">Proposed @rec.CreatedAtUtc.ToLocalTime().ToString("u")</p>
+
+                @if (rec.Status == "Pending")
+                {
+                    <div class="approval-actions">
+                        <button class="btn-approve" @onclick="() => ApproveAsync(rec.Id)">Approve</button>
+                        <button class="btn-reject" @onclick="() => OpenRejectAsync(rec.Id)">Reject</button>
+                    </div>
+                }
+
+                @if (_rejectingId == rec.Id)
+                {
+                    <div class="rejection-form">
+                        <label>
+                            Reason for rejection
+                            <InputText @bind-Value="_rejectReason" />
+                        </label>
+                        <div class="approval-actions">
+                            <button class="btn-reject" @onclick="ConfirmRejectAsync">Confirm rejection</button>
+                            <button @onclick="CancelReject">Cancel</button>
+                        </div>
+                    </div>
+                }
+            </article>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<ElBruno.CopilotHarness.Admin.Web.Services.RuleRecommendationDto>? _recommendations;
+    private string? _status;
+    private string? _rejectingId;
+    private string _rejectReason = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _status = null;
+        var response = await Api.GetPendingRecommendationsAsync();
+        _recommendations = response.Recommendations;
+    }
+
+    private async Task ApproveAsync(string id)
+    {
+        try
+        {
+            await Api.ApproveRecommendationAsync(new(id, "approve", null));
+            _status = $"Recommendation {id} approved.";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"Approval failed: {ex.Message}";
+        }
+    }
+
+    private void OpenRejectAsync(string id)
+    {
+        _rejectingId = id;
+        _rejectReason = string.Empty;
+    }
+
+    private void CancelReject()
+    {
+        _rejectingId = null;
+        _rejectReason = string.Empty;
+    }
+
+    private async Task ConfirmRejectAsync()
+    {
+        if (_rejectingId is null) return;
+        try
+        {
+            await Api.ApproveRecommendationAsync(new(_rejectingId, "reject", _rejectReason));
+            _status = $"Recommendation {_rejectingId} rejected.";
+            _rejectingId = null;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"Rejection failed: {ex.Message}";
+        }
+    }
+
+    private static string FormatConfidence(double confidence) =>
+        $"{Math.Round(confidence * 100)}%";
+
+    private static string GetConfidenceClass(double confidence) =>
+        confidence switch
+        {
+            >= 0.8 => "confidence-high",
+            >= 0.5 => "confidence-medium",
+            _ => "confidence-low"
+        };
+
+    private static string GetStatusClass(string status) =>
+        status.ToLowerInvariant() switch
+        {
+            "pending" => "status-warn",
+            "approved" => "status-good",
+            "rejected" => "status-bad",
+            _ => "status-neutral"
+        };
+}

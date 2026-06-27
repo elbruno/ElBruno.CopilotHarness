@@ -355,6 +355,144 @@ public static class AdminEndpoints
             return Results.Ok(snapshot.LiveRequests.Select(ToLiveRequestDto).ToList());
         });
 
+        // ── Phase 8 – Admin.Web-compatible bridge endpoints ────────────────────
+
+        group.MapGet("/recommendations/pending", async (
+            IApprovalWorkflowStore approvalStore,
+            CancellationToken cancellationToken) =>
+        {
+            var pending = await approvalStore.ListAsync("pending", 0, 100, cancellationToken);
+            var dtos = pending.Select(ApprovalToRecommendationDto).ToList();
+            return Results.Ok(new RecommendationsResponse(dtos));
+        });
+
+        group.MapPost("/recommendations/decision", async (
+            ReviewRecommendationRequest request,
+            IApprovalWorkflowStore approvalStore,
+            CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.RecommendationId))
+            {
+                return Results.BadRequest("RecommendationId is required.");
+            }
+
+            var approved = string.Equals(request.Decision, "approve", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                await approvalStore.ReviewAsync(request.RecommendationId,
+                    new ReviewApprovalRequest(approved, "admin", request.Reason),
+                    cancellationToken);
+                return Results.Ok();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+        });
+
+        group.MapGet("/profiles/teams", async (
+            ITeamProjectProfileStore teamStore,
+            CancellationToken cancellationToken) =>
+        {
+            var teams = await teamStore.ListTeamsAsync(cancellationToken);
+            return Results.Ok(teams.Select(ToAdminTeamDto).ToList());
+        });
+
+        group.MapPost("/profiles/teams", async (
+            AdminCreateTeamRequest request,
+            ITeamProjectProfileStore teamStore,
+            CancellationToken cancellationToken) =>
+        {
+            var slug = request.Name.Trim().ToLowerInvariant().Replace(' ', '-');
+            var preferredModelsJson = System.Text.Json.JsonSerializer.Serialize(request.PreferredModels);
+            var defaultProfile = request.PreferredModels.Count > 0 ? request.PreferredModels[0] : "small";
+
+            await teamStore.UpsertTeamAsync(slug, new UpsertTeamProfileRequest(
+                request.Name, defaultProfile, preferredModelsJson, true), cancellationToken);
+
+            return Results.Created($"/admin/profiles/teams/{slug}", null);
+        });
+
+        group.MapDelete("/profiles/teams/{name}", async (
+            string name,
+            ITeamProjectProfileStore teamStore,
+            CancellationToken cancellationToken) =>
+        {
+            var deleted = await teamStore.DeleteTeamAsync(name, cancellationToken);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        });
+
+        group.MapGet("/profiles/projects", async (
+            ITeamProjectProfileStore teamStore,
+            CancellationToken cancellationToken) =>
+        {
+            var projects = await teamStore.ListProjectsAsync(null, cancellationToken);
+            return Results.Ok(projects.Select(ToAdminProjectDto).ToList());
+        });
+
+        group.MapPost("/profiles/projects", async (
+            AdminCreateProjectRequest request,
+            ITeamProjectProfileStore teamStore,
+            CancellationToken cancellationToken) =>
+        {
+            var slug = request.Name.Trim().ToLowerInvariant().Replace(' ', '-');
+            var tagsJson = System.Text.Json.JsonSerializer.Serialize(request.Tags);
+            var overrideProfile = string.IsNullOrWhiteSpace(request.OverrideProfile) ? "small" : request.OverrideProfile;
+
+            await teamStore.UpsertProjectAsync(slug, new UpsertProjectProfileRequest(
+                request.TeamProfile, request.Name, overrideProfile, tagsJson, true), cancellationToken);
+
+            return Results.Created($"/admin/profiles/projects/{slug}", null);
+        });
+
+        group.MapDelete("/profiles/projects/{name}", async (
+            string name,
+            ITeamProjectProfileStore teamStore,
+            CancellationToken cancellationToken) =>
+        {
+            var deleted = await teamStore.DeleteProjectAsync(name, cancellationToken);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        });
+
+        group.MapGet("/benchmarks/status", async (
+            IBenchmarkStore benchmarkStore,
+            CancellationToken cancellationToken) =>
+        {
+            var recentRuns = await benchmarkStore.ListRunsAsync(0, 10, cancellationToken);
+
+            var runDtos = recentRuns.Select(r => new AdminBenchmarkRunDto(
+                r.RunId,
+                r.Status,
+                "scheduled",
+                r.CreatedAtUtc,
+                r.CompletedAtUtc,
+                r.TotalItems,
+                r.CompletedItems,
+                0)).ToList();
+
+            var last = recentRuns.FirstOrDefault(r => r.CompletedAtUtc.HasValue);
+            return Results.Ok(new BenchmarkStatusResponse(
+                recentRuns.Any(r => r.Status == "running") ? "Running" : "Idle",
+                last?.CompletedAtUtc,
+                null,
+                runDtos,
+                []));
+        });
+
+        group.MapGet("/rules/confidence", async (
+            IRuleConfidenceStore confidenceStore,
+            CancellationToken cancellationToken) =>
+        {
+            var scores = await confidenceStore.GetCurrentScoresAsync(cancellationToken);
+            var dtos = scores.Select(s => new AdminRuleConfidenceDto(
+                s.RuleKey,
+                s.ConfidenceScore,
+                s.ConfidenceScore >= 0.8 ? "stable" : s.ConfidenceScore >= 0.5 ? "declining" : "low",
+                s.RecordedAtUtc)).ToList();
+            return Results.Ok(new RulesConfidenceResponse(dtos));
+        });
+
         return endpoints;
     }
 
@@ -467,4 +605,60 @@ public static class AdminEndpoints
             "copilot-app" => "Copilot App",
             _ => "Unknown"
         };
+
+    // ── Phase 8 mapping helpers ───────────────────────────────────────────────
+
+    private static RuleRecommendationDto ApprovalToRecommendationDto(ApprovalRequestSummary a)
+    {
+        string ruleKey = a.ChangeType, currentValue = "", recommendedValue = "", rationale = a.Description;
+        double confidence = 0.75;
+
+        try
+        {
+            var payload = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(a.PayloadJson);
+            ruleKey = TryGetString(payload, "ruleKey") ?? a.ChangeType;
+            currentValue = TryGetString(payload, "currentValue") ?? "";
+            recommendedValue = TryGetString(payload, "recommendedValue") ?? "";
+            rationale = TryGetString(payload, "rationale") ?? a.Description;
+            if (payload.TryGetProperty("confidence", out var conf)) confidence = conf.GetDouble();
+        }
+        catch { /* fall through to defaults */ }
+
+        return new RuleRecommendationDto(a.ApprovalId, ruleKey, currentValue, recommendedValue, rationale, confidence, a.Status, a.CreatedAtUtc);
+    }
+
+    private static string? TryGetString(System.Text.Json.JsonElement el, string key) =>
+        el.TryGetProperty(key, out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String
+            ? prop.GetString()
+            : null;
+
+    private static AdminTeamProfileDto ToAdminTeamDto(TeamProfileSummary t)
+    {
+        IReadOnlyList<string> preferredModels;
+        try
+        {
+            preferredModels = System.Text.Json.JsonSerializer.Deserialize<List<string>>(t.RulesJson) ?? [t.DefaultProfile];
+        }
+        catch
+        {
+            preferredModels = [t.DefaultProfile];
+        }
+
+        return new AdminTeamProfileDto(t.TeamId, t.DisplayName, preferredModels, false);
+    }
+
+    private static AdminProjectProfileDto ToAdminProjectDto(ProjectProfileSummary p)
+    {
+        IReadOnlyList<string> tags;
+        try
+        {
+            tags = System.Text.Json.JsonSerializer.Deserialize<List<string>>(p.RulesJson) ?? [];
+        }
+        catch
+        {
+            tags = [];
+        }
+
+        return new AdminProjectProfileDto(p.ProjectId, p.TeamId, tags, p.DefaultProfile);
+    }
 }

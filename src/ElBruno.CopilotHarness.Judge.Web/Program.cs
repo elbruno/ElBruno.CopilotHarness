@@ -34,6 +34,14 @@ builder.Services.AddScoped<IJudgeModelClient, FoundryJudgeModelClient>();
 builder.Services.AddScoped<IJudgeScoringEngine, HeuristicJudgeScoringEngine>();
 builder.Services.AddScoped<IBenchmarkRunner, BenchmarkRunner>();
 builder.Services.AddScoped<JudgeDatabaseInitializer>();
+builder.Services.AddScoped<IRecommendationAgent, RecommendationAgent>();
+
+builder.Services
+    .AddOptions<ContinuousBenchmarkOptions>()
+    .Bind(builder.Configuration.GetSection(ContinuousBenchmarkOptions.SectionName));
+
+builder.Services.AddSingleton<ContinuousBenchmarkScheduler>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ContinuousBenchmarkScheduler>());
 
 builder.Services.AddHttpClient<FoundryJudgeModelClient>((serviceProvider, client) =>
 {
@@ -139,6 +147,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapDefaultEndpoints();
 app.MapJudgeEndpoints();
+app.MapContinuousEvalEndpoints();
 
 app.Run();
 return;

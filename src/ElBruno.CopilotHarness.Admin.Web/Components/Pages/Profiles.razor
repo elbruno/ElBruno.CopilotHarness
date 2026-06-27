@@ -1,0 +1,217 @@
+@page "/profiles"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Team &amp; Project Profiles</PageTitle>
+
+<h1>Team &amp; Project Profiles</h1>
+<p>Manage team and project routing profiles for Phase 8 Continuous Evaluation.</p>
+
+@if (!string.IsNullOrWhiteSpace(_status))
+{
+    <p class="muted">@_status</p>
+}
+
+<div class="two-column">
+    <section>
+        <h2>Team profiles</h2>
+        <button @onclick="() => _showNewTeam = !_showNewTeam">Add team profile</button>
+
+        @if (_showNewTeam)
+        {
+            <article class="card">
+                <h3>New team profile</h3>
+                <EditForm Model="_newTeam" OnValidSubmit="CreateTeamProfileAsync">
+                    <DataAnnotationsValidator />
+                    <div class="form-grid">
+                        <label>Name <InputText @bind-Value="_newTeam.Name" /></label>
+                        <label>Description <InputText @bind-Value="_newTeam.Description" /></label>
+                        <label>Preferred models (comma-separated) <InputText @bind-Value="_newTeam.PreferredModelsRaw" /></label>
+                        <label class="checkbox"><InputCheckbox @bind-Value="_newTeam.IsDefault" /> Default profile</label>
+                    </div>
+                    <button type="submit">Create</button>
+                    <button type="button" @onclick="() => _showNewTeam = false">Cancel</button>
+                </EditForm>
+            </article>
+        }
+
+        @if (_teamProfiles is null)
+        {
+            <p>Loading team profiles...</p>
+        }
+        else if (_teamProfiles.Count == 0)
+        {
+            <p class="muted">No team profiles yet. Phase 8 backend may not be configured.</p>
+        }
+        else
+        {
+            <div class="model-list">
+                @foreach (var profile in _teamProfiles)
+                {
+                    <article class="card">
+                        <div class="approval-header">
+                            <strong>@profile.Name</strong>
+                            @if (profile.IsDefault)
+                            {
+                                <span class="status-pill status-good">Default</span>
+                            }
+                        </div>
+                        <p class="muted">@profile.Description</p>
+                        <p><strong>Models:</strong> @string.Join(", ", profile.PreferredModels)</p>
+                        <button class="btn-reject" @onclick="() => DeleteTeamProfileAsync(profile.Name)">Remove</button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <section>
+        <h2>Project profiles</h2>
+        <button @onclick="() => _showNewProject = !_showNewProject">Add project profile</button>
+
+        @if (_showNewProject)
+        {
+            <article class="card">
+                <h3>New project profile</h3>
+                <EditForm Model="_newProject" OnValidSubmit="CreateProjectProfileAsync">
+                    <DataAnnotationsValidator />
+                    <div class="form-grid">
+                        <label>Name <InputText @bind-Value="_newProject.Name" /></label>
+                        <label>Team profile <InputText @bind-Value="_newProject.TeamProfile" /></label>
+                        <label>Tags (comma-separated) <InputText @bind-Value="_newProject.TagsRaw" /></label>
+                        <label>Override profile <InputText @bind-Value="_newProject.OverrideProfile" /></label>
+                    </div>
+                    <button type="submit">Create</button>
+                    <button type="button" @onclick="() => _showNewProject = false">Cancel</button>
+                </EditForm>
+            </article>
+        }
+
+        @if (_projectProfiles is null)
+        {
+            <p>Loading project profiles...</p>
+        }
+        else if (_projectProfiles.Count == 0)
+        {
+            <p class="muted">No project profiles yet. Phase 8 backend may not be configured.</p>
+        }
+        else
+        {
+            <div class="model-list">
+                @foreach (var profile in _projectProfiles)
+                {
+                    <article class="card">
+                        <div class="approval-header">
+                            <strong>@profile.Name</strong>
+                            @if (!string.IsNullOrWhiteSpace(profile.OverrideProfile))
+                            {
+                                <span class="status-pill status-warn">Override: @profile.OverrideProfile</span>
+                            }
+                        </div>
+                        <p class="muted">Team: @profile.TeamProfile</p>
+                        @if (profile.Tags.Count > 0)
+                        {
+                            <p><strong>Tags:</strong> @string.Join(", ", profile.Tags)</p>
+                        }
+                        <button class="btn-reject" @onclick="() => DeleteProjectProfileAsync(profile.Name)">Remove</button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private IReadOnlyList<ElBruno.CopilotHarness.Admin.Web.Services.TeamProfileDto>? _teamProfiles;
+    private IReadOnlyList<ElBruno.CopilotHarness.Admin.Web.Services.ProjectProfileDto>? _projectProfiles;
+    private string? _status;
+    private bool _showNewTeam;
+    private bool _showNewProject;
+    private readonly NewTeamForm _newTeam = new();
+    private readonly NewProjectForm _newProject = new();
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _teamProfiles = await Api.GetTeamProfilesAsync();
+        _projectProfiles = await Api.GetProjectProfilesAsync();
+    }
+
+    private async Task CreateTeamProfileAsync()
+    {
+        try
+        {
+            var models = _newTeam.PreferredModelsRaw
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            await Api.CreateTeamProfileAsync(new(_newTeam.Name, _newTeam.Description, models, _newTeam.IsDefault));
+            _status = $"Team profile '{_newTeam.Name}' created.";
+            _showNewTeam = false;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"Create failed: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteTeamProfileAsync(string name)
+    {
+        try
+        {
+            await Api.DeleteTeamProfileAsync(name);
+            _status = $"Team profile '{name}' removed.";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"Delete failed: {ex.Message}";
+        }
+    }
+
+    private async Task CreateProjectProfileAsync()
+    {
+        try
+        {
+            var tags = _newProject.TagsRaw
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            await Api.CreateProjectProfileAsync(new(_newProject.Name, _newProject.TeamProfile, tags, _newProject.OverrideProfile));
+            _status = $"Project profile '{_newProject.Name}' created.";
+            _showNewProject = false;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"Create failed: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteProjectProfileAsync(string name)
+    {
+        try
+        {
+            await Api.DeleteProjectProfileAsync(name);
+            _status = $"Project profile '{name}' removed.";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"Delete failed: {ex.Message}";
+        }
+    }
+
+    private sealed class NewTeamForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string PreferredModelsRaw { get; set; } = string.Empty;
+        public bool IsDefault { get; set; }
+    }
+
+    private sealed class NewProjectForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string TeamProfile { get; set; } = string.Empty;
+        public string TagsRaw { get; set; } = string.Empty;
+        public string OverrideProfile { get; set; } = string.Empty;
+    }
+}

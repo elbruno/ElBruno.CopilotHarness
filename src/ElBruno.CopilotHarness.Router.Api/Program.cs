@@ -3,6 +3,8 @@ using ElBruno.CopilotHarness.Router.Api.BackgroundJobs;
 using ElBruno.CopilotHarness.Router.Api;
 using ElBruno.CopilotHarness.Router.Api.Admin;
 using ElBruno.CopilotHarness.Router.Api.Extension;
+using ElBruno.CopilotHarness.Router.Api.Intelligence;
+using ElBruno.CopilotHarness.Router.Api.Phase8;
 using ElBruno.CopilotHarness.Router.Core;
 using ElBruno.CopilotHarness.Router.Core.Persistence;
 using ElBruno.CopilotHarness.Router.Api.Infrastructure;
@@ -19,6 +21,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.Services.AddOpenApi();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddOptions<BackendOptions>()
     .Bind(builder.Configuration.GetSection(BackendOptions.SectionName))
     .ValidateDataAnnotations()
@@ -145,6 +148,24 @@ builder.Services.AddScoped<IRuleAdvisorAgent, DeterministicRuleAdvisorAgent>();
 builder.Services.AddScoped<IRoutingWorkflow, MicrosoftAgentFrameworkRoutingWorkflow>();
 builder.Services.AddScoped<IRequestRoutingService, RequestRoutingService>();
 builder.Services.AddSingleton<IClientRequestActivityStore, InMemoryClientRequestActivityStore>();
+
+// Phase 8 – Continuous Evaluation stores
+builder.Services.AddScoped<ShadowRoutingStore>();
+builder.Services.AddScoped<IShadowRoutingStore>(sp => sp.GetRequiredService<ShadowRoutingStore>());
+builder.Services.AddScoped<RuleConfidenceStore>();
+builder.Services.AddScoped<IRuleConfidenceStore>(sp => sp.GetRequiredService<RuleConfidenceStore>());
+builder.Services.AddScoped<BenchmarkStore>();
+builder.Services.AddScoped<IBenchmarkStore>(sp => sp.GetRequiredService<BenchmarkStore>());
+builder.Services.AddScoped<ApprovalWorkflowStore>();
+builder.Services.AddScoped<IApprovalWorkflowStore>(sp => sp.GetRequiredService<ApprovalWorkflowStore>());
+builder.Services.AddScoped<TeamProjectProfileStore>();
+builder.Services.AddScoped<ITeamProjectProfileStore>(sp => sp.GetRequiredService<TeamProjectProfileStore>());
+
+// Phase 8 – Intelligence services
+builder.Services.AddScoped<IRequestContextProvider, TeamProfileContextProvider>();
+builder.Services.AddScoped<IShadowRoutingService, ShadowRoutingService>();
+builder.Services.AddScoped<IRecommendationAgent, DeterministicRecommendationAgent>();
+builder.Services.AddScoped<IShadowRoutingService, ShadowRoutingService>();
 
 builder.Services.AddHttpClient<FoundryChatCompletionsClient>((serviceProvider, client) =>
 {
@@ -282,6 +303,7 @@ app.MapPost("/v1/chat/completions", async (
     FoundryChatCompletionsClient client,
     IRequestRoutingService routingService,
     IClientRequestActivityStore requestActivityStore,
+    IShadowRoutingService shadowRoutingService,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -328,6 +350,17 @@ app.MapPost("/v1/chat/completions", async (
             elapsedMs,
             stream);
 
+        // Phase 8: fire shadow routing comparison in background (non-streaming only)
+        if (!stream)
+        {
+            shadowRoutingService.FireAndForget(
+                requestPayload,
+                routingDecision.ProfileName,
+                routingSelection.TraceId,
+                elapsedMs,
+                (int)upstreamResponse.StatusCode);
+        }
+
         context.Response.StatusCode = (int)upstreamResponse.StatusCode;
         OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
         OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
@@ -348,6 +381,7 @@ app.MapDefaultEndpoints();
 
 app.MapExtensionEndpoints();
 app.MapAdminEndpoints(adminAuthEnabled);
+app.MapPhase8Endpoints(adminAuthEnabled);
 
 app.Run();
 return;
