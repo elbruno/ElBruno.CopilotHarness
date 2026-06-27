@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using ElBruno.CopilotHarness.Router.Api.BackgroundJobs;
 using ElBruno.CopilotHarness.Router.Api;
 using ElBruno.CopilotHarness.Router.Api.Admin;
+using ElBruno.CopilotHarness.Router.Api.Extension;
 using ElBruno.CopilotHarness.Router.Core;
 using ElBruno.CopilotHarness.Router.Core.Persistence;
 using ElBruno.CopilotHarness.Router.Api.Infrastructure;
@@ -345,6 +346,7 @@ app.MapPost("/v1/chat/completions", async (
 
 app.MapDefaultEndpoints();
 
+app.MapExtensionEndpoints();
 app.MapAdminEndpoints(adminAuthEnabled);
 
 app.Run();

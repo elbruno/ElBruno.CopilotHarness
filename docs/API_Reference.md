@@ -22,6 +22,18 @@ Readiness check including downstream Foundry reachability.
 
 Liveness check.
 
+### `GET /v1/status`
+
+Returns the VS Code extension status surface, including dashboard link metadata and health checks.
+
+### `GET /v1/explain-routing/{traceId}`
+
+Returns routing trace details for a trace id.
+
+### `GET /v1/extension/capabilities`
+
+Returns the chat participant, dashboard link, and language model tool metadata used by the VS Code extension.
+
 ## Admin
 
 ### `GET /admin/dashboard/snapshot`
@@ -82,5 +94,6 @@ Returns benchmark results and model summaries.
 
 - All compatibility additions are additive and preserve existing response shapes.
 - Refer to `docs/Phase4_Client_Compatibility.md` for client detection details.
+- Refer to `docs/PRD.md` Phase 7 for VS Code extension integration surfaces.
 - Admin routes require bearer auth when `Backend:Auth:AdminApiKey` is configured.
 - Requests are subject to configurable rate limiting.

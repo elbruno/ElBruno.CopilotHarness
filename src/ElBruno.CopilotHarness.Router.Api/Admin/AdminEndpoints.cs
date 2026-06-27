@@ -286,7 +286,7 @@ public static class AdminEndpoints
                 return Results.NotFound();
             }
 
-            return Results.Ok(ToRoutingTraceResponse(trace));
+            return Results.Ok(RoutingTraceResponseMapper.ToResponse(trace));
         });
 
         group.MapGet("/dashboard/snapshot", (IClientRequestActivityStore requestActivityStore) =>
@@ -434,26 +434,6 @@ public static class AdminEndpoints
             updatedRules.PreferBigWhenSystemMessageExists,
             updatedRules.PreferStreamingProfileWhenStreaming), cancellationToken);
     }
-
-    private static RoutingTraceResponse ToRoutingTraceResponse(RoutingExecutionTrace trace) =>
-        new(
-            trace.TraceId,
-            trace.CreatedAtUtc,
-            trace.WorkflowEngine,
-            new ClassificationTraceDto(
-            trace.Classification.Intent,
-            trace.Classification.Complexity,
-            trace.Classification.Confidence,
-            trace.Classification.Reasoning),
-            new RuleAdvisorTraceDto(
-            trace.RuleAdvisor.SuggestedProfile,
-            trace.RuleAdvisor.Rationale),
-            new RoutingDecisionTraceDto(
-            trace.Decision.ProfileName,
-            trace.Decision.Profile.Deployment,
-            trace.Decision.Reason),
-            trace.Context.Select(contextFact => new RoutingTraceContextFactDto(contextFact.Key, contextFact.Value)).ToList(),
-            trace.Steps.Select(step => new RoutingWorkflowStepDto(step.Name, step.Outcome)).ToList());
 
     private static ConnectedClientDto ToConnectedClientDto(ConnectedClientSnapshot snapshot) =>
         new(

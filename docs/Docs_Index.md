@@ -18,6 +18,7 @@
 - `docs/Phase4_Client_Compatibility.md`
 - `docs/Phase4_MultiClient_Dashboard.md`
 - `docs/Phase5_AI_Judge.md`
+- `docs/Phase7_VSCode_Extension.md`
 
 ## Planning
 

@@ -30,48 +30,67 @@ public sealed class SqliteRoutingStoreInitializer(
             "CREATE INDEX IF NOT EXISTS IX_RoutingExecutionTraces_CreatedAtUtc ON RoutingExecutionTraces (CreatedAtUtc);",
             cancellationToken);
 
-        if (!await dbContext.ModelProfiles.AnyAsync(cancellationToken))
+        foreach (var profile in _bootstrapOptions.Profiles)
         {
-            var now = DateTimeOffset.UtcNow;
-            var profiles = _bootstrapOptions.Profiles.Select(profile => new ModelProfileEntity
-            {
-                ProfileName = profile.Key,
-                DisplayName = profile.Key,
-                Deployment = profile.Value.Deployment,
-                ApiVersion = profile.Value.ApiVersion,
-                Enabled = profile.Value.Enabled,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
-            });
-
-            await dbContext.ModelProfiles.AddRangeAsync(profiles, cancellationToken);
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                 INSERT OR IGNORE INTO ModelProfiles (
+                     ProfileName,
+                     DisplayName,
+                     Deployment,
+                     ApiVersion,
+                     Enabled,
+                     CreatedAtUtc,
+                     UpdatedAtUtc
+                 ) VALUES (
+                     {profile.Key},
+                     {profile.Key},
+                     {profile.Value.Deployment},
+                     {profile.Value.ApiVersion},
+                     {profile.Value.Enabled},
+                     {DateTimeOffset.UtcNow},
+                     {DateTimeOffset.UtcNow}
+                 );
+                 """,
+                cancellationToken);
         }
 
-        if (!await dbContext.RoutingRuleSettings.AnyAsync(cancellationToken))
-        {
-            dbContext.RoutingRuleSettings.Add(new RoutingRuleSettingsEntity
-            {
-                Id = 1,
-                DefaultProfile = _bootstrapOptions.DefaultProfile,
-                BigPromptCharacterThreshold = _bootstrapOptions.Rules.BigPromptCharacterThreshold,
-                BigProfile = _bootstrapOptions.Rules.BigProfile,
-                StreamingProfile = _bootstrapOptions.Rules.StreamingProfile,
-                PreferBigWhenSystemMessageExists = _bootstrapOptions.Rules.PreferBigWhenSystemMessageExists,
-                PreferStreamingProfileWhenStreaming = _bootstrapOptions.Rules.PreferStreamingProfileWhenStreaming,
-                UpdatedAtUtc = DateTimeOffset.UtcNow
-            });
-        }
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             INSERT OR IGNORE INTO RoutingRuleSettings (
+                 Id,
+                 DefaultProfile,
+                 BigPromptCharacterThreshold,
+                 BigProfile,
+                 StreamingProfile,
+                 PreferBigWhenSystemMessageExists,
+                 PreferStreamingProfileWhenStreaming,
+                 UpdatedAtUtc
+             ) VALUES (
+                 {1},
+                 {_bootstrapOptions.DefaultProfile},
+                 {_bootstrapOptions.Rules.BigPromptCharacterThreshold},
+                 {_bootstrapOptions.Rules.BigProfile},
+                 {_bootstrapOptions.Rules.StreamingProfile},
+                 {_bootstrapOptions.Rules.PreferBigWhenSystemMessageExists},
+                 {_bootstrapOptions.Rules.PreferStreamingProfileWhenStreaming},
+                 {DateTimeOffset.UtcNow}
+             );
+             """,
+            cancellationToken);
 
-        if (!await dbContext.SetupState.AnyAsync(cancellationToken))
-        {
-            dbContext.SetupState.Add(new SetupStateEntity
-            {
-                Id = SetupStateEntity.DefaultId,
-                IsCompleted = false,
-                SelectedDefaultProfile = _bootstrapOptions.DefaultProfile
-            });
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             INSERT OR IGNORE INTO SetupState (
+                 Id,
+                 IsCompleted,
+                 SelectedDefaultProfile
+             ) VALUES (
+                 {SetupStateEntity.DefaultId},
+                 {false},
+                 {_bootstrapOptions.DefaultProfile}
+             );
+             """,
+            cancellationToken);
     }
 }

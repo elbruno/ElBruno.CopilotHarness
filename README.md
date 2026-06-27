@@ -11,7 +11,7 @@ An intelligent BYOK harness for GitHub Copilot. The repo currently includes:
 - Admin Web
 - Judge Web
 - SQLite + EF Core admin storage
-- Phase 0-5 routing, intelligence, judge, and multi-client telemetry
+- Phase 0-7 routing, intelligence, judge, multi-client telemetry, and VS Code extension contracts
 
 ## Current projects
 
@@ -21,6 +21,7 @@ An intelligent BYOK harness for GitHub Copilot. The repo currently includes:
 - `src/ElBruno.CopilotHarness.Router.Api`
 - `src/ElBruno.CopilotHarness.Admin.Web`
 - `src/ElBruno.CopilotHarness.Judge.Web`
+- `src/ElBruno.CopilotHarness.VSCode`
 
 ## Quick start
 
@@ -43,6 +44,16 @@ dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameter
 dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
 ```
 
+### VS Code extension
+
+```powershell
+cd .\src\ElBruno.CopilotHarness.VSCode
+npm install
+npm run compile
+```
+
+Open the folder in VS Code and press `F5` to run the extension host.
+
 ## Docs
 
 - `docs/Docs_Index.md`
@@ -58,6 +69,7 @@ dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
 - `docs/Phase4_Client_Compatibility.md`
 - `docs/Phase4_MultiClient_Dashboard.md`
 - `docs/Phase5_AI_Judge.md`
+- `docs/Phase7_VSCode_Extension.md`
 
 ## Validate
 

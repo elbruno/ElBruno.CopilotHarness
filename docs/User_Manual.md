@@ -9,6 +9,7 @@ ElBruno.CopilotHarness is a BYOK harness for GitHub Copilot with:
 - Admin UI for routing, models, rules, and validation
 - Multi-client telemetry for VS Code, Copilot CLI, and Copilot App
 - Judge app for prompt replay, multi-model benchmarks, and evaluation reports
+- VS Code extension for routing explanations and dashboard links
 
 ## Install and run
 
@@ -30,6 +31,23 @@ dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameter
 dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
 ```
 
+## VS Code extension
+
+1. Open `src/ElBruno.CopilotHarness.VSCode` in VS Code.
+2. Run `npm install`.
+3. Press `F5`.
+
+### Commands
+
+- `Harness: Show Status Panel`
+- `Harness: Explain Routing`
+- `Harness: Open Dashboard`
+- `Harness: Open Trace`
+
+### Chat
+
+Use `@harness` in Copilot Chat to ask for routing explanations or dashboard links.
+
 ## Common URLs
 
 - Router: `/v1/chat/completions`
@@ -50,6 +68,7 @@ dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
 - Judge manual controls: `/manual`
 - Judge manual benchmark: `/judge/benchmarks/manual`
 - Judge reports: `/judge/benchmarks/runs` and `/judge/reports/{runId}`
+- Phase 7 extension docs: `docs/Phase7_VSCode_Extension.md`
 
 ## What to look at first
 

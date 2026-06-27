@@ -14,13 +14,14 @@ Last updated: 2026-06-27
 
 ## Current focus
 
+- Phase 7 - VS Code Extension
 - Keep the router stable and compatible with BYOK clients
 - Maintain the judge app and benchmark/reporting contract
 - Preserve phase boundaries and keep Judge separate from Router and Admin
 
 ## Next planned phase
 
-- Phase 7 - VS Code Extension
+- Phase 8 - Continuous Evaluation
 
 ## Key links
 

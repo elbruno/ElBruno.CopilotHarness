@@ -1,0 +1,141 @@
+{
+  "name": "elbruno-copilotharness-vscode",
+  "displayName": "ElBruno CopilotHarness",
+  "description": "VS Code companion for the CopilotHarness router and dashboard.",
+  "version": "0.1.0",
+  "publisher": "elbruno",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:harness.showStatusPanel",
+    "onCommand:harness.explainRouting",
+    "onCommand:harness.openDashboard",
+    "onCommand:harness.openTrace",
+    "onChatParticipant:harness",
+    "onLanguageModelTool:harness.explainRouting",
+    "onLanguageModelTool:harness.openDashboard",
+    "onLanguageModelTool:harness.openTrace"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "harness.showStatusPanel",
+        "title": "Harness: Show Status Panel"
+      },
+      {
+        "command": "harness.explainRouting",
+        "title": "Harness: Explain Routing"
+      },
+      {
+        "command": "harness.openDashboard",
+        "title": "Harness: Open Dashboard"
+      },
+      {
+        "command": "harness.openTrace",
+        "title": "Harness: Open Trace"
+      }
+    ],
+    "configuration": {
+      "title": "Harness",
+      "properties": {
+        "harness.routerBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:5080",
+          "description": "Base URL for the Router API."
+        },
+        "harness.adminBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:5080",
+          "description": "Base URL for the Admin endpoints."
+        }
+      }
+    },
+    "chatParticipants": [
+      {
+        "id": "harness",
+        "name": "harness",
+        "fullName": "Harness",
+        "description": "Explain routing decisions and surface dashboard links."
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "harness.explainRouting",
+        "toolReferenceName": "explainRouting",
+        "displayName": "Explain Routing",
+        "modelDescription": "Explain a routing decision by calling the router playground endpoint.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "The prompt to route."
+            },
+            "systemMessage": {
+              "type": "string",
+              "description": "Optional system message."
+            },
+            "requestedProfile": {
+              "type": "string",
+              "description": "Optional logical profile name."
+            },
+            "stream": {
+              "type": "boolean",
+              "description": "Whether the request is a streaming request."
+            }
+          },
+          "required": [
+            "prompt"
+          ]
+        }
+      },
+      {
+        "name": "harness.openDashboard",
+        "toolReferenceName": "openDashboard",
+        "displayName": "Open Dashboard",
+        "modelDescription": "Open the Admin dashboard in the default browser.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "harness.openTrace",
+        "toolReferenceName": "openTrace",
+        "displayName": "Open Trace",
+        "modelDescription": "Open a routing trace in the Admin dashboard.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "traceId": {
+              "type": "string",
+              "description": "Trace identifier."
+            }
+          },
+          "required": [
+            "traceId"
+          ]
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.96.0",
+    "typescript": "^5.8.3"
+  }
+}
