@@ -1,12 +1,24 @@
 # ElBruno.CopilotHarness
 
-Repository bootstrap for Copilot-driven implementation workflows.
+BYOK harness for GitHub Copilot built with .NET 10 and .NET Aspire.
 
-## Getting started
+## Phase 0 projects
 
-1. Clone the repository.
-2. Open it with GitHub Copilot enabled.
-3. Say: **"start with the plan"**.
+- `src/ElBruno.CopilotHarness.AppHost`
+- `src/ElBruno.CopilotHarness.ServiceDefaults`
+- `src/ElBruno.CopilotHarness.Router.Api`
 
-Copilot is configured to use `docs/Copilot_Implementation_Prompt.md` as the execution plan entry point.
+## Local run
 
+Configure secrets (AppHost user-secrets):
+
+```powershell
+dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryEndpoint https://<your-foundry-endpoint>
+dotnet user-secrets --project .\src\ElBruno.CopilotHarness.AppHost set Parameters:FoundryApiKey <your-api-key>
+```
+
+Then run:
+
+```powershell
+dotnet run --project .\src\ElBruno.CopilotHarness.AppHost
+```

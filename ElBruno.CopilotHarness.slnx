@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ElBruno.CopilotHarness.AppHost/ElBruno.CopilotHarness.AppHost.csproj" />
+    <Project Path="src/ElBruno.CopilotHarness.Router.Api/ElBruno.CopilotHarness.Router.Api.csproj" />
+    <Project Path="src/ElBruno.CopilotHarness.ServiceDefaults/ElBruno.CopilotHarness.ServiceDefaults.csproj" />
+  </Folder>
+</Solution>
