@@ -1,0 +1,88 @@
+@page "/rules"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Rules Editor</PageTitle>
+
+<h1>Rules Editor</h1>
+<p>Phase 2 supports deterministic basic routing rules.</p>
+
+<button @onclick="GenerateStarterRulesAsync">Generate my first rules</button>
+
+@if (_model is null)
+{
+    <p>Loading rules...</p>
+}
+else
+{
+    <EditForm Model="_model" OnValidSubmit="SaveAsync">
+        <div class="form-grid">
+            <label>Default profile <InputText @bind-Value="_model.DefaultProfile" /></label>
+            <label>Big prompt threshold <InputNumber @bind-Value="_model.BigPromptCharacterThreshold" /></label>
+            <label>Big profile <InputText @bind-Value="_model.BigProfile" /></label>
+            <label>Streaming profile <InputText @bind-Value="_model.StreamingProfile" /></label>
+            <label class="checkbox"><InputCheckbox @bind-Value="_model.PreferBigWhenSystemMessageExists" /> Prefer big when system exists</label>
+            <label class="checkbox"><InputCheckbox @bind-Value="_model.PreferStreamingProfileWhenStreaming" /> Prefer streaming profile</label>
+        </div>
+        <button type="submit">Save rules</button>
+    </EditForm>
+}
+
+@if (!string.IsNullOrWhiteSpace(_status))
+{
+    <p>@_status</p>
+}
+
+@code {
+    private MutableRules? _model;
+    private string? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model = new MutableRules(await Api.GetBasicRulesAsync());
+    }
+
+    private async Task GenerateStarterRulesAsync()
+    {
+        await Api.GenerateFirstRulesAsync();
+        _model = new MutableRules(await Api.GetBasicRulesAsync());
+        _status = "Starter rules generated.";
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        var updated = await Api.UpdateBasicRulesAsync(new(
+            _model.DefaultProfile,
+            _model.BigPromptCharacterThreshold,
+            _model.BigProfile,
+            _model.StreamingProfile,
+            _model.PreferBigWhenSystemMessageExists,
+            _model.PreferStreamingProfileWhenStreaming));
+        _model = new MutableRules(updated);
+        _status = $"Rules updated at {updated.UpdatedAtUtc:O}.";
+    }
+
+    private sealed class MutableRules
+    {
+        public MutableRules(BasicRulesDto source)
+        {
+            DefaultProfile = source.DefaultProfile;
+            BigPromptCharacterThreshold = source.BigPromptCharacterThreshold;
+            BigProfile = source.BigProfile;
+            StreamingProfile = source.StreamingProfile;
+            PreferBigWhenSystemMessageExists = source.PreferBigWhenSystemMessageExists;
+            PreferStreamingProfileWhenStreaming = source.PreferStreamingProfileWhenStreaming;
+        }
+
+        public string DefaultProfile { get; set; }
+        public int BigPromptCharacterThreshold { get; set; }
+        public string BigProfile { get; set; }
+        public string StreamingProfile { get; set; }
+        public bool PreferBigWhenSystemMessageExists { get; set; }
+        public bool PreferStreamingProfileWhenStreaming { get; set; }
+    }
+}

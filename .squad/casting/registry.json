@@ -34,6 +34,20 @@
       "created_at": "2026-06-26T12:16:56.933+02:00",
       "legacy_named": false,
       "status": "active"
+    },
+    "oracle": {
+      "persistent_name": "Oracle",
+      "universe": "The Matrix",
+      "created_at": "2026-06-27T10:02:42.707-04:00",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "dozer": {
+      "persistent_name": "Dozer",
+      "universe": "The Matrix",
+      "created_at": "2026-06-27T10:02:42.707-04:00",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }

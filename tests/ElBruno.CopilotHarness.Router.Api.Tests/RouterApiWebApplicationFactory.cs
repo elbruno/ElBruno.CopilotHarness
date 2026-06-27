@@ -11,6 +11,15 @@ namespace ElBruno.CopilotHarness.Router.Api.Tests;
 
 public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private readonly string _dbPath;
+
+    public RouterApiWebApplicationFactory()
+    {
+        var directory = Path.Combine(AppContext.BaseDirectory, "App_Data");
+        Directory.CreateDirectory(directory);
+        _dbPath = Path.Combine(directory, $"admin-tests-{Guid.NewGuid():N}.db");
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -19,7 +28,8 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
             configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Foundry:Endpoint"] = "https://unit.test",
-                ["Foundry:ApiKey"] = "test-key"
+                ["Foundry:ApiKey"] = "test-key",
+                ["Persistence:DatabasePath"] = _dbPath
             });
         });
 
@@ -60,7 +70,10 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
 
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\"}", Encoding.UTF8, "application/json")
+            Content = new StringContent(
+                "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"stubbed assistant reply\"}}],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":3,\"total_tokens\":7}}",
+                Encoding.UTF8,
+                "application/json")
         };
     }
 

@@ -1,0 +1,34 @@
+﻿@page "/"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Admin Dashboard</PageTitle>
+
+<h1>Phase 2 Admin</h1>
+<p>Use the Setup Wizard, then validate and tune routing behavior.</p>
+
+@if (_validation is null)
+{
+    <p>Loading system checks...</p>
+}
+else
+{
+    <div class="cards">
+        @foreach (var check in _validation.Checks)
+        {
+            <article class="card">
+                <h3>@check.Name</h3>
+                <p>@check.Message</p>
+                <strong>@(check.Passed ? "Passed" : "Needs action")</strong>
+            </article>
+        }
+    </div>
+}
+
+@code {
+    private ElBruno.CopilotHarness.Admin.Web.Services.ValidationResponse? _validation;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _validation = await Api.GetValidationAsync();
+    }
+}

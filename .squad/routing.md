@@ -10,7 +10,10 @@ How to decide who handles what.
 | Router API and backend services | Neo | ASP.NET endpoints, routing core boundaries, persistence adapters |
 | Admin web and UX | Trinity | Blazor wizard, model registry UI, rules editor, playground |
 | AI policy and model intelligence | Niobe | Routing policies, explainability data, MAF workflows |
+| GitHub Copilot integrations and BYOK spec validation | Oracle | Copilot client integration checks, OpenAI/BYOK compatibility drift checks |
+| Aspire app topology and platform wiring | Dozer | AppHost resources, parameters/secrets wiring, Aspire diagnostics/deployment paths |
 | Testing and quality gates | Link | Unit/integration tests, acceptance criteria, regression coverage |
+| Isolated issue execution (bugfixes/docs/tests) | @copilot 🤖 | Async issue implementation with PR creation |
 | Code review | Morpheus | Review PRs, check quality, suggest improvements |
 | Testing | Link | Write tests, find edge cases, verify fixes |
 | Scope & priorities | Morpheus | What to build next, trade-offs, decisions |

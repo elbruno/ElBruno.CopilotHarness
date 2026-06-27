@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using ElBruno.CopilotHarness.Router.Core;
 using Microsoft.Extensions.Options;
 
 namespace ElBruno.CopilotHarness.Router.Api;
@@ -12,42 +13,44 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
 {
     private readonly RoutingOptions _options = options.Value;
 
-    public RoutingDecision SelectModel(JsonObject requestBody)
+    public RoutingDecision SelectModel(JsonObject requestBody) => SelectModel(requestBody, _options);
+
+    public static RoutingDecision SelectModel(JsonObject requestBody, RoutingOptions options)
     {
         var requestedModel = GetStringValue(requestBody["model"]);
         if (!string.IsNullOrWhiteSpace(requestedModel) &&
-            TryGetEnabledProfile(requestedModel, out var explicitProfileName, out var explicitProfile))
+            TryGetEnabledProfile(options, requestedModel, out var explicitProfileName, out var explicitProfile))
         {
             return new RoutingDecision(explicitProfileName, explicitProfile, "Explicit model profile requested by client.");
         }
 
-        if (_options.Rules.PreferBigWhenSystemMessageExists &&
+        if (options.Rules.PreferBigWhenSystemMessageExists &&
             ContainsSystemMessage(requestBody) &&
-            TryGetEnabledProfile(_options.Rules.BigProfile, out var systemProfileName, out var systemProfile))
+            TryGetEnabledProfile(options, options.Rules.BigProfile, out var systemProfileName, out var systemProfile))
         {
             return new RoutingDecision(systemProfileName, systemProfile, "System message detected by basic rule.");
         }
 
-        if (GetPromptCharacterCount(requestBody) >= _options.Rules.BigPromptCharacterThreshold &&
-            TryGetEnabledProfile(_options.Rules.BigProfile, out var bigProfileName, out var bigProfile))
+        if (GetPromptCharacterCount(requestBody) >= options.Rules.BigPromptCharacterThreshold &&
+            TryGetEnabledProfile(options, options.Rules.BigProfile, out var bigProfileName, out var bigProfile))
         {
             return new RoutingDecision(bigProfileName, bigProfile, "Prompt size exceeded threshold.");
         }
 
         var stream = requestBody["stream"]?.GetValue<bool>() ?? false;
         if (stream &&
-            _options.Rules.PreferStreamingProfileWhenStreaming &&
-            TryGetEnabledProfile(_options.Rules.StreamingProfile, out var streamingProfileName, out var streamingProfile))
+            options.Rules.PreferStreamingProfileWhenStreaming &&
+            TryGetEnabledProfile(options, options.Rules.StreamingProfile, out var streamingProfileName, out var streamingProfile))
         {
             return new RoutingDecision(streamingProfileName, streamingProfile, "Streaming request matched basic streaming rule.");
         }
 
-        if (TryGetEnabledProfile(_options.DefaultProfile, out var defaultProfileName, out var defaultProfile))
+        if (TryGetEnabledProfile(options, options.DefaultProfile, out var defaultProfileName, out var defaultProfile))
         {
             return new RoutingDecision(defaultProfileName, defaultProfile, "Default model profile.");
         }
 
-        var fallback = _options.Profiles.FirstOrDefault(profile => profile.Value.Enabled);
+        var fallback = options.Profiles.FirstOrDefault(profile => profile.Value.Enabled);
         if (fallback.Equals(default(KeyValuePair<string, ModelProfileOptions>)))
         {
             throw new InvalidOperationException("No enabled model profiles are configured.");
@@ -56,17 +59,21 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
         return new RoutingDecision(fallback.Key, fallback.Value, "Fallback to first enabled model profile.");
     }
 
-    private bool TryGetEnabledProfile(string profileName, out string selectedProfileName, out ModelProfileOptions profile)
+    private static bool TryGetEnabledProfile(
+        RoutingOptions options,
+        string profileName,
+        out string selectedProfileName,
+        out ModelProfileOptions profile)
     {
         selectedProfileName = profileName;
         profile = null!;
 
-        if (!_options.TryGetProfile(profileName, out var configuredProfile) || !configuredProfile.Enabled)
+        if (!options.TryGetProfile(profileName, out var configuredProfile) || !configuredProfile.Enabled)
         {
             return false;
         }
 
-        selectedProfileName = _options.Profiles.Keys.First(key => string.Equals(key, profileName, StringComparison.OrdinalIgnoreCase));
+        selectedProfileName = options.Profiles.Keys.First(key => string.Equals(key, profileName, StringComparison.OrdinalIgnoreCase));
         profile = configuredProfile;
         return true;
     }

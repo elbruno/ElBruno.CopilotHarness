@@ -1,6 +1,9 @@
-using System.Text.Json.Nodes;
 using ElBruno.CopilotHarness.Router.Api;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using ElBruno.CopilotHarness.Router.Api.Admin;
+using ElBruno.CopilotHarness.Router.Core;
+using ElBruno.CopilotHarness.Router.Core.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
@@ -32,7 +35,24 @@ builder.Services
         "At least one routing profile must be enabled.")
     .ValidateOnStart();
 
-builder.Services.AddSingleton<IModelRouter, BasicModelRouter>();
+builder.Services
+    .AddOptions<PersistenceOptions>()
+    .Bind(builder.Configuration.GetSection(PersistenceOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddDbContext<HarnessDbContext>((serviceProvider, options) =>
+{
+    var persistenceOptions = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    var contentRootPath = builder.Environment.ContentRootPath;
+    options.UseSqlite(persistenceOptions.BuildConnectionString(contentRootPath));
+    options.ConfigureWarnings(warnings =>
+        warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
+});
+
+builder.Services.AddScoped<IRoutingConfigurationStore, RoutingConfigurationStore>();
+builder.Services.AddScoped<SqliteRoutingStoreInitializer>();
+builder.Services.AddScoped<IRequestRoutingService, RequestRoutingService>();
 
 builder.Services.AddHttpClient<FoundryChatCompletionsClient>((serviceProvider, client) =>
 {
@@ -51,26 +71,92 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var initializer = scope.ServiceProvider.GetRequiredService<SqliteRoutingStoreInitializer>();
+    await initializer.InitializeAsync(CancellationToken.None);
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.MapPost("/v1/chat/completions", async (
+app.MapGet("/v1/models", async (
+    IRequestRoutingService routingService,
+    CancellationToken cancellationToken) =>
+{
+    var routingOptions = await routingService.GetRoutingOptionsAsync(cancellationToken);
+    return Results.Ok(OpenAiCompatibilityMapper.CreateModelsResponse(routingOptions));
+});
+
+app.MapPost("/v1/responses", async (
     HttpContext context,
     FoundryChatCompletionsClient client,
-    IModelRouter router,
+    IRequestRoutingService routingService,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
-    var payload = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: cancellationToken);
-    if (payload is not JsonObject requestBody)
+    var (responsesRequest, parseError) = await OpenAiApiUtilities.ParseJsonObjectRequestAsync(context.Request, cancellationToken);
+    if (parseError is not null)
     {
-        return Results.BadRequest(new { error = "The request body must be a valid JSON object." });
+        return parseError;
     }
 
-    var routingDecision = router.SelectModel(requestBody);
-    requestBody["model"] = routingDecision.Profile.Deployment;
+    if (!OpenAiCompatibilityMapper.TryBuildChatCompletionsRequest(
+            responsesRequest!,
+            out var chatPayload,
+            out var mappingError))
+    {
+        return OpenAiApiUtilities.OpenAiBadRequest(mappingError ?? "Invalid responses request.");
+    }
+
+    var routingDecision = await routingService.SelectModelAsync(chatPayload, cancellationToken);
+    chatPayload["model"] = routingDecision.Profile.Deployment;
+
+    logger.LogInformation(
+        "Responses compatibility routing selected profile {ProfileName} deployment {Deployment}. Reason: {Reason}",
+        routingDecision.ProfileName,
+        routingDecision.Profile.Deployment,
+        routingDecision.Reason);
+
+    using var upstreamResponse = await client.SendChatCompletionsAsync(
+        chatPayload,
+        routingDecision.Profile,
+        stream: false,
+        cancellationToken);
+
+    context.Response.StatusCode = (int)upstreamResponse.StatusCode;
+    OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
+    OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingDecision);
+
+    var upstreamBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
+    if (!upstreamResponse.IsSuccessStatusCode)
+    {
+        await context.Response.WriteAsync(upstreamBody, cancellationToken);
+        return Results.Empty;
+    }
+
+    var responsePayload = OpenAiCompatibilityMapper.CreateResponsesResponse(upstreamBody, routingDecision);
+    await context.Response.WriteAsJsonAsync(responsePayload, cancellationToken);
+    return Results.Empty;
+});
+
+app.MapPost("/v1/chat/completions", async (
+    HttpContext context,
+    FoundryChatCompletionsClient client,
+    IRequestRoutingService routingService,
+    ILogger<Program> logger,
+    CancellationToken cancellationToken) =>
+{
+    var (requestBody, parseError) = await OpenAiApiUtilities.ParseJsonObjectRequestAsync(context.Request, cancellationToken);
+    if (parseError is not null)
+    {
+        return parseError;
+    }
+
+    var routingDecision = await routingService.SelectModelAsync(requestBody!, cancellationToken);
+    requestBody!["model"] = routingDecision.Profile.Deployment;
     var stream = requestBody["stream"]?.GetValue<bool>() ?? false;
 
     logger.LogInformation(
@@ -94,10 +180,8 @@ app.MapPost("/v1/chat/completions", async (
         stream);
 
     context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-    CopyHeaders(upstreamResponse, context.Response);
-    context.Response.Headers["x-harness-model-profile"] = routingDecision.ProfileName;
-    context.Response.Headers["x-harness-model-deployment"] = routingDecision.Profile.Deployment;
-    context.Response.Headers["x-harness-routing-reason"] = routingDecision.Reason;
+    OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
+    OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingDecision);
 
     await using var responseStream = await upstreamResponse.Content.ReadAsStreamAsync(cancellationToken);
     await responseStream.CopyToAsync(context.Response.Body, cancellationToken);
@@ -106,28 +190,10 @@ app.MapPost("/v1/chat/completions", async (
     return Results.Empty;
 });
 
-app.MapHealthChecks("/health");
-app.MapHealthChecks("/alive", new HealthCheckOptions
-{
-    Predicate = registration => registration.Tags.Contains("live")
-});
+app.MapDefaultEndpoints();
+app.MapAdminEndpoints();
 
 app.Run();
 return;
-
-static void CopyHeaders(HttpResponseMessage source, HttpResponse target)
-{
-    foreach (var header in source.Headers)
-    {
-        target.Headers[header.Key] = header.Value.ToArray();
-    }
-
-    foreach (var header in source.Content.Headers)
-    {
-        target.Headers[header.Key] = header.Value.ToArray();
-    }
-
-    target.Headers.Remove("transfer-encoding");
-}
 
 public partial class Program;

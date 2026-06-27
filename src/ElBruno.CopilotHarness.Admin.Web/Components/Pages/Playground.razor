@@ -1,0 +1,53 @@
+@page "/playground"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Playground</PageTitle>
+
+<h1>Playground</h1>
+<p>Try a prompt and inspect the current deterministic routing decision.</p>
+
+<EditForm Model="_model" OnValidSubmit="EvaluateAsync">
+    <div class="form-grid">
+        <label>System message <InputText @bind-Value="_model.SystemMessage" /></label>
+        <label>Requested profile <InputText @bind-Value="_model.RequestedProfile" /></label>
+        <label class="checkbox"><InputCheckbox @bind-Value="_model.Stream" /> Stream response</label>
+    </div>
+    <label>
+        Prompt
+        <InputTextArea @bind-Value="_model.Prompt" rows="7" />
+    </label>
+    <button type="submit">Evaluate</button>
+</EditForm>
+
+@if (_result is not null)
+{
+    <article class="card">
+        <h3>Decision</h3>
+        <p><strong>Profile:</strong> @_result.Profile</p>
+        <p><strong>Deployment:</strong> @_result.Deployment</p>
+        <p><strong>Reason:</strong> @_result.Reason</p>
+        <p><strong>Prompt chars:</strong> @_result.PromptCharacters</p>
+    </article>
+}
+
+@code {
+    private PlaygroundModel _model = new();
+    private ElBruno.CopilotHarness.Admin.Web.Services.PlaygroundResponse? _result;
+
+    private async Task EvaluateAsync()
+    {
+        _result = await Api.EvaluatePlaygroundAsync(new(
+            _model.Prompt,
+            string.IsNullOrWhiteSpace(_model.SystemMessage) ? null : _model.SystemMessage,
+            _model.Stream,
+            string.IsNullOrWhiteSpace(_model.RequestedProfile) ? null : _model.RequestedProfile));
+    }
+
+    private sealed class PlaygroundModel
+    {
+        public string Prompt { get; set; } = "Tell me a joke about routing.";
+        public string? SystemMessage { get; set; } = "You are a concise assistant.";
+        public bool Stream { get; set; }
+        public string? RequestedProfile { get; set; }
+    }
+}

@@ -1,0 +1,78 @@
+@page "/setup"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Setup Wizard</PageTitle>
+
+<h1>Setup Wizard</h1>
+<p>The wizard never asks for secrets. Configure logical profiles and bootstrap starter rules.</p>
+
+<EditForm Model="_model" OnValidSubmit="SaveAsync">
+    <div class="form-grid">
+        <label>
+            Local deployment
+            <InputText @bind-Value="_model.LocalDeployment" />
+        </label>
+        <label>
+            Small cloud deployment
+            <InputText @bind-Value="_model.SmallDeployment" />
+        </label>
+        <label>
+            Big cloud deployment
+            <InputText @bind-Value="_model.BigDeployment" />
+        </label>
+        <label>
+            Default profile
+            <InputSelect @bind-Value="_model.DefaultProfile">
+                <option value="local">local</option>
+                <option value="small">small</option>
+                <option value="big">big</option>
+            </InputSelect>
+        </label>
+        <label class="checkbox">
+            <InputCheckbox @bind-Value="_model.GenerateFirstRules" />
+            Generate my first rules
+        </label>
+    </div>
+    <button type="submit">Save setup</button>
+</EditForm>
+
+@if (!string.IsNullOrWhiteSpace(_status))
+{
+    <p>@_status</p>
+}
+
+@code {
+    private SetupModel _model = new();
+    private string? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var models = await Api.GetModelsAsync();
+        _model.LocalDeployment = models.FirstOrDefault(model => model.Name == "local")?.Deployment ?? "gpt-5-mini";
+        _model.SmallDeployment = models.FirstOrDefault(model => model.Name == "small")?.Deployment ?? "gpt-5-mini";
+        _model.BigDeployment = models.FirstOrDefault(model => model.Name == "big")?.Deployment ?? "gpt-5-mini";
+        _model.DefaultProfile = (await Api.GetSetupStateAsync()).DefaultProfile;
+    }
+
+    private async Task SaveAsync()
+    {
+        var response = await Api.SaveSetupAsync(new(
+            _model.LocalDeployment,
+            _model.SmallDeployment,
+            _model.BigDeployment,
+            _model.DefaultProfile,
+            _model.GenerateFirstRules));
+        _status = response.IsCompleted
+            ? $"Setup completed at {response.CompletedAtUtc:O}."
+            : "Setup not completed.";
+    }
+
+    private sealed class SetupModel
+    {
+        public string LocalDeployment { get; set; } = "gpt-5-mini";
+        public string SmallDeployment { get; set; } = "gpt-5-mini";
+        public string BigDeployment { get; set; } = "gpt-5-mini";
+        public string DefaultProfile { get; set; } = "small";
+        public bool GenerateFirstRules { get; set; } = true;
+    }
+}

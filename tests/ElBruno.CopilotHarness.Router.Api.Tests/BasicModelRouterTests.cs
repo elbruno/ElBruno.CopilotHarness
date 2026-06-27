@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using ElBruno.CopilotHarness.Router.Api;
+using ElBruno.CopilotHarness.Router.Core;
 using Microsoft.Extensions.Options;
 
 namespace ElBruno.CopilotHarness.Router.Api.Tests;

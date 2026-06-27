@@ -4,6 +4,11 @@
       "universe": "The Matrix",
       "used_at": "2026-06-26T12:16:56.933+02:00",
       "assignment_id": "assignment-2026-06-26-initial"
+    },
+    {
+      "universe": "The Matrix",
+      "used_at": "2026-06-27T10:02:42.707-04:00",
+      "assignment_id": "assignment-2026-06-27-specialists"
     }
   ],
   "assignment_cast_snapshots": {
@@ -16,6 +21,16 @@
         "Trinity",
         "Niobe",
         "Link"
+      ],
+      "requested_by": "Bruno Capuano",
+      "project": "ElBruno.CopilotHarness"
+    },
+    "assignment-2026-06-27-specialists": {
+      "created_at": "2026-06-27T10:02:42.707-04:00",
+      "universe": "The Matrix",
+      "members": [
+        "Oracle",
+        "Dozer"
       ],
       "requested_by": "Bruno Capuano",
       "project": "ElBruno.CopilotHarness"

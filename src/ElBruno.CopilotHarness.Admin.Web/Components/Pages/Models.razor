@@ -1,0 +1,79 @@
+@page "/models"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>Model Registry</PageTitle>
+
+<h1>Model Registry</h1>
+
+@if (_models.Count == 0)
+{
+    <p>Loading models...</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Profile</th>
+                <th>Category</th>
+                <th>Deployment</th>
+                <th>Enabled</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var model in _models)
+            {
+                <tr>
+                    <td>@model.Name</td>
+                    <td>@model.Category</td>
+                    <td><InputText @bind-Value="model.Deployment" /></td>
+                    <td><InputCheckbox @bind-Value="model.Enabled" /></td>
+                    <td><button @onclick="() => SaveAsync(model)">Save</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrWhiteSpace(_status))
+{
+    <p>@_status</p>
+}
+
+@code {
+    private List<MutableModelProfile> _models = [];
+    private string? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var models = await Api.GetModelsAsync();
+        _models = models
+            .Select(model => new MutableModelProfile(model))
+            .ToList();
+    }
+
+    private async Task SaveAsync(MutableModelProfile model)
+    {
+        await Api.UpdateModelAsync(new(model.Name, model.Category, model.Deployment, model.ApiVersion, model.Enabled));
+        _status = $"Saved profile {model.Name}.";
+    }
+
+    private sealed class MutableModelProfile
+    {
+        public MutableModelProfile(ElBruno.CopilotHarness.Admin.Web.Services.ModelProfileDto dto)
+        {
+            Name = dto.Name;
+            Category = dto.Category;
+            Deployment = dto.Deployment;
+            ApiVersion = dto.ApiVersion;
+            Enabled = dto.Enabled;
+        }
+
+        public string Name { get; }
+        public string Category { get; set; }
+        public string Deployment { get; set; }
+        public string ApiVersion { get; set; }
+        public bool Enabled { get; set; }
+    }
+}

@@ -1,0 +1,45 @@
+@page "/validation"
+@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+
+<PageTitle>System Validation</PageTitle>
+
+<h1>System Validation</h1>
+<button @onclick="RefreshAsync">Refresh checks</button>
+
+@if (_response is null)
+{
+    <p>Loading checks...</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Check</th>
+                <th>Status</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var check in _response.Checks)
+            {
+                <tr>
+                    <td>@check.Name</td>
+                    <td>@(check.Passed ? "Passed" : "Fail")</td>
+                    <td>@check.Message</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private ElBruno.CopilotHarness.Admin.Web.Services.ValidationResponse? _response;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _response = await Api.GetValidationAsync();
+    }
+}

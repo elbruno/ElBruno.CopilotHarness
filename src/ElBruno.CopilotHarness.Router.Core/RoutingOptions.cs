@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace ElBruno.CopilotHarness.Router.Api;
+namespace ElBruno.CopilotHarness.Router.Core;
 
 public sealed class RoutingOptions
 {
@@ -23,7 +23,7 @@ public sealed class ModelProfileOptions
     [Required]
     public string Deployment { get; init; } = string.Empty;
 
-    public string ApiVersion { get; init; } = FoundryOptions.DefaultApiVersion;
+    public string ApiVersion { get; init; } = "2024-10-21";
 
     public bool Enabled { get; init; } = true;
 }
