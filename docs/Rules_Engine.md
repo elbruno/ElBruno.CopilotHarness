@@ -191,6 +191,7 @@ Key properties:
 
 | Rule | Paragraph (summary) | Engine |
 |---|---|---|
+| Simple chat | Greetings and small talk in any language (`hi`, `hola`, `thanks`) plus lightweight web-search lookups answered with Copilot's search tools. | `ollama llama3.2` (local) |
 | GitHub actions | Commit / push / open PRs and other Git operations. | `ollama llama3.2` (local) |
 | Launch App actions | Run / build / start the application. | `ollama llama3.2` (local) |
 | Others actions *(catch-all)* | Everything else, including complex coding tasks. | `foundry gpt-5-mini` (cloud) |

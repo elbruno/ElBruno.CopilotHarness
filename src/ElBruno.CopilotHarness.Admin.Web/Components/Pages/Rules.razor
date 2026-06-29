@@ -351,6 +351,15 @@ else
         try
         {
             await Api.CreateRuleAsync(new RoutingRuleUpsertRequest(
+                "Simple chat",
+                "Captures short, simple, conversational prompts in any language - greetings and small talk such as 'hi', 'hello', 'hola', 'thanks', 'gracias', 'how are you' - that do not require reading or changing code. Also captures lightweight information lookups that GitHub Copilot answers using its web search tools, for example 'search the web for ...', 'look up ...', 'find online ...', 'what is the latest ...', or general questions about current facts or documentation.",
+                "SemanticMatch",
+                string.Empty,
+                localModel.Name,
+                5,
+                true));
+
+            await Api.CreateRuleAsync(new RoutingRuleUpsertRequest(
                 "GitHub actions",
                 "Captures all GitHub related actions, for example: commit all the changes, push to GitHub, create a pull request.",
                 "SemanticMatch",
