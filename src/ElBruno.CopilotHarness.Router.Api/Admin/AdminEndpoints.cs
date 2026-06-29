@@ -397,7 +397,12 @@ public static class AdminEndpoints
                 .Select(trace =>
                 {
                     var clientId = GetContextValue(trace, "request.client.id") ?? "unknown";
-                    var matchedRule = ExtractMatchedRuleName(trace.Decision.Reason);
+                    var semanticRule = GetContextValue(trace, "semantic.matchedRule");
+                    var matchedRule = !string.IsNullOrWhiteSpace(semanticRule)
+                        ? semanticRule
+                        : ExtractMatchedRuleName(trace.Decision.Reason);
+                    var semanticReason = GetContextValue(trace, "semantic.reason");
+                    var rawUserMessage = GetContextValue(trace, "request.rawUserMessage");
                     int.TryParse(GetContextValue(trace, "request.promptCharacters"), out var promptChars);
                     int.TryParse(GetContextValue(trace, "request.totalPromptCharacters"), out var totalPromptChars);
                     var hasSystemMessage = string.Equals(GetContextValue(trace, "request.hasSystemMessage"), "true", StringComparison.OrdinalIgnoreCase);
@@ -426,7 +431,9 @@ public static class AdminEndpoints
                         ProcessorModel: processorModel,
                         ClassificationConfidence: trace.Classification.Confidence,
                         TotalPromptCharacters: totalPromptChars,
-                        HasSystemMessage: hasSystemMessage);
+                        HasSystemMessage: hasSystemMessage,
+                        RawUserMessage: rawUserMessage,
+                        SemanticReason: semanticReason);
                 })
                 .ToList();
 
@@ -767,6 +774,12 @@ public static class AdminEndpoints
     {
         var model = trace.Decision.ProfileName;
         var classification = trace.Classification;
+
+        var semanticReason = GetContextValue(trace, "semantic.reason");
+        if (!string.IsNullOrWhiteSpace(matchedRule) && !string.IsNullOrWhiteSpace(semanticReason))
+        {
+            return $"The local processor model read the user request and selected rule '{matchedRule}' → routed to '{model}'. Reason: {semanticReason}";
+        }
 
         var classifierPhrase = classifierSource switch
         {

@@ -43,6 +43,13 @@ public sealed class ClassifierOptions
 
     /// <summary>Timeout for the processor model call before falling back to deterministic classification.</summary>
     public int TimeoutMs { get; set; } = 4000;
+
+    /// <summary>
+    /// Timeout for the semantic rules analyzer call. This is the actual routing decision (not just an
+    /// intent label), and local models can be slow on a cold first call, so it is more generous than
+    /// <see cref="TimeoutMs"/>.
+    /// </summary>
+    public int SemanticTimeoutMs { get; set; } = 15000;
 }
 
 /// <summary>

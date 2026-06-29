@@ -344,12 +344,14 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
     IEnumerable<IRequestContextProvider> contextProviders,
     IClassificationAgent classificationAgent,
     IRuleAdvisorAgent ruleAdvisorAgent,
+    ISemanticRuleAnalyzer semanticRuleAnalyzer,
     IExecutionTraceStore executionTraceStore,
     ILogger<MicrosoftAgentFrameworkRoutingWorkflow> logger) : IRoutingWorkflow
 {
     private readonly IReadOnlyList<IRequestContextProvider> _contextProviders = contextProviders.ToList();
     private readonly IClassificationAgent _classificationAgent = classificationAgent;
     private readonly IRuleAdvisorAgent _ruleAdvisorAgent = ruleAdvisorAgent;
+    private readonly ISemanticRuleAnalyzer _semanticRuleAnalyzer = semanticRuleAnalyzer;
     private readonly IExecutionTraceStore _executionTraceStore = executionTraceStore;
     private readonly ILogger<MicrosoftAgentFrameworkRoutingWorkflow> _logger = logger;
 
@@ -389,6 +391,42 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
             ?? await _ruleAdvisorAgent.AdviseAsync(context, classification, routingOptions, cancellationToken);
         var decision = state.Decision ?? BasicModelRouter.SelectModel(requestBody, routingOptions, classification.Intent);
 
+        // Semantic rules engine: when natural-language rules are configured, the processor model
+        // picks the matching rule by name from the CLEAN user request (the <userRequest> content),
+        // and the request is routed to that rule's engine. The full Copilot payload is still
+        // forwarded to the selected engine downstream.
+        if (_semanticRuleAnalyzer.HasSemanticRules(routingOptions))
+        {
+            var userRequest = BasicModelRouter.GetUserPromptText(requestBody);
+            var rawUserMessage = BasicModelRouter.GetRawUserMessageText(requestBody);
+            var match = await _semanticRuleAnalyzer.AnalyzeAsync(userRequest, routingOptions, cancellationToken);
+
+            if (match is not null &&
+                BasicModelRouter.TryResolveProfile(routingOptions, match.TargetModel, out var profileName, out var profile))
+            {
+                decision = new RoutingDecision(
+                    profileName,
+                    profile,
+                    $"Semantic rule '{match.RuleName}' matched → routed to '{profileName}'. {match.Reason}");
+
+                state.Facts.Add(new RoutingContextFact("semantic.matchedRule", match.RuleName));
+                state.Facts.Add(new RoutingContextFact("semantic.reason", match.Reason));
+                state.Facts.Add(new RoutingContextFact("semantic.engine", profileName));
+                state.Facts.Add(new RoutingContextFact("semantic.confidence", match.Confidence.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
+                state.Facts.Add(new RoutingContextFact("classifier.source", match.Source));
+                state.Steps.Add(new RoutingWorkflowStep(
+                    "semantic-rule-analyzer",
+                    $"Semantic rule '{match.RuleName}' selected by {match.Source} → '{profileName}'."));
+
+                if (!string.IsNullOrWhiteSpace(rawUserMessage) &&
+                    !string.Equals(rawUserMessage, userRequest, StringComparison.Ordinal))
+                {
+                    var rawCapped = rawUserMessage.Length > 4000 ? rawUserMessage[..4000] : rawUserMessage;
+                    state.Facts.Add(new RoutingContextFact("request.rawUserMessage", rawCapped));
+                }
+            }
+        }
+
         _logger.LogInformation(
             "Routing workflow classification intent={Intent}, complexity={Complexity}, confidence={Confidence}",
             classification.Intent,
@@ -409,12 +447,34 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
             Context: state.Facts,
             Classification: classification,
             RuleAdvisor: advisorResult,
-            Decision: decision,
+            Decision: RedactDecision(decision),
             Steps: state.Steps));
 
         _logger.LogInformation("Routing execution trace persisted with id {TraceId}.", traceId);
 
         return new RoutingSelectionResult(decision, traceId, state.Client);
+    }
+
+    /// <summary>
+    /// Produces a copy of the routing decision with the model API key removed, so persisted traces
+    /// never store plaintext secrets.
+    /// </summary>
+    private static RoutingDecision RedactDecision(RoutingDecision decision)
+    {
+        var profile = decision.Profile;
+        var redacted = new ModelProfileOptions
+        {
+            Type = profile.Type,
+            Endpoint = profile.Endpoint,
+            Deployment = profile.Deployment,
+            ApiVersion = profile.ApiVersion,
+            ApiKey = string.IsNullOrEmpty(profile.ApiKey) ? string.Empty : "***redacted***",
+            Enabled = profile.Enabled,
+            IsProcessor = profile.IsProcessor,
+            SupportsCustomTemperature = profile.SupportsCustomTemperature
+        };
+
+        return new RoutingDecision(decision.ProfileName, redacted, decision.Reason);
     }
 
     private sealed class WorkflowState

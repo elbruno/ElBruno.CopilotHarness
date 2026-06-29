@@ -100,7 +100,14 @@ public enum RoutingRuleConditionType
     PromptMatchesRegex = 6,
 
     /// <summary>Matches when the classifier-detected intent equals the value (case-insensitive).</summary>
-    IntentEquals = 7
+    IntentEquals = 7,
+
+    /// <summary>
+    /// Semantic rule: the processor model decides whether this rule applies by reading the rule's
+    /// natural-language <see cref="RoutingRuleDefinition.Description"/> (a paragraph describing what
+    /// the rule captures) against the user's request. No keyword/condition value is used.
+    /// </summary>
+    SemanticMatch = 8
 }
 
 /// <summary>

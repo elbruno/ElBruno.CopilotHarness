@@ -144,6 +144,7 @@ builder.Services.AddScoped<IRequestContextProvider, PromptShapeContextProvider>(
 builder.Services.AddScoped<DeterministicClassificationAgent>();
 builder.Services.AddScoped<IClassificationAgent, ProcessorModelClassificationAgent>();
 builder.Services.AddScoped<IRuleAdvisorAgent, DeterministicRuleAdvisorAgent>();
+builder.Services.AddScoped<ISemanticRuleAnalyzer, SemanticRuleAnalyzer>();
 builder.Services.AddScoped<IRoutingWorkflow, MicrosoftAgentFrameworkRoutingWorkflow>();
 builder.Services.AddScoped<IRequestRoutingService, RequestRoutingService>();
 builder.Services.AddSingleton<IClientRequestActivityStore, InMemoryClientRequestActivityStore>();

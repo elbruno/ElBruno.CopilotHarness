@@ -100,7 +100,7 @@ else
                         <span class="arrow">→</span>
                         <div class="stage stage-rule">
                             <span class="stage-label">Rule</span>
-                            <span class="stage-value">@(request.MatchedRuleName ?? "—")</span>
+                            <span class="stage-value"><strong>@(request.MatchedRuleName ?? "—")</strong></span>
                         </div>
                         <span class="arrow">→</span>
                         <div class="stage stage-model">
@@ -110,9 +110,20 @@ else
                         </div>
                     </div>
                     <div class="pipeline-why">
-                        <span class="muted">@request.Explanation</span>
+                        <span class="muted"><strong>Why this rule:</strong> @RuleSelectionReason(request)</span>
                         <span class="trace muted">@request.TraceId</span>
                     </div>
+                    <details class="payload-details">
+                        <summary>User message — @PromptSummary(request)</summary>
+                        <div class="payload-text">@DisplayPrompt(request)</div>
+                    </details>
+                    @if (!string.IsNullOrWhiteSpace(request.RawUserMessage))
+                    {
+                        <details class="payload-details">
+                            <summary>Raw Copilot payload</summary>
+                            <div class="payload-text payload-raw">@request.RawUserMessage</div>
+                        </details>
+                    }
                 </article>
             }
         </div>
@@ -158,6 +169,19 @@ else
 
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max] + "…";
+
+    private static string DisplayPrompt(RoutedRequestView request) =>
+        string.IsNullOrWhiteSpace(request.PromptPreview)
+            ? $"({request.PromptCharacters} chars captured)"
+            : request.PromptPreview!;
+
+    private static string PromptSummary(RoutedRequestView request) =>
+        Truncate(DisplayPrompt(request).ReplaceLineEndings(" "), 80);
+
+    private static string RuleSelectionReason(RoutedRequestView request) =>
+        !string.IsNullOrWhiteSpace(request.SemanticReason)
+            ? request.SemanticReason!
+            : request.Explanation;
 
     public async ValueTask DisposeAsync()
     {

@@ -139,6 +139,24 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
         return true;
     }
 
+    /// <summary>Public wrapper over the enabled-profile lookup, for the semantic analyzer.</summary>
+    public static bool TryResolveProfile(
+        RoutingOptions options,
+        string profileName,
+        out string selectedProfileName,
+        out ModelProfileOptions profile) =>
+        TryGetEnabledProfile(options, profileName, out selectedProfileName, out profile);
+
+    /// <summary>
+    /// Returns the enabled <see cref="RoutingRuleConditionType.SemanticMatch"/> rules in evaluation
+    /// order (ascending priority). The last/highest-priority-number rule acts as the catch-all.
+    /// </summary>
+    public static IReadOnlyList<RoutingRuleDefinition> GetSemanticRules(RoutingOptions options) =>
+        options.RuleSet
+            .Where(rule => rule is { Enabled: true, ConditionType: RoutingRuleConditionType.SemanticMatch })
+            .OrderBy(rule => rule.Priority)
+            .ToList();
+
     private static bool ContainsSystemMessage(JsonObject requestBody)
     {
         if (requestBody["messages"] is not JsonArray messages)
@@ -249,9 +267,22 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
     /// Returns the text of the <b>last user message</b> — the actual turn the caller typed.
     /// GitHub Copilot prepends a large boilerplate system preamble to every request, so
     /// routing and classification must look at the user's message, not the whole payload.
+    /// Copilot Chat additionally wraps the typed text in a <c>&lt;userRequest&gt;</c> tag and
+    /// surrounds it with <c>&lt;attachments&gt;</c>, <c>&lt;context&gt;</c>, and
+    /// <c>&lt;reminderInstructions&gt;</c> blocks; this method extracts the typed text so a
+    /// one-word ask like "hi" is not inflated to ~1000 characters of tool/repo context.
     /// Falls back to the full prompt text when no user message is present.
     /// </summary>
-    public static string GetUserPromptText(JsonObject requestBody)
+    public static string GetUserPromptText(JsonObject requestBody) =>
+        ExtractTypedUserMessage(GetRawUserMessageText(requestBody));
+
+    /// <summary>
+    /// Returns the <b>raw</b> last user message, including any Copilot Chat wrapper blocks
+    /// (<c>&lt;attachments&gt;</c>, <c>&lt;context&gt;</c>, <c>&lt;reminderInstructions&gt;</c>,
+    /// <c>&lt;userRequest&gt;</c>). Used by the Live view to show the complete payload Copilot
+    /// sent, alongside the cleaned typed message.
+    /// </summary>
+    public static string GetRawUserMessageText(JsonObject requestBody)
     {
         if (requestBody["messages"] is JsonArray messages)
         {
@@ -272,9 +303,83 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
         return GetPromptText(requestBody).Trim();
     }
 
+    private static readonly string[] CopilotWrapperTags =
+    {
+        "attachments", "context", "reminderInstructions", "environment_info",
+        "editorContext", "currentEditor", "instructions", "toolResult", "tool-result"
+    };
+
     /// <summary>
-    /// Character count of the last user message — the size of the actual ask, excluding
-    /// the system preamble and prior conversation turns.
+    /// Extracts the actual user-typed text from a raw Copilot Chat user message. Prefers the
+    /// content of the <c>&lt;userRequest&gt;</c> tag (the VS Code Copilot Chat convention); if
+    /// that tag is absent, strips the known wrapper blocks and returns the remaining text;
+    /// otherwise returns the trimmed raw message unchanged (non-Copilot clients).
+    /// </summary>
+    public static string ExtractTypedUserMessage(string rawUserMessage)
+    {
+        if (string.IsNullOrWhiteSpace(rawUserMessage))
+        {
+            return rawUserMessage ?? string.Empty;
+        }
+
+        var userRequest = ExtractTagContent(rawUserMessage, "userRequest")
+            ?? ExtractTagContent(rawUserMessage, "user-request");
+        if (!string.IsNullOrWhiteSpace(userRequest))
+        {
+            return userRequest.Trim();
+        }
+
+        // No <userRequest> tag — strip known Copilot wrapper blocks and keep what remains.
+        var stripped = rawUserMessage;
+        foreach (var tag in CopilotWrapperTags)
+        {
+            stripped = RemoveTagBlock(stripped, tag);
+        }
+
+        stripped = stripped.Trim();
+        return string.IsNullOrWhiteSpace(stripped) ? rawUserMessage.Trim() : stripped;
+    }
+
+    private static string? ExtractTagContent(string text, string tag)
+    {
+        var open = $"<{tag}>";
+        var close = $"</{tag}>";
+        var start = text.IndexOf(open, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        var contentStart = start + open.Length;
+        var end = text.IndexOf(close, contentStart, StringComparison.OrdinalIgnoreCase);
+        return end < 0 ? null : text[contentStart..end];
+    }
+
+    private static string RemoveTagBlock(string text, string tag)
+    {
+        while (true)
+        {
+            var open = $"<{tag}>";
+            var close = $"</{tag}>";
+            var start = text.IndexOf(open, StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+            {
+                return text;
+            }
+
+            var closeIndex = text.IndexOf(close, start, StringComparison.OrdinalIgnoreCase);
+            if (closeIndex < 0)
+            {
+                return text;
+            }
+
+            text = text.Remove(start, closeIndex + close.Length - start);
+        }
+    }
+
+    /// <summary>
+    /// Character count of the typed user message — the size of the actual ask, excluding
+    /// the system preamble, prior conversation turns, and Copilot Chat wrapper blocks.
     /// </summary>
     public static int GetUserPromptCharacterCount(JsonObject requestBody) =>
         GetUserPromptText(requestBody).Length;

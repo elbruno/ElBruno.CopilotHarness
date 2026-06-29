@@ -130,6 +130,35 @@
         font-size: 0.75rem;
     }
 
+.payload-details {
+    margin-top: 0.55rem;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    background: #f6f8fa;
+}
+
+    .payload-details summary {
+        padding: 0.45rem 0.6rem;
+        cursor: pointer;
+        color: #24292f;
+        font-size: 0.85rem;
+    }
+
+.payload-text {
+    border-top: 1px solid #d8dee4;
+    padding: 0.6rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    background: #fff;
+}
+
+.payload-raw {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.78rem;
+}
+
 .muted {
     color: #57606a;
 }

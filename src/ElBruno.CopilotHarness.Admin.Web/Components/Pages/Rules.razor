@@ -6,9 +6,9 @@
 
 <h1>Rules Editor</h1>
 <p class="muted">
-    Condition-based routing rules. Each rule matches a request condition (prompt size, streaming, system message,
-    requested model, keyword, or regex) and routes to a target model. Rules are evaluated by ascending priority;
-    the first match wins. If nothing matches, the default model is used.
+    Routing rules can match deterministic request conditions or semantic natural-language paragraphs. Rules are
+    evaluated by ascending priority; the first match wins. For semantic rules, the highest-priority enabled rule
+    should be the catch-all.
 </p>
 
 @if (_loading)
@@ -18,10 +18,11 @@
 else
 {
     <div class="dashboard-actions">
-        <button @onclick="StartCreate">➕ Add rule</button>
+        <button @onclick="StartCreate">➕ Add condition rule</button>
+        <button @onclick="StartCreateSemantic">🧠 Add semantic rule</button>
         @if (_rules.Count == 0)
         {
-            <button class="btn-approve" @onclick="GenerateStarterRulesAsync">✨ Generate my first rules</button>
+            <button class="btn-approve" @onclick="GenerateStarterRulesAsync">✨ Generate starter rules</button>
         }
     </div>
 
@@ -36,8 +37,8 @@ else
                 <tr>
                     <th>Priority</th>
                     <th>Name</th>
-                    <th>Condition</th>
-                    <th>Target model</th>
+                    <th>Type</th>
+                    <th>Target engine/model</th>
                     <th>Enabled</th>
                     <th></th>
                 </tr>
@@ -80,10 +81,13 @@ else
                     Priority
                     <InputNumber @bind-Value="_editor.Priority" />
                 </label>
-                <label>
-                    Description
-                    <InputText @bind-Value="_editor.Description" />
-                </label>
+                @if (!IsSemantic(_editor.ConditionType))
+                {
+                    <label>
+                        Description
+                        <InputText @bind-Value="_editor.Description" />
+                    </label>
+                }
                 <label>
                     Condition type
                     <InputSelect @bind-Value="_editor.ConditionType">
@@ -93,7 +97,14 @@ else
                         }
                     </InputSelect>
                 </label>
-                @if (ConditionNeedsValue(_editor.ConditionType))
+                @if (IsSemantic(_editor.ConditionType))
+                {
+                    <label>
+                        Rule paragraph
+                        <InputTextArea @bind-Value="_editor.Description" rows="5" placeholder="Captures requests where..." />
+                    </label>
+                }
+                else if (ConditionNeedsValue(_editor.ConditionType))
                 {
                     <label>
                         @ConditionValueLabel(_editor.ConditionType)
@@ -101,7 +112,7 @@ else
                     </label>
                 }
                 <label>
-                    Target model
+                    @(IsSemantic(_editor.ConditionType) ? "LLM Engine" : "Target model")
                     <InputSelect @bind-Value="_editor.TargetModel">
                         <option value="">— select —</option>
                         @foreach (var model in _models)
@@ -205,7 +216,8 @@ else
         ("HasSystemMessage", "Has a system message"),
         ("RequestedModelEquals", "Requested model equals"),
         ("PromptContainsKeyword", "Prompt contains keyword"),
-        ("PromptMatchesRegex", "Prompt matches regex")
+        ("PromptMatchesRegex", "Prompt matches regex"),
+        ("SemanticMatch", "Semantic match")
     ];
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
@@ -231,6 +243,21 @@ else
             Priority = (_rules.Count + 1) * 10,
             Enabled = true,
             TargetModel = _models.FirstOrDefault()?.Name ?? string.Empty
+        };
+    }
+
+    private void StartCreateSemantic()
+    {
+        _isNew = true;
+        _editorId = 0;
+        _editorName = string.Empty;
+        _editor = new RuleEditor
+        {
+            ConditionType = "SemanticMatch",
+            ConditionValue = string.Empty,
+            Priority = (_rules.Count + 1) * 10,
+            Enabled = true,
+            TargetModel = SelectProcessorModel()?.Name ?? _models.FirstOrDefault()?.Name ?? string.Empty
         };
     }
 
@@ -307,9 +334,56 @@ else
 
     private async Task GenerateStarterRulesAsync()
     {
-        await Api.GenerateStarterRulesAsync();
-        SetStatus("Starter rules generated.", true);
-        await ReloadAsync();
+        if (_rules.Count > 0)
+        {
+            return;
+        }
+
+        var localModel = SelectProcessorModel() ?? _models.FirstOrDefault();
+        var cloudModel = SelectCloudModel() ?? _models.FirstOrDefault();
+
+        if (localModel is null || cloudModel is null)
+        {
+            SetStatus("Starter rules require at least one registered model.", false);
+            return;
+        }
+
+        try
+        {
+            await Api.CreateRuleAsync(new RoutingRuleUpsertRequest(
+                "GitHub actions",
+                "Captures all GitHub related actions, for example: commit all the changes, push to GitHub, create a pull request.",
+                "SemanticMatch",
+                string.Empty,
+                localModel.Name,
+                10,
+                true));
+
+            await Api.CreateRuleAsync(new RoutingRuleUpsertRequest(
+                "Launch App actions",
+                "Captures all actions where the user asks Copilot to launch, run, build or start the application.",
+                "SemanticMatch",
+                string.Empty,
+                localModel.Name,
+                20,
+                true));
+
+            await Api.CreateRuleAsync(new RoutingRuleUpsertRequest(
+                "Others actions",
+                "Catch-all rule. Captures every request that does not match the other rules, including complex coding tasks.",
+                "SemanticMatch",
+                string.Empty,
+                cloudModel.Name,
+                30,
+                true));
+
+            SetStatus("Starter semantic rules generated.", true);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Starter rules failed: {ex.Message}", false);
+        }
     }
 
     private async Task RunTestAsync()
@@ -329,6 +403,14 @@ else
 
     private static bool ConditionNeedsValue(string conditionType) =>
         conditionType is "PromptSizeAtLeast" or "RequestedModelEquals" or "PromptContainsKeyword" or "PromptMatchesRegex";
+
+    private static bool IsSemantic(string conditionType) => conditionType == "SemanticMatch";
+
+    private ModelConnectionDto? SelectProcessorModel() =>
+        _models.FirstOrDefault(model => model.IsProcessor);
+
+    private ModelConnectionDto? SelectCloudModel() =>
+        _models.FirstOrDefault(model => !model.IsProcessor);
 
     private static string ConditionValueLabel(string conditionType) =>
         conditionType switch
@@ -350,6 +432,7 @@ else
             "RequestedModelEquals" => $"Requested model = '{rule.ConditionValue}'",
             "PromptContainsKeyword" => $"Contains '{rule.ConditionValue}'",
             "PromptMatchesRegex" => $"Matches /{rule.ConditionValue}/",
+            "SemanticMatch" => "Semantic match",
             _ => rule.ConditionType
         };
 

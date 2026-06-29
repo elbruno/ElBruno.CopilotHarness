@@ -49,6 +49,29 @@ per-model share summary (how many requests went to each model).
 | `clientDisplayName` | Friendly client name mapped from the user-agent |
 | `totalPromptCharacters` | Size of the **full payload** (system preamble + all turns), shown in the context badge |
 | `hasSystemMessage` | `true` when the request carried a system message (drives the context badge) |
+| `matchedRuleName` | The rule that matched. For semantic routing this is the rule the processor model picked (from the `semantic.matchedRule` trace fact) |
+| `semanticReason` | The processor model's plain-language reason for choosing the rule (semantic routing only) |
+| `rawUserMessage` | The original GitHub Copilot payload before `<userRequest>` extraction, shown in a collapsible "Raw Copilot payload" panel for inspection |
+
+### Collapsible message detail (semantic routing)
+
+When semantic rules are active, each card adds two collapsible panels:
+
+- **User message** — the **complete** extracted user request (not truncated), so you can read
+  exactly what the processor model analyzed.
+- **Raw Copilot payload** — the full `<attachments>…<userRequest>…</userRequest>` envelope
+  Copilot actually sent, shown only when present. This makes it obvious why a one-word `hi`
+  is correctly classified as `hi` rather than as ~1,000 characters of boilerplate.
+
+The "Why this rule" line shows the processor model's `semanticReason` when available
+(e.g. *"the user asks to commit and push"*), falling back to the generated explanation
+otherwise.
+
+> **Security — API keys are redacted in traces.** Routing traces persist the routing
+> *decision*, which includes the resolved model profile. The stored copy of that profile has
+> its `apiKey` blanked to `***redacted***` so cloud credentials are never written to the
+> trace database (`RoutingExecutionTraces`). The live request to the upstream model still uses
+> the real key in memory.
 
 
 ## Prompt-text capture is opt-in (privacy-first)

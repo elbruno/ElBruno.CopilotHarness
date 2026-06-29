@@ -164,7 +164,9 @@ public sealed record RoutedRequestView(
     string? ProcessorModel = null,
     double ClassificationConfidence = 0,
     int TotalPromptCharacters = 0,
-    bool HasSystemMessage = false);
+    bool HasSystemMessage = false,
+    string? RawUserMessage = null,
+    string? SemanticReason = null);
 
 public sealed record RoutingFeedResponse(
     DateTimeOffset GeneratedAtUtc,
