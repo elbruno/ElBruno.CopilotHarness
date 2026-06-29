@@ -9,3 +9,13 @@
 ## Learnings
 
 - Initialized as frontend owner for the Blazor Admin experience.
+
+
+## Session: 2026-06-29T15-28-35 — Live Routing & Models UX
+- **Outcome:** Complete
+- **Decision:** 2026-06-29T19-21-23 recorded
+- LiveRouting: filter bar, client-side paging, per-row/bulk/clear-all deletes (two-step confirms).
+- Models: editor moved to Rules-style modal with delete confirm.
+- AdminApiClient: DeleteTraceAsync, DeleteTracesAsync, ClearTracesAsync.
+- CSS: .page-header token, .empty-state, .confirm-banner, shared styles.
+- Feed limit 50→200. Admin.Web builds clean.
