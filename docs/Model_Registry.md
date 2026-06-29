@@ -140,6 +140,14 @@ In the Admin UI (**Models** page), the form is **type-aware**: choosing *Azure O
 shows deployment, API version, and API key; choosing *Ollama* shows only the model name.
 A **Test connection** button calls the probe endpoint and shows the result inline.
 
+> **Probe payload (per provider).** Azure OpenAI / Foundry models use
+> `max_completion_tokens` (the newer gpt-5-series deployments reject the legacy
+> `max_tokens` parameter with *"Unsupported parameter… use max_completion_tokens"*),
+> while Ollama uses `max_tokens`. When the probe fails, the harness now reads the
+> **upstream error body** and surfaces the provider's actual message (e.g. a 400 from
+> Azure) inline instead of a generic failure, so you can see exactly why a connection
+> was rejected.
+
 ---
 
 ## Seeded examples

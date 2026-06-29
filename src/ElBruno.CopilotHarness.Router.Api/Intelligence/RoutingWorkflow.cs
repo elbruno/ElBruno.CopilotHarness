@@ -175,16 +175,22 @@ public sealed class PromptShapeContextProvider(IOptions<TelemetryOptions> teleme
                                        "system",
                                        StringComparison.OrdinalIgnoreCase));
 
-        var promptCharacters = BasicModelRouter.GetPromptCharacterCount(requestBody);
+        var totalPromptCharacters = BasicModelRouter.GetPromptCharacterCount(requestBody);
+        var userPromptCharacters = BasicModelRouter.GetUserPromptCharacterCount(requestBody);
         var facts = new List<RoutingContextFact>
         {
             new("request.hasSystemMessage", hasSystemMessage.ToString()),
-            new("request.promptCharacters", promptCharacters.ToString())
+            // request.promptCharacters is the routing-relevant size (the user's actual
+            // message). The full payload size is surfaced separately so the live view can
+            // explain that routing ignores Copilot's large system preamble.
+            new("request.promptCharacters", userPromptCharacters.ToString()),
+            new("request.userPromptCharacters", userPromptCharacters.ToString()),
+            new("request.totalPromptCharacters", totalPromptCharacters.ToString())
         };
 
         if (_telemetryOptions.CapturePromptText)
         {
-            var preview = PromptPrivacy.BuildPreview(BasicModelRouter.GetPromptText(requestBody), _telemetryOptions);
+            var preview = PromptPrivacy.BuildPreview(BasicModelRouter.GetUserPromptText(requestBody), _telemetryOptions);
             if (!string.IsNullOrEmpty(preview))
             {
                 facts.Add(new RoutingContextFact(PromptPrivacy.PromptPreviewFactKey, preview));
@@ -240,10 +246,10 @@ public sealed class DeterministicClassificationAgent : IClassificationAgent
         RoutingContext context,
         RoutingOptions routingOptions)
     {
-        var promptText = BasicModelRouter.GetPromptText(requestBody);
+        var promptText = BasicModelRouter.GetUserPromptText(requestBody);
         var preview = (promptText.Length > 200 ? promptText[..200] : promptText).ToLowerInvariant();
 
-        var promptCharacters = BasicModelRouter.GetPromptCharacterCount(requestBody);
+        var promptCharacters = BasicModelRouter.GetUserPromptCharacterCount(requestBody);
 
         // Source-control / GitHub actions intent.
         if (ContainsAny(preview, "push to gh", "git push", "git commit", "commit and push", "open a pr", "pull request", "push to github"))

@@ -77,7 +77,7 @@ public sealed class ProcessorModelClassificationAgent(
             return deterministic;
         }
 
-        var promptText = BasicModelRouter.GetPromptText(requestBody);
+        var promptText = BasicModelRouter.GetUserPromptText(requestBody);
         if (string.IsNullOrWhiteSpace(promptText))
         {
             return deterministic;

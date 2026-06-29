@@ -81,6 +81,8 @@ type RoutedRequestView = {
   classifierSource?: string;
   processorModel?: string | null;
   classificationConfidence?: number;
+  totalPromptCharacters?: number;
+  hasSystemMessage?: boolean;
 };
 
 type RoutingFeedResponse = {
@@ -332,6 +334,10 @@ function renderLiveRoutingHtml(feed: RoutingFeedResponse): string {
     const prompt = request.promptPreview
       ? escapeHtml(request.promptPreview.length > 60 ? `${request.promptPreview.slice(0, 60)}…` : request.promptPreview)
       : `<span class="muted">(${request.promptCharacters} chars)</span>`;
+    const total = request.totalPromptCharacters ?? request.promptCharacters;
+    const contextNote = (request.hasSystemMessage || total > request.promptCharacters)
+      ? `<br/><span class="ctx" title="Routing uses your message only; Copilot's system preamble + history are ignored for routing.">📎 ${request.promptCharacters}/${total} ctx${request.hasSystemMessage ? ' · system preamble' : ''}</span>`
+      : '';
     const intent = request.classificationIntent ? escapeHtml(request.classificationIntent) : 'unknown';
     const sourceIcon = request.classifierSource === 'processor-model' ? '🧠' : '⚙️';
     const confidence = typeof request.classificationConfidence === 'number'
@@ -340,7 +346,7 @@ function renderLiveRoutingHtml(feed: RoutingFeedResponse): string {
     const intentCell = `<span class="badge badge-${intent}">${intent}</span> <span class="muted">${sourceIcon}${escapeHtml(confidence)}</span>`;
     return `<tr>
       <td>${escapeHtml(new Date(request.createdAtUtc).toLocaleTimeString())}</td>
-      <td>${prompt}<br/><span class="muted">${escapeHtml(request.clientDisplayName)}</span></td>
+      <td>${prompt}${contextNote}<br/><span class="muted">${escapeHtml(request.clientDisplayName)}</span></td>
       <td>${intentCell}</td>
       <td>${escapeHtml(request.matchedRuleName ?? '-')}</td>
       <td><strong>${escapeHtml(request.selectedModel)}</strong></td>
@@ -365,6 +371,7 @@ function renderLiveRoutingHtml(feed: RoutingFeedResponse): string {
       th, td { border-bottom: 1px solid var(--vscode-panel-border); padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; }
       th { color: var(--vscode-descriptionForeground); }
       .muted { color: var(--vscode-descriptionForeground); }
+      .ctx { color: #6a4c00; background: #fff3cd; border-radius: 4px; padding: 0 4px; font-size: 11px; }
       button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; margin-bottom: 8px; }
       a { color: var(--vscode-textLink-foreground); }
       .badge { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #fff; background: #57606a; }

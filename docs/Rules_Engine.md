@@ -53,13 +53,28 @@ caller that pins a specific model).
 | Condition | `conditionValue` | Matches when… |
 |---|---|---|
 | `Always` | *(ignored)* | Always — useful as a catch-all at the lowest priority. |
-| `PromptSizeAtLeast` | integer | Total prompt character count ≥ the value. |
+| `PromptSizeAtLeast` | integer | The **user message** character count ≥ the value. See [User message vs. full payload](#user-message-vs-full-payload). |
 | `IsStreaming` | *(ignored)* | The request is a streaming request (`stream: true`). |
 | `HasSystemMessage` | *(ignored)* | The request contains a `system` message. |
 | `RequestedModelEquals` | model name | The client-requested model equals the value (case-insensitive). |
-| `PromptContainsKeyword` | keyword | Any prompt text contains the keyword (case-insensitive). |
-| `PromptMatchesRegex` | regex | Any prompt text matches the regular expression. Regex evaluation is bounded by a 250 ms timeout; an invalid or timing-out pattern simply does not match. |
+| `PromptContainsKeyword` | keyword | The **user message** contains the keyword (case-insensitive). |
+| `PromptMatchesRegex` | regex | The **user message** matches the regular expression. Regex evaluation is bounded by a 250 ms timeout; an invalid or timing-out pattern simply does not match. |
 | `IntentEquals` | intent label | The **processor model's** classification of the prompt equals the value (case-insensitive). See [Intent classification](#intent-classification). |
+
+---
+
+## User message vs. full payload
+
+GitHub Copilot prepends a large boilerplate **system preamble** (e.g. *"You are an
+expert AI programming assistant…"*) to **every** request. If size/keyword/regex
+conditions looked at the whole payload, every Copilot request would look "large" and
+route to the cloud model — even a one-word `hi`.
+
+To avoid this, `PromptSizeAtLeast`, `PromptContainsKeyword`, and `PromptMatchesRegex`
+evaluate the **last user message** (the actual turn the caller typed), not the system
+preamble or prior conversation turns. The classifier and the `/live` preview use the
+same user-message text. The full payload size is still surfaced for visibility (see
+[Live Routing](Live_Routing.md)) but is not used for routing decisions.
 
 ---
 

@@ -135,4 +135,6 @@ public sealed record RoutedRequestViewTest(
     string ClassificationComplexity,
     string ClassifierSource,
     string? ProcessorModel,
-    double ClassificationConfidence);
+    double ClassificationConfidence,
+    int TotalPromptCharacters,
+    bool HasSystemMessage);

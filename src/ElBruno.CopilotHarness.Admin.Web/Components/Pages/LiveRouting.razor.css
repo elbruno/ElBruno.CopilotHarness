@@ -99,6 +99,17 @@
     color: #57606a;
 }
 
+.stage-context {
+    display: inline-block;
+    margin-top: 0.2rem;
+    font-size: 0.72rem;
+    color: #6a4c00;
+    background: #fff3cd;
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+    cursor: help;
+}
+
 .arrow {
     align-self: center;
     color: #8c959f;

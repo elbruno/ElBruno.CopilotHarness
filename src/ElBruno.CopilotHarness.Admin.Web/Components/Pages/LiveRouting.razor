@@ -68,13 +68,23 @@ else
                     </div>
                     <div class="pipeline-flow">
                         <div class="stage stage-prompt">
-                            <span class="stage-label">Prompt</span>
+                            <span class="stage-label">User message</span>
                             <span class="stage-value" title="@request.PromptPreview">
                                 @(string.IsNullOrWhiteSpace(request.PromptPreview)
                                     ? $"({request.PromptCharacters} chars)"
-                                    : Truncate(request.PromptPreview!, 60))
+                                    : Truncate(request.PromptPreview!, 80))
                             </span>
                             <span class="stage-sub">@request.ClientDisplayName</span>
+                            @if (request.HasSystemMessage || request.TotalPromptCharacters > request.PromptCharacters)
+                            {
+                                <span class="stage-context" title="Routing uses your message only. Copilot also sends a large system preamble + prior turns, which the harness ignores for routing.">
+                                    📎 @request.PromptCharacters of @request.TotalPromptCharacters ctx chars
+                                    @if (request.HasSystemMessage)
+                                    {
+                                        <text> · system preamble</text>
+                                    }
+                                </span>
+                            }
                         </div>
                         <span class="arrow">→</span>
                         <div class="stage stage-processor">

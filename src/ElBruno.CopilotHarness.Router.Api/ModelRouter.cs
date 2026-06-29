@@ -50,7 +50,7 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
                 return new RoutingDecision(systemProfileName, systemProfile, "System message detected by basic rule.");
             }
 
-            if (GetPromptCharacterCount(requestBody) >= options.Rules.BigPromptCharacterThreshold &&
+            if (GetUserPromptCharacterCount(requestBody) >= options.Rules.BigPromptCharacterThreshold &&
                 TryGetEnabledProfile(options, options.Rules.BigProfile, out var bigProfileName, out var bigProfile))
             {
                 return new RoutingDecision(bigProfileName, bigProfile, "Prompt size exceeded threshold.");
@@ -86,13 +86,13 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
             RoutingRuleConditionType.IsStreaming => requestBody["stream"]?.GetValue<bool>() ?? false,
             RoutingRuleConditionType.HasSystemMessage => ContainsSystemMessage(requestBody),
             RoutingRuleConditionType.PromptSizeAtLeast =>
-                int.TryParse(rule.ConditionValue, out var threshold) && GetPromptCharacterCount(requestBody) >= threshold,
+                int.TryParse(rule.ConditionValue, out var threshold) && GetUserPromptCharacterCount(requestBody) >= threshold,
             RoutingRuleConditionType.RequestedModelEquals =>
                 string.Equals(GetStringValue(requestBody["model"]), rule.ConditionValue, StringComparison.OrdinalIgnoreCase),
             RoutingRuleConditionType.PromptContainsKeyword =>
                 !string.IsNullOrWhiteSpace(rule.ConditionValue) &&
-                GetPromptText(requestBody).Contains(rule.ConditionValue, StringComparison.OrdinalIgnoreCase),
-            RoutingRuleConditionType.PromptMatchesRegex => MatchesRegex(rule.ConditionValue, GetPromptText(requestBody)),
+                GetUserPromptText(requestBody).Contains(rule.ConditionValue, StringComparison.OrdinalIgnoreCase),
+            RoutingRuleConditionType.PromptMatchesRegex => MatchesRegex(rule.ConditionValue, GetUserPromptText(requestBody)),
             RoutingRuleConditionType.IntentEquals =>
                 !string.IsNullOrWhiteSpace(intent) &&
                 string.Equals(intent, rule.ConditionValue, StringComparison.OrdinalIgnoreCase),
@@ -151,7 +151,7 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
             .Any(message => string.Equals(GetStringValue(message["role"]), "system", StringComparison.OrdinalIgnoreCase));
     }
 
-    internal static int GetPromptCharacterCount(JsonObject requestBody)
+    public static int GetPromptCharacterCount(JsonObject requestBody)
     {
         if (requestBody["messages"] is not JsonArray messages)
         {
@@ -216,6 +216,68 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
 
         return builder.ToString();
     }
+
+    /// <summary>
+    /// Extracts the plain text of a single chat message, handling both the simple
+    /// string form and the multi-part content array form.
+    /// </summary>
+    internal static string GetMessageText(JsonObject message)
+    {
+        if (message["content"] is JsonValue singleContent && singleContent.TryGetValue<string>(out var contentText))
+        {
+            return contentText;
+        }
+
+        if (message["content"] is not JsonArray multiPartContent)
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var part in multiPartContent.OfType<JsonObject>())
+        {
+            if (part["text"] is JsonValue textPart && textPart.TryGetValue<string>(out var text))
+            {
+                builder.Append(text).Append('\n');
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Returns the text of the <b>last user message</b> — the actual turn the caller typed.
+    /// GitHub Copilot prepends a large boilerplate system preamble to every request, so
+    /// routing and classification must look at the user's message, not the whole payload.
+    /// Falls back to the full prompt text when no user message is present.
+    /// </summary>
+    public static string GetUserPromptText(JsonObject requestBody)
+    {
+        if (requestBody["messages"] is JsonArray messages)
+        {
+            var lastUser = messages
+                .OfType<JsonObject>()
+                .LastOrDefault(message => string.Equals(GetStringValue(message["role"]), "user", StringComparison.OrdinalIgnoreCase));
+
+            if (lastUser is not null)
+            {
+                var text = GetMessageText(lastUser).Trim();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    return text;
+                }
+            }
+        }
+
+        return GetPromptText(requestBody).Trim();
+    }
+
+    /// <summary>
+    /// Character count of the last user message — the size of the actual ask, excluding
+    /// the system preamble and prior conversation turns.
+    /// </summary>
+    public static int GetUserPromptCharacterCount(JsonObject requestBody) =>
+        GetUserPromptText(requestBody).Length;
 
     private static string? GetStringValue(JsonNode? node)
     {

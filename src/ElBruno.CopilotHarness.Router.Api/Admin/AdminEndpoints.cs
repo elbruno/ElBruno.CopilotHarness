@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using ElBruno.CopilotHarness.Router.Core;
 using ElBruno.CopilotHarness.Router.Core.Persistence;
@@ -398,6 +399,8 @@ public static class AdminEndpoints
                     var clientId = GetContextValue(trace, "request.client.id") ?? "unknown";
                     var matchedRule = ExtractMatchedRuleName(trace.Decision.Reason);
                     int.TryParse(GetContextValue(trace, "request.promptCharacters"), out var promptChars);
+                    int.TryParse(GetContextValue(trace, "request.totalPromptCharacters"), out var totalPromptChars);
+                    var hasSystemMessage = string.Equals(GetContextValue(trace, "request.hasSystemMessage"), "true", StringComparison.OrdinalIgnoreCase);
                     var classifierSource = GetContextValue(trace, "classifier.source")
                         ?? (string.IsNullOrWhiteSpace(trace.Classification.Source) ? "deterministic" : trace.Classification.Source);
                     var processorModel = GetContextValue(trace, "classifier.processorModel") ?? trace.Classification.ProcessorModel;
@@ -421,7 +424,9 @@ public static class AdminEndpoints
                         ClassificationComplexity: trace.Classification.Complexity,
                         ClassifierSource: classifierSource,
                         ProcessorModel: processorModel,
-                        ClassificationConfidence: trace.Classification.Confidence);
+                        ClassificationConfidence: trace.Classification.Confidence,
+                        TotalPromptCharacters: totalPromptChars,
+                        HasSystemMessage: hasSystemMessage);
                 })
                 .ToList();
 
@@ -811,9 +816,19 @@ public static class AdminEndpoints
             ["messages"] = new JsonArray
             {
                 new JsonObject { ["role"] = "user", ["content"] = "ping" }
-            },
-            ["max_tokens"] = 1
+            }
         };
+
+        // Newer Azure OpenAI models (gpt-5 family) reject the legacy `max_tokens`
+        // parameter and require `max_completion_tokens`; Ollama uses `max_tokens`.
+        if (profile.Type == ModelProviderType.AzureOpenAI)
+        {
+            payload["max_completion_tokens"] = 16;
+        }
+        else
+        {
+            payload["max_tokens"] = 1;
+        }
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
@@ -823,14 +838,54 @@ public static class AdminEndpoints
                 .SendChatCompletionsAsync(payload, profile, stream: false, cancellationToken);
             stopwatch.Stop();
 
-            return response.IsSuccessStatusCode
-                ? new ModelConnectionTestResult(true, $"Connection succeeded ({(int)response.StatusCode}).", stopwatch.Elapsed.TotalMilliseconds)
-                : new ModelConnectionTestResult(false, $"Upstream returned {(int)response.StatusCode} {response.ReasonPhrase}.", stopwatch.Elapsed.TotalMilliseconds);
+            if (response.IsSuccessStatusCode)
+            {
+                return new ModelConnectionTestResult(true, $"Connection succeeded ({(int)response.StatusCode}).", stopwatch.Elapsed.TotalMilliseconds);
+            }
+
+            var detail = await ReadUpstreamErrorAsync(response, cancellationToken);
+            var message = string.IsNullOrWhiteSpace(detail)
+                ? $"Upstream returned {(int)response.StatusCode} {response.ReasonPhrase}."
+                : $"Upstream returned {(int)response.StatusCode} {response.ReasonPhrase}: {detail}";
+            return new ModelConnectionTestResult(false, message, stopwatch.Elapsed.TotalMilliseconds);
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
             return new ModelConnectionTestResult(false, $"Connection failed: {ex.Message}", stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private static async Task<string?> ReadUpstreamErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            // OpenAI/Azure error envelopes wrap the human-readable text in error.message.
+            try
+            {
+                if (JsonNode.Parse(raw) is JsonObject obj
+                    && obj["error"] is JsonObject error
+                    && error["message"] is JsonValue messageValue)
+                {
+                    return messageValue.ToString();
+                }
+            }
+            catch (JsonException)
+            {
+                // Fall through to the trimmed raw body.
+            }
+
+            return raw.Length > 400 ? raw[..400] : raw;
+        }
+        catch
+        {
+            return null;
         }
     }
 

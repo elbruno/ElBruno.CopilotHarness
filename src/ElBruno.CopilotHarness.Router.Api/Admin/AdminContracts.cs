@@ -159,7 +159,9 @@ public sealed record RoutedRequestView(
     string ClassificationComplexity,
     string ClassifierSource,
     string? ProcessorModel,
-    double ClassificationConfidence);
+    double ClassificationConfidence,
+    int TotalPromptCharacters,
+    bool HasSystemMessage);
 
 public sealed record RoutingFeedResponse(
     DateTimeOffset GeneratedAtUtc,

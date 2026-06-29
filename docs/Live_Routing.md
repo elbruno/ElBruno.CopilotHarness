@@ -18,7 +18,8 @@ left-to-right: *Prompt → Processor classifies intent → Rule matches → Targ
 | Field | Meaning |
 | --- | --- |
 | Time | When the request was routed |
-| Prompt | Redacted, truncated preview of the prompt (opt-in — see below) |
+| Prompt | Redacted, truncated preview of the **user message** — the actual turn the caller typed, not the system preamble (opt-in — see below) |
+| Context | A `📎 {user} of {total} ctx chars · system preamble` badge when the request carried a large system preamble or prior turns, so you can see the user message was tiny even though the full payload was large |
 | Processor | Which model classified the request, the **intent** it assigned, and the confidence |
 | Classifier source | Whether the intent came from the **processor model** (real LLM call) or the **deterministic** fallback |
 | Rule | The routing rule that matched (if any) |
@@ -29,6 +30,11 @@ left-to-right: *Prompt → Processor classifies intent → Rule matches → Targ
 
 The dashboard also shows per-intent and per-classifier-source summary cards, plus a
 per-model share summary (how many requests went to each model).
+
+> **Why "User message" and not "Prompt"?** GitHub Copilot prepends a large boilerplate
+> system preamble to every request. The card shows the **last user message** (what you
+> actually typed), and routing/classification use that same text — see
+> [Rules Engine → User message vs. full payload](Rules_Engine.md#user-message-vs-full-payload).
 
 ### Enriched feed fields
 
@@ -41,6 +47,8 @@ per-model share summary (how many requests went to each model).
 | `processorModel` | Name of the model that performed the classification |
 | `classificationConfidence` | Classifier confidence (0–1) |
 | `clientDisplayName` | Friendly client name mapped from the user-agent |
+| `totalPromptCharacters` | Size of the **full payload** (system preamble + all turns), shown in the context badge |
+| `hasSystemMessage` | `true` when the request carried a system message (drives the context badge) |
 
 
 ## Prompt-text capture is opt-in (privacy-first)

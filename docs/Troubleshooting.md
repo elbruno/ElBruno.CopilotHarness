@@ -43,6 +43,12 @@ model. Common failures:
 - **Azure model falls back to shared Foundry config** — if a model's endpoint or key is
   blank, the Azure provider uses the shared `Foundry:Endpoint` / `Foundry:ApiKey`. Set the
   per-model values to override.
+- **Test connection fails with a 400 on a gpt-5-series model** — the newer Azure
+  gpt-5-series deployments reject the legacy `max_tokens` parameter
+  (*"Unsupported parameter: 'max_tokens'… use 'max_completion_tokens' instead"*). The probe
+  now sends `max_completion_tokens` for Azure models (and `max_tokens` for Ollama), so this
+  is fixed. When a probe fails, the harness surfaces the **upstream error body** inline, so
+  the exact provider message is shown instead of a generic failure.
 
 ## Temperature 400 {#temperature-400}
 
@@ -78,6 +84,23 @@ Routing still works, but intent quality is lower. Common causes:
 Start the processor model (`ollama pull llama3.2` + run Ollama), confirm exactly one model
 has the processor flag on the **Models** page, and the source returns to `processor-model`.
 See [Model Registry → Processor model](Model_Registry.md#processor-model).
+
+## Short prompts (like `hi`) route to the cloud model
+
+On the **Live Routing** page a one-word prompt such as `hi` is classified as `long-form`/
+`high` and routed to the cloud model, and the preview shows *"You are an expert AI
+programming assistant…"* instead of `hi`.
+
+**Cause.** GitHub Copilot prepends a large boilerplate **system preamble** to every
+request. If size/keyword/regex conditions and the classifier look at the whole payload,
+every Copilot request looks "large" → the `Large prompts` rule matches → the cloud model is
+chosen, and the preview shows the system text.
+
+**Fix.** Routing, classification, and the `/live` preview now use the **last user message**
+(the actual turn typed), not the system preamble or prior turns. A short `hi` now classifies
+as `simple-chat` and routes to the local model, and the card shows `hi` plus a context badge
+(`📎 {user} of {total} ctx chars · system preamble`). See
+[Rules Engine → User message vs. full payload](Rules_Engine.md#user-message-vs-full-payload).
 
 ## Stored API keys stop working after a reset
 

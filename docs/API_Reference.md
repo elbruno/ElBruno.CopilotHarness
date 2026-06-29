@@ -119,6 +119,8 @@ Returns the **Live Routing** feed — one row per routed request combining promp
       "explanation": "processor 'ollama llama3.2' classified intent=simple-chat (0.92) → rule 'Simple chat' matched → routed to 'ollama llama3.2'.",
       "promptPreview": "hi",
       "promptCharacters": 2,
+      "totalPromptCharacters": 2480,
+      "hasSystemMessage": true,
       "classificationIntent": "simple-chat",
       "classificationComplexity": "low",
       "classifierSource": "processor-model",
@@ -128,6 +130,11 @@ Returns the **Live Routing** feed — one row per routed request combining promp
   ]
 }
 ```
+
+`promptCharacters` is the size of the **user message** (the actual ask, used for routing),
+while `totalPromptCharacters` is the size of the full payload including Copilot's system
+preamble and prior turns. `hasSystemMessage` is `true` when the request carried a system
+message — both drive the Live Routing context badge.
 
 `classifierSource` is `processor-model` when the designated processor model classified the
 request, or `deterministic` when the built-in fallback was used (processor disabled,
