@@ -145,6 +145,31 @@ public sealed class AdminApiClient(HttpClient httpClient)
         }
     }
 
+    public async Task<bool> DeleteTraceAsync(string traceId, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync($"/admin/traces/{Uri.EscapeDataString(traceId)}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<DeleteTraceResponse>(cancellationToken);
+        return result?.Deleted ?? false;
+    }
+
+    public async Task<int> DeleteTracesAsync(IEnumerable<string> traceIds, CancellationToken cancellationToken = default)
+    {
+        var request = new DeleteTracesRequest(traceIds.ToList());
+        var response = await _httpClient.PostAsJsonAsync("/admin/traces/delete", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<DeleteTracesResponse>(cancellationToken);
+        return result?.DeletedCount ?? 0;
+    }
+
+    public async Task<bool> ClearTracesAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync("/admin/traces", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ClearTracesResponse>(cancellationToken);
+        return result?.Cleared ?? false;
+    }
+
     public async Task<OperationsStatusResponse> GetOperationsStatusAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<OperationsStatusResponse>("/admin/operations/status", cancellationToken)
         ?? new OperationsStatusResponse(

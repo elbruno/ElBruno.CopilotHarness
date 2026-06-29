@@ -297,6 +297,16 @@ public sealed record LiveRequestsResponse(
     DateTimeOffset SnapshotUtc,
     IReadOnlyList<LiveRequestTelemetryDto> Requests);
 
+// ── Live routing trace deletion ──────────────────────────────────────────────
+
+public sealed record DeleteTraceResponse(bool Deleted);
+
+public sealed record BulkDeleteTracesRequest(IReadOnlyList<string> TraceIds);
+
+public sealed record BulkDeleteResponse(int DeletedCount);
+
+public sealed record ClearTracesResponse(bool Cleared);
+
 // ── Phase 8 – Continuous Evaluation ──────────────────────────────────────────
 
 public sealed record RuleRecommendationDto(

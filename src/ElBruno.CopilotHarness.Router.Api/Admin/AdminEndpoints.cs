@@ -435,7 +435,7 @@ public static class AdminEndpoints
 
         group.MapGet("/telemetry/requests", (IExecutionTraceStore traceStore, int? limit) =>
         {
-            var normalizedLimit = Math.Clamp(limit ?? 50, 1, 200);
+            var normalizedLimit = Math.Clamp(limit ?? 200, 1, 200);
             var traces = traceStore.GetRecent(normalizedLimit);
 
             var requests = traces
@@ -530,6 +530,25 @@ public static class AdminEndpoints
             }
 
             return Results.Ok(RoutingTraceResponseMapper.ToResponse(trace));
+        });
+
+        group.MapDelete("/traces/{traceId}", (string traceId, IExecutionTraceStore traceStore) =>
+        {
+            var deleted = traceStore.Remove(traceId);
+            return Results.Ok(new DeleteTraceResponse(deleted));
+        });
+
+        group.MapPost("/traces/delete", (BulkDeleteTracesRequest request, IExecutionTraceStore traceStore) =>
+        {
+            var traceIds = request?.TraceIds ?? [];
+            var deletedCount = traceStore.RemoveMany(traceIds);
+            return Results.Ok(new BulkDeleteResponse(deletedCount));
+        });
+
+        group.MapDelete("/traces", (IExecutionTraceStore traceStore) =>
+        {
+            traceStore.Clear();
+            return Results.Ok(new ClearTracesResponse(true));
         });
 
         group.MapGet("/dashboard/snapshot", (IClientRequestActivityStore requestActivityStore) =>

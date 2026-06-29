@@ -5,9 +5,13 @@
 
 <PageTitle>Live Routing</PageTitle>
 
-<h1>Live Routing</h1>
-<p>Watch the harness pipeline in real time: each prompt is read by the <strong>processor model</strong>,
-   classified into an <strong>intent</strong>, matched to a <strong>rule</strong>, and routed to a <strong>target model</strong>.</p>
+<div class="page-header">
+    <div>
+        <h1>Live Routing</h1>
+        <p class="muted">Watch the harness pipeline in real time: each prompt is read by the <strong>processor model</strong>,
+           classified into an <strong>intent</strong>, matched to a <strong>rule</strong>, and routed to a <strong>target model</strong>.</p>
+    </div>
+</div>
 
 @if (!string.IsNullOrWhiteSpace(_error))
 {
@@ -16,7 +20,7 @@
 
 @if (_feed is null)
 {
-    <p>Loading routing feed...</p>
+    <p>Loading routing feed…</p>
 }
 else
 {
@@ -52,19 +56,108 @@ else
         </div>
     }
 
-    <h2>Recent requests (@_feed.Requests.Count)</h2>
+    <div class="recent-head">
+        <h2>Recent requests (@_filteredCount@(_filteredCount != _feed.Requests.Count ? $" of {_feed.Requests.Count}" : ""))</h2>
+        <div class="recent-actions">
+            @if (_selected.Count > 0)
+            {
+                <button class="btn-reject" @onclick="BeginBulkDelete">🗑 Delete selected (@_selected.Count)</button>
+            }
+            @if (_feed.Requests.Count > 0)
+            {
+                <button class="btn-reject" @onclick="BeginClearAll">Clear all</button>
+            }
+        </div>
+    </div>
+
+    @if (_feed.Requests.Count > 0)
+    {
+        <div class="filter-bar">
+            <input class="filter-text" type="search" placeholder="Filter by prompt, model or rule…"
+                   value="@_filterText" @oninput="OnFilterInput" />
+            <select value="@_modelFilter" @onchange="OnModelFilterChanged">
+                <option value="">All models</option>
+                @foreach (var model in DistinctModels())
+                {
+                    <option value="@model">@model</option>
+                }
+            </select>
+            <select value="@_ruleFilter" @onchange="OnRuleFilterChanged">
+                <option value="">All rules</option>
+                @foreach (var rule in DistinctRules())
+                {
+                    <option value="@rule">@rule</option>
+                }
+            </select>
+            @if (HasActiveFilter)
+            {
+                <button class="btn-ghost" @onclick="ClearFilters">Clear filters</button>
+            }
+        </div>
+    }
+
+    @if (_confirmClearAll)
+    {
+        <div class="confirm-banner">
+            <span><strong>Delete all @_feed.Requests.Count request(s)?</strong> This cannot be undone.</span>
+            <span class="confirm-actions">
+                <button class="btn-reject" @onclick="ConfirmClearAll">Yes, clear all</button>
+                <button class="btn-ghost" @onclick="() => _confirmClearAll = false">Cancel</button>
+            </span>
+        </div>
+    }
+
+    @if (_confirmBulkDelete)
+    {
+        <div class="confirm-banner">
+            <span><strong>Delete @_selected.Count selected request(s)?</strong> This cannot be undone.</span>
+            <span class="confirm-actions">
+                <button class="btn-reject" @onclick="ConfirmBulkDelete">Yes, delete selected</button>
+                <button class="btn-ghost" @onclick="() => _confirmBulkDelete = false">Cancel</button>
+            </span>
+        </div>
+    }
+
     @if (_feed.Requests.Count == 0)
     {
-        <p>No routed requests yet. Send a prompt from VS Code Copilot (BYOK) to see it here.</p>
+        <div class="empty-state">
+            <p class="empty-title">No routed requests yet</p>
+            <p class="muted">Send a prompt from VS Code Copilot (BYOK) to see it flow through the pipeline here.</p>
+        </div>
+    }
+    else if (_filteredCount == 0)
+    {
+        <div class="empty-state">
+            <p class="empty-title">No requests match your filters</p>
+            <button class="btn-ghost" @onclick="ClearFilters">Clear filters</button>
+        </div>
     }
     else
     {
         <div class="pipeline-list">
-            @foreach (var request in _feed.Requests)
+            @foreach (var request in _pageItems)
             {
-                <article class="pipeline-row">
-                    <div class="pipeline-time" title="@request.CreatedAtUtc.ToLocalTime().ToString("u")">
-                        @request.CreatedAtUtc.ToLocalTime().ToString("HH:mm:ss")
+                <article class="pipeline-row @(_selected.Contains(request.TraceId) ? "row-selected" : "")">
+                    <div class="pipeline-topbar">
+                        <label class="select-box" title="Select for bulk delete">
+                            <input type="checkbox" checked="@_selected.Contains(request.TraceId)"
+                                   @onchange="e => ToggleSelect(request.TraceId, e.Value is bool b && b)" />
+                        </label>
+                        <div class="pipeline-time" title="@request.CreatedAtUtc.ToLocalTime().ToString("u")">
+                            @request.CreatedAtUtc.ToLocalTime().ToString("HH:mm:ss")
+                        </div>
+                        <div class="row-actions">
+                            @if (_confirmDeleteId == request.TraceId)
+                            {
+                                <span class="muted">Delete?</span>
+                                <button class="btn-reject btn-sm" @onclick="() => ConfirmDeleteRow(request.TraceId)">Yes</button>
+                                <button class="btn-ghost btn-sm" @onclick="() => _confirmDeleteId = null">No</button>
+                            }
+                            else
+                            {
+                                <button class="icon-btn" title="Delete this request" @onclick="() => _confirmDeleteId = request.TraceId">🗑</button>
+                            }
+                        </div>
                     </div>
                     <div class="pipeline-flow">
                         <div class="stage stage-prompt">
@@ -127,16 +220,68 @@ else
                 </article>
             }
         </div>
+
+        @if (_totalPages > 1)
+        {
+            <div class="pager">
+                <button class="btn-ghost" disabled="@(_page == 0)" @onclick="PrevPage">← Prev</button>
+                <span class="pager-info">Page @(_page + 1) of @_totalPages</span>
+                <button class="btn-ghost" disabled="@(_page >= _totalPages - 1)" @onclick="NextPage">Next →</button>
+            </div>
+        }
     }
 
     <p class="muted">Snapshot: @_feed.GeneratedAtUtc.ToLocalTime().ToString("u")</p>
 }
 
 @code {
+    private const int PageSize = 20;
+
     private readonly CancellationTokenSource _loopCancellation = new();
     private Task? _loopTask;
     private RoutingFeedResponse? _feed;
     private string? _error;
+
+    private string _filterText = string.Empty;
+    private string _modelFilter = string.Empty;
+    private string _ruleFilter = string.Empty;
+    private int _page;
+
+    private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
+    private string? _confirmDeleteId;
+    private bool _confirmBulkDelete;
+    private bool _confirmClearAll;
+
+    private List<RoutedRequestView> _pageItems = new();
+    private int _totalPages = 1;
+    private int _filteredCount;
+
+    private void Recompute()
+    {
+        var filtered = FilteredRequests().ToList();
+        _filteredCount = filtered.Count;
+        _totalPages = Math.Max(1, (filtered.Count + PageSize - 1) / PageSize);
+        if (_page >= _totalPages) { _page = _totalPages - 1; }
+        if (_page < 0) { _page = 0; }
+        _pageItems = filtered.Skip(_page * PageSize).Take(PageSize).ToList();
+    }
+
+    private void PrevPage()
+    {
+        if (_page > 0) { _page--; }
+        Recompute();
+    }
+
+    private void NextPage()
+    {
+        if (_page < _totalPages - 1) { _page++; }
+        Recompute();
+    }
+
+    private bool HasActiveFilter =>
+        !string.IsNullOrWhiteSpace(_filterText) ||
+        !string.IsNullOrWhiteSpace(_modelFilter) ||
+        !string.IsNullOrWhiteSpace(_ruleFilter);
 
     protected override async Task OnInitializedAsync()
     {
@@ -158,12 +303,166 @@ else
     {
         try
         {
-            _feed = await Api.GetRoutingFeedAsync(50, cancellationToken);
+            _feed = await Api.GetRoutingFeedAsync(200, cancellationToken);
             _error = null;
+            // Prune selection / pending confirm for traces that no longer exist.
+            var present = _feed.Requests.Select(r => r.TraceId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _selected.RemoveWhere(id => !present.Contains(id));
+            if (_confirmDeleteId is not null && !present.Contains(_confirmDeleteId))
+            {
+                _confirmDeleteId = null;
+            }
+            Recompute();
         }
         catch (Exception exception)
         {
             _error = $"Could not refresh routing feed: {exception.Message}";
+        }
+    }
+
+    private IEnumerable<RoutedRequestView> FilteredRequests()
+    {
+        IEnumerable<RoutedRequestView> items = _feed?.Requests ?? Enumerable.Empty<RoutedRequestView>();
+
+        if (!string.IsNullOrWhiteSpace(_modelFilter))
+        {
+            items = items.Where(r => string.Equals(r.SelectedModel, _modelFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_ruleFilter))
+        {
+            items = items.Where(r => string.Equals(r.MatchedRuleName ?? string.Empty, _ruleFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_filterText))
+        {
+            var term = _filterText.Trim();
+            items = items.Where(r =>
+                Contains(r.PromptPreview, term) ||
+                Contains(r.RawUserMessage, term) ||
+                Contains(r.SelectedModel, term) ||
+                Contains(r.MatchedRuleName, term) ||
+                Contains(r.ClassificationIntent, term));
+        }
+
+        return items;
+    }
+
+    private static bool Contains(string? value, string term) =>
+        !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private IEnumerable<string> DistinctModels() =>
+        (_feed?.Requests ?? Enumerable.Empty<RoutedRequestView>())
+            .Select(r => r.SelectedModel)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(m => m, StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<string> DistinctRules() =>
+        (_feed?.Requests ?? Enumerable.Empty<RoutedRequestView>())
+            .Select(r => r.MatchedRuleName)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(m => m, StringComparer.OrdinalIgnoreCase);
+
+    private void OnFilterInput(ChangeEventArgs e)
+    {
+        _filterText = e.Value?.ToString() ?? string.Empty;
+        _page = 0;
+        Recompute();
+    }
+
+    private void OnModelFilterChanged(ChangeEventArgs e)
+    {
+        _modelFilter = e.Value?.ToString() ?? string.Empty;
+        _page = 0;
+        Recompute();
+    }
+
+    private void OnRuleFilterChanged(ChangeEventArgs e)
+    {
+        _ruleFilter = e.Value?.ToString() ?? string.Empty;
+        _page = 0;
+        Recompute();
+    }
+
+    private void ClearFilters()
+    {
+        _filterText = string.Empty;
+        _modelFilter = string.Empty;
+        _ruleFilter = string.Empty;
+        _page = 0;
+        Recompute();
+    }
+
+    private void ToggleSelect(string traceId, bool selected)
+    {
+        if (selected)
+        {
+            _selected.Add(traceId);
+        }
+        else
+        {
+            _selected.Remove(traceId);
+        }
+    }
+
+    private async Task ConfirmDeleteRow(string traceId)
+    {
+        try
+        {
+            await Api.DeleteTraceAsync(traceId);
+            _selected.Remove(traceId);
+            _confirmDeleteId = null;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Delete failed: {ex.Message}";
+        }
+    }
+
+    private void BeginBulkDelete()
+    {
+        _confirmClearAll = false;
+        _confirmBulkDelete = true;
+    }
+
+    private async Task ConfirmBulkDelete()
+    {
+        try
+        {
+            await Api.DeleteTracesAsync(_selected.ToList());
+            _selected.Clear();
+            _confirmBulkDelete = false;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Bulk delete failed: {ex.Message}";
+        }
+    }
+
+    private void BeginClearAll()
+    {
+        _confirmBulkDelete = false;
+        _confirmClearAll = true;
+    }
+
+    private async Task ConfirmClearAll()
+    {
+        try
+        {
+            await Api.ClearTracesAsync();
+            _selected.Clear();
+            _confirmClearAll = false;
+            _page = 0;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Clear all failed: {ex.Message}";
         }
     }
 

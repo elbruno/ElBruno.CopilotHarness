@@ -4,11 +4,15 @@
 
 <PageTitle>Model Registry</PageTitle>
 
-<h1>Model Registry</h1>
-<p class="muted">
-    A registry of real LLM connections. Each model has its own provider type, endpoint, model/deployment name,
-    and (for Azure OpenAI / Foundry) an API key that is encrypted at rest. Routing rules reference these models by name.
-</p>
+<div class="page-header">
+    <div>
+        <h1>Model Registry</h1>
+        <p class="muted">
+            A registry of real LLM connections. Each model has its own provider type, endpoint, model/deployment name,
+            and (for Azure OpenAI / Foundry) an API key that is encrypted at rest. Routing rules reference these models by name.
+        </p>
+    </div>
+</div>
 
 @if (_loading)
 {
@@ -88,10 +92,19 @@ else
                                 @(model.SupportsCustomTemperature ? "yes" : "default-only")
                             </span>
                         </td>
-                        <td>
-                            <button class="btn-approve" @onclick="() => StartEdit(model)">Edit</button>
-                            <button @onclick="() => TestAsync(model)">Test</button>
-                            <button class="btn-reject" @onclick="() => DeleteAsync(model)">Delete</button>
+                        <td class="col-actions">
+                            @if (_confirmDeleteId == model.Id)
+                            {
+                                <span class="muted">Delete '@model.Name'?</span>
+                                <button class="btn-reject btn-sm" @onclick="() => ConfirmDeleteAsync(model)">Yes</button>
+                                <button class="btn-ghost btn-sm" @onclick="() => _confirmDeleteId = null">No</button>
+                            }
+                            else
+                            {
+                                <button class="btn-approve" @onclick="() => StartEdit(model)">Edit</button>
+                                <button @onclick="() => TestAsync(model)">Test</button>
+                                <button class="btn-reject" @onclick="() => _confirmDeleteId = model.Id">Delete</button>
+                            }
                         </td>
                     </tr>
                 }
@@ -102,57 +115,65 @@ else
 
 @if (_editor is not null)
 {
-    <div class="card">
-        <h2>@(_isNew ? "Add model" : $"Edit '{_editorName}'")</h2>
+    <div class="modal-backdrop" @onclick="CancelEdit"></div>
+    <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+            <h2>@(_isNew ? "➕ Add model" : $"Edit '{_editorName}'")</h2>
+            <button class="modal-close" @onclick="CancelEdit" title="Close">✕</button>
+        </div>
         <EditForm Model="_editor" OnValidSubmit="SaveAsync">
-            <div class="form-grid">
-                <label>
-                    Display name
-                    <InputText @bind-Value="_editor.Name" placeholder="e.g. foundry gpt-5.5" />
-                </label>
-                <label>
-                    Provider type
-                    <InputSelect @bind-Value="_editor.Type">
-                        <option value="azure-openai">Azure OpenAI / Foundry</option>
-                        <option value="ollama">Ollama</option>
-                    </InputSelect>
-                </label>
-                <label>
-                    Endpoint
-                    <InputText @bind-Value="_editor.Endpoint"
-                               placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
-                </label>
-                <label>
-                    @(_editor.Type == "ollama" ? "Model name" : "Deployment name")
-                    <InputText @bind-Value="_editor.ModelName"
-                               placeholder="@(_editor.Type == "ollama" ? "llama3.2" : "gpt-5-mini")" />
-                </label>
-                @if (_editor.Type != "ollama")
-                {
+            <div class="modal-body">
+                <div class="form-grid">
                     <label>
-                        API version
-                        <InputText @bind-Value="_editor.ApiVersion" placeholder="2024-10-21" />
+                        Display name
+                        <InputText @bind-Value="_editor.Name" placeholder="e.g. foundry gpt-5.5" />
                     </label>
                     <label>
-                        API key
-                        <InputText type="password" @bind-Value="_editor.ApiKey"
-                                   placeholder="@(_isNew ? "paste key" : "leave blank to keep, type to replace")" />
+                        Provider type
+                        <InputSelect @bind-Value="_editor.Type">
+                            <option value="azure-openai">Azure OpenAI / Foundry</option>
+                            <option value="ollama">Ollama</option>
+                        </InputSelect>
                     </label>
-                }
-                <label class="checkbox">
-                    <InputCheckbox @bind-Value="_editor.Enabled" /> Enabled
-                </label>
-                <label class="checkbox">
-                    <InputCheckbox @bind-Value="_editor.IsProcessor" /> Processor model (classifier)
-                    <span class="muted">— reads the first chars of each prompt to decide intent. Only one model can be the processor.</span>
-                </label>
-                <label class="checkbox">
-                    <InputCheckbox @bind-Value="_editor.SupportsCustomTemperature" /> Supports custom temperature
-                    <span class="muted">— uncheck for gpt-5 family models that only accept the default temperature.</span>
-                </label>
+                    <label class="span-2">
+                        Endpoint
+                        <InputText @bind-Value="_editor.Endpoint"
+                                   placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
+                    </label>
+                    <label>
+                        @(_editor.Type == "ollama" ? "Model name" : "Deployment name")
+                        <InputText @bind-Value="_editor.ModelName"
+                                   placeholder="@(_editor.Type == "ollama" ? "llama3.2" : "gpt-5-mini")" />
+                    </label>
+                    @if (_editor.Type != "ollama")
+                    {
+                        <label>
+                            API version
+                            <InputText @bind-Value="_editor.ApiVersion" placeholder="2024-10-21" />
+                        </label>
+                        <label class="span-2">
+                            API key
+                            <InputText type="password" @bind-Value="_editor.ApiKey"
+                                       placeholder="@(_isNew ? "paste key" : "leave blank to keep, type to replace")" />
+                        </label>
+                    }
+                    <label class="checkbox span-2">
+                        <InputCheckbox @bind-Value="_editor.Enabled" /> Enabled
+                    </label>
+                    <label class="checkbox span-2">
+                        <InputCheckbox @bind-Value="_editor.IsProcessor" /> Processor model (classifier)
+                        <span class="field-hint">— reads the first chars of each prompt to decide intent. Only one model can be the processor.</span>
+                    </label>
+                    <label class="checkbox span-2">
+                        <InputCheckbox @bind-Value="_editor.SupportsCustomTemperature" /> Supports custom temperature
+                        <span class="field-hint">— uncheck for gpt-5 family models that only accept the default temperature.</span>
+                    </label>
+                </div>
             </div>
-            <button type="submit">@(_isNew ? "Create" : "Save")</button>
-            <button type="button" class="btn-reject" @onclick="CancelEdit">Cancel</button>
+            <div class="modal-foot">
+                <button type="submit" class="btn-approve">@(_isNew ? "Create" : "Save")</button>
+                <button type="button" class="btn-reject" @onclick="CancelEdit">Cancel</button>
+            </div>
         </EditForm>
     </div>
 }
@@ -173,6 +194,7 @@ else
     private bool _isNew;
     private string? _editorId;
     private string _editorName = string.Empty;
+    private string? _confirmDeleteId;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -186,6 +208,7 @@ else
 
     private void StartCreate()
     {
+        _confirmDeleteId = null;
         _isNew = true;
         _editorId = null;
         _editorName = string.Empty;
@@ -194,6 +217,7 @@ else
 
     private void StartEdit(ModelConnectionDto model)
     {
+        _confirmDeleteId = null;
         _isNew = false;
         _editorId = model.Id;
         _editorName = model.Name;
@@ -253,11 +277,12 @@ else
         }
     }
 
-    private async Task DeleteAsync(ModelConnectionDto model)
+    private async Task ConfirmDeleteAsync(ModelConnectionDto model)
     {
         try
         {
             await Api.DeleteModelAsync(model.Id);
+            _confirmDeleteId = null;
             SetStatus($"Deleted model '{model.Name}'.", true);
             await ReloadAsync();
         }

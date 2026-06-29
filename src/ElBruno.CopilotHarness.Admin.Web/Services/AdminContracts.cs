@@ -187,6 +187,16 @@ public sealed record RoutingFeedResponse(
     bool PromptCaptureEnabled,
     IReadOnlyList<RoutedRequestView> Requests);
 
+// ── Trace deletion (mirrors Router.Api admin trace endpoints) ─────────────────
+
+public sealed record DeleteTraceResponse(bool Deleted);
+
+public sealed record DeleteTracesRequest(IReadOnlyList<string> TraceIds);
+
+public sealed record DeleteTracesResponse(int DeletedCount);
+
+public sealed record ClearTracesResponse(bool Cleared);
+
 public sealed record OperationalSignalDto(
     string Name,
     string State,

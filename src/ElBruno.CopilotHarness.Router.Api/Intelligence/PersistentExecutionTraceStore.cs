@@ -92,4 +92,58 @@ public sealed class PersistentExecutionTraceStore(
             .Take(normalizedLimit)
             .ToList();
     }
+
+    public bool Remove(string traceId)
+    {
+        if (string.IsNullOrWhiteSpace(traceId))
+        {
+            return false;
+        }
+
+        var removed = dbContext.RoutingExecutionTraces
+            .Where(item => item.TraceId == traceId)
+            .ExecuteDelete();
+
+        if (removed > 0)
+        {
+            logger.LogInformation("Removed routing execution trace {TraceId}.", traceId);
+        }
+
+        return removed > 0;
+    }
+
+    public int RemoveMany(IEnumerable<string> traceIds)
+    {
+        if (traceIds is null)
+        {
+            return 0;
+        }
+
+        var ids = traceIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return 0;
+        }
+
+        var removed = dbContext.RoutingExecutionTraces
+            .Where(item => ids.Contains(item.TraceId))
+            .ExecuteDelete();
+
+        if (removed > 0)
+        {
+            logger.LogInformation("Removed {Count} routing execution traces.", removed);
+        }
+
+        return removed;
+    }
+
+    public void Clear()
+    {
+        var removed = dbContext.RoutingExecutionTraces.ExecuteDelete();
+        logger.LogInformation("Cleared {Count} routing execution traces.", removed);
+    }
 }

@@ -85,6 +85,9 @@ public interface IExecutionTraceStore
     void Store(RoutingExecutionTrace trace);
     bool TryGet(string traceId, out RoutingExecutionTrace trace);
     IReadOnlyList<RoutingExecutionTrace> GetRecent(int limit);
+    bool Remove(string traceId);
+    int RemoveMany(IEnumerable<string> traceIds);
+    void Clear();
 }
 
 public sealed record RoutingWorkflowStep(string Name, string Outcome);
@@ -123,6 +126,86 @@ public sealed class InMemoryExecutionTraceStore : IExecutionTraceStore
 
     public bool TryGet(string traceId, out RoutingExecutionTrace trace) =>
         _traces.TryGetValue(traceId, out trace!);
+
+    public bool Remove(string traceId)
+    {
+        if (string.IsNullOrWhiteSpace(traceId))
+        {
+            return false;
+        }
+
+        lock (_lock)
+        {
+            if (!_traces.TryRemove(traceId, out _))
+            {
+                return false;
+            }
+
+            RebuildOrderedQueueExcluding(traceId);
+            return true;
+        }
+    }
+
+    public int RemoveMany(IEnumerable<string> traceIds)
+    {
+        if (traceIds is null)
+        {
+            return 0;
+        }
+
+        var ids = traceIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (ids.Count == 0)
+        {
+            return 0;
+        }
+
+        lock (_lock)
+        {
+            var removed = 0;
+            foreach (var id in ids)
+            {
+                if (_traces.TryRemove(id, out _))
+                {
+                    removed++;
+                }
+            }
+
+            if (removed > 0)
+            {
+                RebuildOrderedQueueExcluding(ids);
+            }
+
+            return removed;
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            _traces.Clear();
+            _orderedTraceIds.Clear();
+        }
+    }
+
+    private void RebuildOrderedQueueExcluding(string excludedTraceId) =>
+        RebuildOrderedQueueExcluding(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { excludedTraceId });
+
+    private void RebuildOrderedQueueExcluding(HashSet<string> excludedTraceIds)
+    {
+        var retained = _orderedTraceIds
+            .Where(id => !excludedTraceIds.Contains(id))
+            .ToList();
+
+        _orderedTraceIds.Clear();
+        foreach (var id in retained)
+        {
+            _orderedTraceIds.Enqueue(id);
+        }
+    }
 
     public IReadOnlyList<RoutingExecutionTrace> GetRecent(int limit)
     {
