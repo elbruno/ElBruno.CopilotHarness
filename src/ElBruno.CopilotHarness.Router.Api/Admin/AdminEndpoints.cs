@@ -171,18 +171,97 @@ public static class AdminEndpoints
             return Results.Ok(rules.Select(ToRoutingRuleDto).ToList());
         });
 
+        group.MapGet("/rules/analyzer-prompt", async (
+            IRequestRoutingService routingService,
+            CancellationToken cancellationToken) =>
+        {
+            var routingOptions = await routingService.GetRoutingOptionsAsync(cancellationToken);
+            var semanticRules = BasicModelRouter.GetSemanticRules(routingOptions);
+            var processor = routingOptions.Profiles
+                .FirstOrDefault(entry => entry.Value is { IsProcessor: true, Enabled: true });
+            var hasProcessor = processor.Value is not null;
+            var systemPrompt = semanticRules.Count == 0
+                ? "No semantic rules are enabled yet. Add at least one semantic rule to see the local analyzer prompt."
+                : SemanticRuleAnalyzer.BuildAnalyzerSystemPrompt(semanticRules);
+
+            return Results.Ok(new RulesAnalyzerPromptResponse(
+                hasProcessor,
+                hasProcessor ? processor.Key : null,
+                semanticRules.Count,
+                systemPrompt));
+        });
+
         group.MapPost("/rules/test", async (
             RuleTestRequest request,
             IRequestRoutingService routingService,
+            IExecutionTraceStore traceStore,
             CancellationToken cancellationToken) =>
         {
             var jsonRequest = BuildEvaluationRequest(request.Prompt, request.SystemMessage, request.Stream, request.RequestedModel);
             var routingSelection = await routingService.SelectModelWithTraceAsync(jsonRequest, cancellationToken);
             var decision = routingSelection.Decision;
-            var matchedRule = ExtractMatchedRuleName(decision.Reason);
             var promptCharacters = (request.Prompt?.Length ?? 0) + (request.SystemMessage?.Length ?? 0);
 
-            return Results.Ok(new RuleTestResponse(matchedRule, decision.ProfileName, decision.Reason, promptCharacters));
+            // Pull the rich facts the workflow recorded on the trace (same source the Live Routing feed uses).
+            string? semanticRule = null;
+            string? semanticReason = null;
+            string? userRequest = null;
+            var decisionSource = "deterministic";
+            var confidence = 0d;
+            var intent = string.Empty;
+            var complexity = string.Empty;
+
+            if (traceStore.TryGet(routingSelection.TraceId, out var trace))
+            {
+                semanticRule = GetContextValue(trace, "semantic.matchedRule");
+                semanticReason = GetContextValue(trace, "semantic.reason");
+                var rawUserMessage = GetContextValue(trace, "request.rawUserMessage");
+                // Show the cleaned typed request (what the local model actually evaluated), not the wrapper.
+                userRequest = string.IsNullOrWhiteSpace(rawUserMessage)
+                    ? rawUserMessage
+                    : BasicModelRouter.ExtractTypedUserMessage(rawUserMessage);
+                intent = trace.Classification.Intent;
+                complexity = trace.Classification.Complexity;
+                confidence = trace.Classification.Confidence;
+                decisionSource = !string.IsNullOrWhiteSpace(semanticRule)
+                    ? GetContextValue(trace, "semantic.source") ?? "processor-model"
+                    : GetContextValue(trace, "classifier.source")
+                        ?? (string.IsNullOrWhiteSpace(trace.Classification.Source) ? "deterministic" : trace.Classification.Source);
+
+                if (double.TryParse(GetContextValue(trace, "semantic.confidence"), out var semConfidence))
+                {
+                    confidence = semConfidence;
+                }
+            }
+
+            var isSemantic = !string.IsNullOrWhiteSpace(semanticRule);
+            var matchedRule = isSemantic ? semanticRule : ExtractMatchedRuleName(decision.Reason);
+
+            // Only the local analyzer prompt is meaningful for semantic routing.
+            string? analyzerPrompt = null;
+            if (isSemantic)
+            {
+                var routingOptions = await routingService.GetRoutingOptionsAsync(cancellationToken);
+                var semanticRules = BasicModelRouter.GetSemanticRules(routingOptions);
+                if (semanticRules.Count > 0)
+                {
+                    analyzerPrompt = SemanticRuleAnalyzer.BuildAnalyzerSystemPrompt(semanticRules);
+                }
+            }
+
+            return Results.Ok(new RuleTestResponse(
+                matchedRule,
+                decision.ProfileName,
+                decision.Reason,
+                promptCharacters,
+                userRequest,
+                isSemantic,
+                decisionSource,
+                confidence,
+                intent,
+                complexity,
+                semanticReason,
+                analyzerPrompt));
         });
 
         group.MapGet("/rules/{id:int}", async (

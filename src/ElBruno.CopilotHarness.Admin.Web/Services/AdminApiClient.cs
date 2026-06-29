@@ -98,6 +98,12 @@ public sealed class AdminApiClient(HttpClient httpClient)
             ?? throw new InvalidOperationException("Rule test response was empty.");
     }
 
+    public async Task<RulesAnalyzerPromptResponse> GetAnalyzerPromptAsync(CancellationToken cancellationToken = default)
+    {
+        return await _httpClient.GetFromJsonAsync<RulesAnalyzerPromptResponse>("/admin/rules/analyzer-prompt", cancellationToken)
+            ?? new RulesAnalyzerPromptResponse(false, null, 0, string.Empty);
+    }
+
     public async Task<DefaultModelDto> GetDefaultModelAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<DefaultModelDto>("/admin/rules/default", cancellationToken)
         ?? new DefaultModelDto(string.Empty, DateTimeOffset.UtcNow);

@@ -74,7 +74,21 @@ public sealed record RuleTestResponse(
     string? MatchedRuleName,
     string SelectedModel,
     string Reason,
-    int PromptCharacters);
+    int PromptCharacters,
+    string? UserRequest = null,
+    bool IsSemantic = false,
+    string DecisionSource = "deterministic",
+    double Confidence = 0,
+    string ClassificationIntent = "",
+    string ClassificationComplexity = "",
+    string? SemanticReason = null,
+    string? AnalyzerPrompt = null);
+
+public sealed record RulesAnalyzerPromptResponse(
+    bool HasProcessorModel,
+    string? ProcessorModel,
+    int SemanticRuleCount,
+    string SystemPrompt);
 
 public sealed record DefaultModelDto(
     string ModelName,

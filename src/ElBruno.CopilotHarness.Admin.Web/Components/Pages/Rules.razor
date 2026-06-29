@@ -18,8 +18,8 @@
 else
 {
     <div class="dashboard-actions">
-        <button @onclick="StartCreate">➕ Add condition rule</button>
         <button @onclick="StartCreateSemantic">🧠 Add semantic rule</button>
+        <button @onclick="StartCreate">⚙️ Add condition rule</button>
         @if (_rules.Count == 0)
         {
             <button class="btn-approve" @onclick="GenerateStarterRulesAsync">✨ Generate starter rules</button>
@@ -32,31 +32,49 @@ else
     }
     else
     {
-        <table>
+        <table class="rules-table">
             <thead>
                 <tr>
-                    <th>Priority</th>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Target engine/model</th>
-                    <th>Enabled</th>
-                    <th></th>
+                    <th class="col-pri">Order</th>
+                    <th>Rule</th>
+                    <th>Match</th>
+                    <th>Routes to</th>
+                    <th class="col-state">State</th>
+                    <th class="col-actions"></th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var rule in _rules)
                 {
-                    <tr>
-                        <td>@rule.Priority</td>
-                        <td><strong>@rule.Name</strong><br /><span class="muted">@rule.Description</span></td>
-                        <td>@DescribeCondition(rule)</td>
-                        <td>@rule.TargetModel</td>
+                    var badge = EngineBadge(rule.TargetModel);
+                    <tr class="@(rule.Enabled ? "" : "row-disabled")">
+                        <td class="col-pri"><span class="pri-chip">@rule.Priority</span></td>
                         <td>
-                            <span class="status-pill @(rule.Enabled ? "status-good" : "status-neutral")">
-                                @(rule.Enabled ? "enabled" : "disabled")
-                            </span>
+                            <div class="rule-name">
+                                @if (IsSemantic(rule.ConditionType))
+                                {
+                                    <span class="type-chip type-semantic" title="Semantic rule – chosen by the local model">🧠 semantic</span>
+                                }
+                                else
+                                {
+                                    <span class="type-chip type-condition" title="Deterministic condition rule">⚙️ condition</span>
+                                }
+                                <strong>@rule.Name</strong>
+                            </div>
+                            <span class="muted rule-desc">@rule.Description</span>
                         </td>
+                        <td class="muted">@DescribeCondition(rule)</td>
                         <td>
+                            <span class="engine-badge @badge.Css" title="@badge.Title">@badge.Icon @rule.TargetModel</span>
+                        </td>
+                        <td class="col-state">
+                            <button class="toggle @(rule.Enabled ? "toggle-on" : "toggle-off")"
+                                    title="@(rule.Enabled ? "Click to disable" : "Click to enable")"
+                                    @onclick="() => ToggleEnabledAsync(rule)">
+                                @(rule.Enabled ? "● on" : "○ off")
+                            </button>
+                        </td>
+                        <td class="col-actions">
                             <button class="btn-approve" @onclick="() => StartEdit(rule)">Edit</button>
                             <button class="btn-reject" @onclick="() => DeleteAsync(rule)">Delete</button>
                         </td>
@@ -64,70 +82,37 @@ else
                 }
             </tbody>
         </table>
+        <p class="muted hint">Rules evaluate top-to-bottom by <strong>Order</strong> (ascending priority). For semantic rules the
+            highest-order enabled rule acts as the catch-all. Drag is not needed — edit a rule's <em>Order</em> to reposition it.</p>
     }
-}
 
-@if (_editor is not null)
-{
-    <div class="card">
-        <h2>@(_isNew ? "Add rule" : $"Edit '{_editorName}'")</h2>
-        <EditForm Model="_editor" OnValidSubmit="SaveAsync">
-            <div class="form-grid">
-                <label>
-                    Name
-                    <InputText @bind-Value="_editor.Name" placeholder="e.g. Large prompts to Foundry" />
-                </label>
-                <label>
-                    Priority
-                    <InputNumber @bind-Value="_editor.Priority" />
-                </label>
-                @if (!IsSemantic(_editor.ConditionType))
-                {
-                    <label>
-                        Description
-                        <InputText @bind-Value="_editor.Description" />
-                    </label>
-                }
-                <label>
-                    Condition type
-                    <InputSelect @bind-Value="_editor.ConditionType">
-                        @foreach (var option in ConditionTypes)
-                        {
-                            <option value="@option.Value">@option.Label</option>
-                        }
-                    </InputSelect>
-                </label>
-                @if (IsSemantic(_editor.ConditionType))
-                {
-                    <label>
-                        Rule paragraph
-                        <InputTextArea @bind-Value="_editor.Description" rows="5" placeholder="Captures requests where..." />
-                    </label>
-                }
-                else if (ConditionNeedsValue(_editor.ConditionType))
-                {
-                    <label>
-                        @ConditionValueLabel(_editor.ConditionType)
-                        <InputText @bind-Value="_editor.ConditionValue" />
-                    </label>
-                }
-                <label>
-                    @(IsSemantic(_editor.ConditionType) ? "LLM Engine" : "Target model")
-                    <InputSelect @bind-Value="_editor.TargetModel">
-                        <option value="">— select —</option>
-                        @foreach (var model in _models)
-                        {
-                            <option value="@model.Name">@model.Name</option>
-                        }
-                    </InputSelect>
-                </label>
-                <label class="checkbox">
-                    <InputCheckbox @bind-Value="_editor.Enabled" /> Enabled
-                </label>
-            </div>
-            <button type="submit">@(_isNew ? "Create" : "Save")</button>
-            <button type="button" class="btn-reject" @onclick="CancelEdit">Cancel</button>
-        </EditForm>
+    @* ── Local analyzer prompt (the "big prompt" the local model uses) ── *@
+    <div class="card analyzer-card">
+        <div class="analyzer-head">
+            <button class="link-toggle" @onclick="() => _showAnalyzer = !_showAnalyzer">
+                @(_showAnalyzer ? "▾" : "▸") 🧠 Local analyzer prompt
+            </button>
+            @if (_analyzerPrompt is not null)
+            {
+                <span class="muted analyzer-meta">
+                    @if (_analyzerPrompt.HasProcessorModel)
+                    {
+                        <span>processor model: <strong>@_analyzerPrompt.ProcessorModel</strong></span>
+                    }
+                    else
+                    {
+                        <span class="status-bad-text">no processor model selected</span>
+                    }
+                    · @_analyzerPrompt.SemanticRuleCount semantic rule(s)
+                </span>
+            }
+        </div>
+        <p class="muted">This is the exact instruction prompt sent to the local processor model. It reads only the user's typed
+            request and returns the one rule that best matches — that rule's engine then receives the full Copilot payload.</p>
+        @if (_showAnalyzer && _analyzerPrompt is not null)
+        {
+            <pre class="prompt-block">@_analyzerPrompt.SystemPrompt</pre>
+        }
     </div>
 }
 
@@ -136,18 +121,19 @@ else
     <p class="@(_statusOk ? "status-good-text" : "status-bad-text")">@_status</p>
 }
 
-<div class="card">
-    <h2>Test the ruleset</h2>
-    <p class="muted">Enter a sample request and see which rule matches and which model is selected.</p>
+@* ── Test the ruleset ── *@
+<div class="card test-card">
+    <h2>🧪 Test the ruleset</h2>
+    <p class="muted">Enter a sample user request to see which rule the local model picks and which engine it routes to.</p>
     <EditForm Model="_test" OnValidSubmit="RunTestAsync">
         <div class="form-grid">
-            <label>
-                Prompt
-                <InputTextArea @bind-Value="_test.Prompt" rows="3" />
+            <label class="span-2">
+                User request
+                <InputTextArea @bind-Value="_test.Prompt" rows="3" placeholder="e.g. hi  ·  commit and push  ·  refactor the auth module" />
             </label>
             <label>
                 System message (optional)
-                <InputTextArea @bind-Value="_test.SystemMessage" rows="3" />
+                <InputTextArea @bind-Value="_test.SystemMessage" rows="2" />
             </label>
             <label>
                 Requested model (optional)
@@ -157,15 +143,53 @@ else
                 <InputCheckbox @bind-Value="_test.Stream" /> Streaming request
             </label>
         </div>
-        <button type="submit">Run test</button>
+        <button type="submit" disabled="@_testRunning">@(_testRunning ? "Running…" : "Run test")</button>
     </EditForm>
 
     @if (_testResult is not null)
     {
-        <div class="card">
-            <p><strong>Selected model:</strong> @_testResult.SelectedModel</p>
-            <p><strong>Matched rule:</strong> @(_testResult.MatchedRuleName ?? "(none — used default/fallback)")</p>
-            <p class="muted">@_testResult.Reason · @_testResult.PromptCharacters prompt characters</p>
+        var tb = EngineBadge(_testResult.SelectedModel);
+        <div class="card test-result">
+            <div class="result-flow">
+                <div class="flow-step">
+                    <span class="flow-label">User request</span>
+                    <span class="flow-value">@(_testResult.UserRequest ?? _test.Prompt)</span>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">
+                    <span class="flow-label">Matched rule</span>
+                    <span class="flow-value">@(_testResult.MatchedRuleName ?? "(none — default/fallback)")</span>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">
+                    <span class="flow-label">Engine</span>
+                    <span class="flow-value engine-badge @tb.Css">@tb.Icon @_testResult.SelectedModel</span>
+                </div>
+            </div>
+            <div class="result-meta">
+                <span class="meta-chip">@(_testResult.IsSemantic ? "🧠 semantic" : "⚙️ condition")</span>
+                <span class="meta-chip" title="How the decision was made">source: @DescribeSource(_testResult.DecisionSource)</span>
+                @if (_testResult.Confidence > 0)
+                {
+                    <span class="meta-chip">confidence: @FormatConfidence(_testResult.Confidence)</span>
+                }
+                @if (!_testResult.IsSemantic && !string.IsNullOrWhiteSpace(_testResult.ClassificationIntent))
+                {
+                    <span class="meta-chip">intent: @_testResult.ClassificationIntent / @_testResult.ClassificationComplexity</span>
+                }
+                <span class="meta-chip">@_testResult.PromptCharacters chars</span>
+            </div>
+            <p class="result-reason">@(_testResult.SemanticReason ?? _testResult.Reason)</p>
+            @if (!string.IsNullOrWhiteSpace(_testResult.AnalyzerPrompt))
+            {
+                <button class="link-toggle" @onclick="() => _showTestPrompt = !_showTestPrompt">
+                    @(_showTestPrompt ? "▾" : "▸") Show the analyzer prompt used for this test
+                </button>
+                @if (_showTestPrompt)
+                {
+                    <pre class="prompt-block">@_testResult.AnalyzerPrompt</pre>
+                }
+            }
         </div>
     }
 </div>
@@ -192,11 +216,107 @@ else
     </div>
 }
 
+@* ── Editor modal ── *@
+@if (_editor is not null)
+{
+    <div class="modal-backdrop" @onclick="CancelEdit"></div>
+    <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+            <h2>
+                @if (IsSemantic(_editor.ConditionType))
+                {
+                    <span>🧠 @(_isNew ? "New semantic rule" : $"Edit '{_editorName}'")</span>
+                }
+                else
+                {
+                    <span>⚙️ @(_isNew ? "New condition rule" : $"Edit '{_editorName}'")</span>
+                }
+            </h2>
+            <button class="modal-close" @onclick="CancelEdit" title="Close">✕</button>
+        </div>
+        <EditForm Model="_editor" OnValidSubmit="SaveAsync">
+            <div class="modal-body">
+                <div class="form-grid">
+                    <label class="span-2">
+                        Name
+                        <InputText @bind-Value="_editor.Name" placeholder="e.g. Simple chat" />
+                    </label>
+
+                    @if (IsSemantic(_editor.ConditionType))
+                    {
+                        <label class="span-2">
+                            Rule paragraph
+                            <InputTextArea @bind-Value="_editor.Description" rows="5"
+                                           placeholder="Describe in plain language what this rule should capture. The local model reads this paragraph to decide whether the user's request matches." />
+                            <span class="field-hint">Write it like an instruction to a teammate. Mention example phrases the rule should catch.</span>
+                        </label>
+                    }
+                    else
+                    {
+                        <label class="span-2">
+                            Description
+                            <InputText @bind-Value="_editor.Description" placeholder="Short note shown in the rules list" />
+                        </label>
+                        <label>
+                            Condition type
+                            <InputSelect @bind-Value="_editor.ConditionType">
+                                @foreach (var option in ConditionTypes)
+                                {
+                                    <option value="@option.Value">@option.Label</option>
+                                }
+                            </InputSelect>
+                        </label>
+                        @if (ConditionNeedsValue(_editor.ConditionType))
+                        {
+                            <label>
+                                @ConditionValueLabel(_editor.ConditionType)
+                                <InputText @bind-Value="_editor.ConditionValue" />
+                            </label>
+                        }
+                    }
+
+                    <label>
+                        @(IsSemantic(_editor.ConditionType) ? "Route to engine" : "Target model")
+                        <InputSelect @bind-Value="_editor.TargetModel">
+                            <option value="">— select —</option>
+                            @foreach (var model in _models)
+                            {
+                                <option value="@model.Name">@model.Name@(model.IsProcessor ? " (local processor)" : "")</option>
+                            }
+                        </InputSelect>
+                        @if (!string.IsNullOrWhiteSpace(_editor.TargetModel))
+                        {
+                            var eb = EngineBadge(_editor.TargetModel);
+                            <span class="field-hint"><span class="engine-badge @eb.Css">@eb.Icon @eb.Title</span></span>
+                        }
+                    </label>
+                    <label>
+                        Order (priority)
+                        <InputNumber @bind-Value="_editor.Priority" />
+                        <span class="field-hint">Lower numbers are evaluated first.</span>
+                    </label>
+                    <label class="checkbox">
+                        <InputCheckbox @bind-Value="_editor.Enabled" /> Enabled
+                    </label>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button type="submit" class="btn-approve">@(_isNew ? "Create rule" : "Save changes")</button>
+                <button type="button" class="btn-reject" @onclick="CancelEdit">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
 @code {
     private List<RoutingRuleDto> _rules = [];
     private List<ModelConnectionDto> _models = [];
     private RulesConfidenceResponse? _confidence;
+    private RulesAnalyzerPromptResponse? _analyzerPrompt;
     private bool _loading = true;
+    private bool _showAnalyzer;
+    private bool _showTestPrompt;
+    private bool _testRunning;
     private string? _status;
     private bool _statusOk = true;
 
@@ -228,7 +348,24 @@ else
         _rules = (await Api.GetRulesAsync()).OrderBy(rule => rule.Priority).ToList();
         _models = (await Api.GetModelsAsync()).ToList();
         _confidence = await Api.GetRulesConfidenceAsync();
+        _analyzerPrompt = await Api.GetAnalyzerPromptAsync();
         _loading = false;
+    }
+
+    private async Task ToggleEnabledAsync(RoutingRuleDto rule)
+    {
+        try
+        {
+            await Api.UpdateRuleAsync(rule.Id, new RoutingRuleUpsertRequest(
+                rule.Name, rule.Description, rule.ConditionType, rule.ConditionValue,
+                rule.TargetModel, rule.Priority, !rule.Enabled));
+            SetStatus($"{(rule.Enabled ? "Disabled" : "Enabled")} rule '{rule.Name}'.", true);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Update failed: {ex.Message}", false);
+        }
     }
 
     private void StartCreate()
@@ -397,12 +534,44 @@ else
 
     private async Task RunTestAsync()
     {
-        _testResult = await Api.TestRuleAsync(new RuleTestRequest(
-            _test.Prompt ?? string.Empty,
-            string.IsNullOrWhiteSpace(_test.SystemMessage) ? null : _test.SystemMessage,
-            _test.Stream,
-            string.IsNullOrWhiteSpace(_test.RequestedModel) ? null : _test.RequestedModel));
+        _testRunning = true;
+        _showTestPrompt = false;
+        try
+        {
+            _testResult = await Api.TestRuleAsync(new RuleTestRequest(
+                _test.Prompt ?? string.Empty,
+                string.IsNullOrWhiteSpace(_test.SystemMessage) ? null : _test.SystemMessage,
+                _test.Stream,
+                string.IsNullOrWhiteSpace(_test.RequestedModel) ? null : _test.RequestedModel));
+        }
+        finally
+        {
+            _testRunning = false;
+        }
     }
+
+    private (string Icon, string Title, string Css) EngineBadge(string? modelName)
+    {
+        var model = _models.FirstOrDefault(m => string.Equals(m.Name, modelName, StringComparison.OrdinalIgnoreCase));
+        if (model is null)
+        {
+            return ("❓", "unknown engine", "engine-unknown");
+        }
+
+        var isLocal = string.Equals(model.Type, "ollama", StringComparison.OrdinalIgnoreCase);
+        var title = model.IsProcessor ? (isLocal ? "local · processor" : "cloud · processor")
+                                      : (isLocal ? "local" : "cloud");
+        return isLocal ? ("🖥️", title, "engine-local") : ("☁️", title, "engine-cloud");
+    }
+
+    private static string DescribeSource(string source) =>
+        source switch
+        {
+            "processor-model" => "local model (LLM)",
+            "deterministic" => "keyword fallback",
+            "" => "default",
+            _ => source
+        };
 
     private void SetStatus(string message, bool ok)
     {

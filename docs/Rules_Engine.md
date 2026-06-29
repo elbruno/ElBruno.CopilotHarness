@@ -196,6 +196,26 @@ Key properties:
 | Launch App actions | Run / build / start the application. | `ollama llama3.2` (local) |
 | Others actions *(catch-all)* | Everything else, including complex coding tasks. | `foundry gpt-5-mini` (cloud) |
 
+## Editing rules in the Admin UI
+
+The **Rules** page is built around the routing flow it represents:
+
+- **Rules list** — each row shows the evaluation **Order** (priority), a 🧠 *semantic* /
+  ⚙️ *condition* type chip, the rule name + paragraph, the match condition, and the
+  **engine badge** of its target model (🖥️ *local* for Ollama, ☁️ *cloud* otherwise, with a
+  *processor* hint on the local classifier model). Toggle a rule on/off inline with the
+  **State** button — no need to open the editor.
+- **Editor modal** — *Add semantic rule*, *Add condition rule*, or *Edit* open a centered
+  **modal dialog** (instead of a form buried at the bottom of the page). Semantic rules show
+  a large *Rule paragraph* field with guidance; condition rules show the condition-type
+  picker and value. The selected engine is previewed with its badge as you choose it.
+- **Local analyzer prompt** — a collapsible card shows the *exact* "rules analyzer" prompt
+  that is sent to the local processor model (`GET /admin/rules/analyzer-prompt`). This is the
+  single mega-prompt that lists every semantic rule and asks the model to pick one, using only
+  the user's typed request. Seeing it makes local routing decisions fully transparent.
+
+---
+
 The first-run wizard on the **Rules** page seeds exactly this starter set when no rules
 exist. You can then edit the paragraphs, change engines, reorder, or add new rules.
 
@@ -233,13 +253,21 @@ intelligently from the start. You can then edit, reorder, disable, or delete the
 ## Testing a rule set
 
 The **Test** panel on the Rules page lets you dry-run a request without sending it
-upstream. Enter a prompt (and optionally a system message, streaming flag, or requested
-model) and the engine reports **which rule matched** and **which model** would be
-selected, plus the routing reason.
+upstream. Enter a user request (and optionally a system message, streaming flag, or
+requested model). The result panel shows the full routing flow — **user request → matched
+rule → engine** — plus:
+
+- whether the decision was **semantic** or a deterministic **condition**;
+- the **decision source** (`local model (LLM)` when the processor model picked the rule, or
+  `keyword fallback` when the model was unavailable and the deterministic overlap matcher ran);
+- the **confidence** and the model's **reason**;
+- for semantic matches, a *Show the analyzer prompt used for this test* toggle that reveals
+  the exact prompt the local model received.
 
 | Method | Route | Purpose |
 |---|---|---|
-| `POST` | `/admin/rules/test` | Evaluate a synthetic request; returns matched rule, selected model, reason, and prompt size. |
+| `POST` | `/admin/rules/test` | Evaluate a synthetic request; returns matched rule, selected model, reason, prompt size, the cleaned user request, decision source, confidence, classification, and (for semantic matches) the analyzer prompt. |
+| `GET` | `/admin/rules/analyzer-prompt` | Return the current local analyzer mega-prompt, processor model name, and semantic-rule count. |
 
 The general-purpose `/admin/playground/evaluate` endpoint performs the same dry-run
 routing and additionally returns the fully routed request body.

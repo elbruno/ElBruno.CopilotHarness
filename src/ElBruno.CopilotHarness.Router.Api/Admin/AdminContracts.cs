@@ -74,7 +74,26 @@ public sealed record RuleTestResponse(
     string? MatchedRuleName,
     string SelectedModel,
     string Reason,
-    int PromptCharacters);
+    int PromptCharacters,
+    string? UserRequest = null,
+    bool IsSemantic = false,
+    string DecisionSource = "deterministic",
+    double Confidence = 0,
+    string ClassificationIntent = "",
+    string ClassificationComplexity = "",
+    string? SemanticReason = null,
+    string? AnalyzerPrompt = null);
+
+/// <summary>
+/// The exact "rules analyzer" mega-prompt that the local processor model receives to pick the
+/// matching semantic rule, plus the processor model name and the number of semantic rules it covers.
+/// Surfaced on the Rules page so users can see precisely how local routing decisions are made.
+/// </summary>
+public sealed record RulesAnalyzerPromptResponse(
+    bool HasProcessorModel,
+    string? ProcessorModel,
+    int SemanticRuleCount,
+    string SystemPrompt);
 
 public sealed record DefaultModelDto(
     string ModelName,

@@ -116,6 +116,78 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
     }
 
     [Fact]
+    public async Task AnalyzerPrompt_ReturnsPromptForSemanticRules()
+    {
+        // Ensure at least one semantic rule exists so the analyzer prompt is non-trivial.
+        var create = new RoutingRuleUpsertRequest(
+            Name: $"semantic-{Guid.NewGuid():N}",
+            Description: "Captures greetings and small talk such as hi and hola.",
+            ConditionType: "SemanticMatch",
+            ConditionValue: "",
+            TargetModel: "ollama llama3.2",
+            Priority: 7,
+            Enabled: true);
+
+        var created = await (await _client.PostAsJsonAsync("/admin/rules", create))
+            .Content.ReadFromJsonAsync<RoutingRuleDto>();
+        Assert.NotNull(created);
+
+        try
+        {
+            var response = await _client.GetAsync("/admin/rules/analyzer-prompt");
+            response.EnsureSuccessStatusCode();
+            var prompt = await response.Content.ReadFromJsonAsync<RulesAnalyzerPromptResponse>();
+
+            Assert.NotNull(prompt);
+            Assert.True(prompt.SemanticRuleCount >= 1);
+            Assert.Contains("routing analyzer", prompt.SystemPrompt, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(created.Name, prompt.SystemPrompt);
+        }
+        finally
+        {
+            await _client.DeleteAsync($"/admin/rules/{created.Id}");
+        }
+    }
+
+    [Fact]
+    public async Task Rules_Test_ConditionRule_ReturnsEnrichedMetadata()
+    {
+        var create = new RoutingRuleUpsertRequest(
+            Name: $"keyword-{Guid.NewGuid():N}",
+            Description: "",
+            ConditionType: "PromptContainsKeyword",
+            ConditionValue: "translate",
+            TargetModel: "ollama llama3.2",
+            Priority: 1,
+            Enabled: true);
+
+        var created = await (await _client.PostAsJsonAsync("/admin/rules", create))
+            .Content.ReadFromJsonAsync<RoutingRuleDto>();
+        Assert.NotNull(created);
+
+        try
+        {
+            var test = new RuleTestRequest(
+                Prompt: "please translate this paragraph to Spanish",
+                SystemMessage: null,
+                Stream: false,
+                RequestedModel: null);
+
+            var result = await (await _client.PostAsJsonAsync("/admin/rules/test", test))
+                .Content.ReadFromJsonAsync<RuleTestResponse>();
+
+            Assert.NotNull(result);
+            // The enriched fields should always be present (defaults are fine when no trace facts exist).
+            Assert.False(string.IsNullOrWhiteSpace(result.DecisionSource));
+            Assert.Equal("ollama llama3.2", result.SelectedModel);
+        }
+        finally
+        {
+            await _client.DeleteAsync($"/admin/rules/{created.Id}");
+        }
+    }
+
+    [Fact]
     public async Task DefaultModel_GetAndSet_RoundTrips()
     {
         var setResponse = await _client.PutAsJsonAsync(

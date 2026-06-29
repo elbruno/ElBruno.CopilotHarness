@@ -414,6 +414,7 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
                 state.Facts.Add(new RoutingContextFact("semantic.engine", profileName));
                 state.Facts.Add(new RoutingContextFact("semantic.confidence", match.Confidence.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
                 state.Facts.Add(new RoutingContextFact("classifier.source", match.Source));
+                state.Facts.Add(new RoutingContextFact("semantic.source", match.Source));
                 state.Steps.Add(new RoutingWorkflowStep(
                     "semantic-rule-analyzer",
                     $"Semantic rule '{match.RuleName}' selected by {match.Source} → '{profileName}'."));

@@ -75,7 +75,8 @@ Condition-based routing rules + default model. See [Rules Engine](Rules_Engine.m
 | `PUT` | `/admin/rules/{id}` | Update a rule. |
 | `DELETE` | `/admin/rules/{id}` | Delete a rule. |
 | `POST` | `/admin/rules/wizard` | Generate the starter rule set (first-run). |
-| `POST` | `/admin/rules/test` | Dry-run evaluation. Body: `{ prompt, systemMessage?, stream, requestedModel? }`. Returns `{ matchedRuleName, selectedModel, reason, promptCharacters }`. |
+| `GET` | `/admin/rules/analyzer-prompt` | Return the exact local "rules analyzer" prompt sent to the processor model, plus `{ hasProcessorModel, processorModel, semanticRuleCount, systemPrompt }`. |
+| `POST` | `/admin/rules/test` | Dry-run evaluation. Body: `{ prompt, systemMessage?, stream, requestedModel? }`. Returns `{ matchedRuleName, selectedModel, reason, promptCharacters, userRequest, isSemantic, decisionSource, confidence, classificationIntent, classificationComplexity, semanticReason, analyzerPrompt }`. |
 | `GET` | `/admin/rules/default` | Get the default model name. |
 | `PUT` | `/admin/rules/default` | Set the default model. Body: `{ modelName }`. |
 
