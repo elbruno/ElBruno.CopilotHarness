@@ -146,4 +146,37 @@ public sealed class PersistentExecutionTraceStore(
         var removed = dbContext.RoutingExecutionTraces.ExecuteDelete();
         logger.LogInformation("Cleared {Count} routing execution traces.", removed);
     }
+
+    public void AppendFacts(string traceId, IReadOnlyList<RoutingContextFact> facts)
+    {
+        if (string.IsNullOrWhiteSpace(traceId) || facts is null || facts.Count == 0)
+        {
+            return;
+        }
+
+        var entity = dbContext.RoutingExecutionTraces
+            .FirstOrDefault(item => item.TraceId == traceId);
+
+        if (entity is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<RoutingExecutionTrace>(entity.PayloadJson, JsonOptions);
+            if (parsed is null)
+            {
+                return;
+            }
+
+            var merged = parsed.Context.Concat(facts).ToList();
+            entity.PayloadJson = JsonSerializer.Serialize(parsed with { Context = merged }, JsonOptions);
+            dbContext.SaveChanges();
+        }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(exception, "Routing execution trace {TraceId} facts could not be appended.", traceId);
+        }
+    }
 }

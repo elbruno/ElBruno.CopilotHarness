@@ -24,6 +24,7 @@ public sealed record ModelConnectionDto(
     bool Enabled,
     bool IsProcessor,
     bool SupportsCustomTemperature,
+    bool SupportsToolCalling,
     DateTimeOffset UpdatedAtUtc);
 
 public sealed record ModelConnectionUpsertRequest(
@@ -35,7 +36,8 @@ public sealed record ModelConnectionUpsertRequest(
     string? ApiKey,
     bool Enabled,
     bool IsProcessor = false,
-    bool SupportsCustomTemperature = true);
+    bool SupportsCustomTemperature = true,
+    bool SupportsToolCalling = true);
 
 public sealed record ModelConnectionTestResponse(
     bool Success,
@@ -182,7 +184,14 @@ public sealed record RoutedRequestView(
     int TotalPromptCharacters,
     bool HasSystemMessage,
     string? RawUserMessage = null,
-    string? SemanticReason = null);
+    string? SemanticReason = null,
+    int? UpstreamStatusCode = null,
+    double? UpstreamLatencyMs = null,
+    bool UpstreamSucceeded = true,
+    string? UpstreamError = null,
+    bool RequestHadTools = false,
+    bool ToolCapabilityOverrideApplied = false,
+    string? OverrideReason = null);
 
 public sealed record RoutingFeedResponse(
     DateTimeOffset GeneratedAtUtc,

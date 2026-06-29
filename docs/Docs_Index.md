@@ -14,6 +14,7 @@
 | [Architecture](Architecture.md) | System design, component boundaries, and data flow |
 | [API Reference](API_Reference.md) | All router and admin HTTP endpoints with request/response shapes |
 | [Troubleshooting](Troubleshooting.md) | Common issues and step-by-step fixes |
+| [Logging](Logging.md) | Reading router logs, the structured upstream log line, log levels, and filtering for real errors |
 | [Runbook](Runbook.md) | Operational playbook: start, stop, reset, inspect, and recover |
 | [Contributing](Contributing.md) | Local dev setup, workflow, Docker notes, and good-first-issue ideas |
 

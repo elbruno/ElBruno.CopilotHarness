@@ -52,6 +52,37 @@ per-model share summary (how many requests went to each model).
 | `matchedRuleName` | The rule that matched. For semantic routing this is the rule the processor model picked (from the `semantic.matchedRule` trace fact) |
 | `semanticReason` | The processor model's plain-language reason for choosing the rule (semantic routing only) |
 | `rawUserMessage` | The original GitHub Copilot payload before `<userRequest>` extraction, shown in a collapsible "Raw Copilot payload" panel for inspection |
+| `upstreamStatusCode` | HTTP status the upstream model returned (e.g. `200`, `400`, `500`). `null` if the call never reached the upstream |
+| `upstreamLatencyMs` | Round-trip time to the upstream model, in milliseconds (rendered as `1.3s` / `850ms` in the badge) |
+| `upstreamSucceeded` | `true` when the upstream call succeeded; `false` drives the red badge and the **Errors only** filter |
+| `upstreamError` | The upstream error body/message when the call failed, shown in a collapsible **Upstream error** panel |
+| `requestHadTools` | `true` when the incoming request asked the model to call tools (agentic request) — drives the 🛠 **tools** chip |
+| `toolCapabilityOverrideApplied` | `true` when the router re-routed the request to a tool-capable model because the originally-selected model can't do tool-calling |
+| `overrideReason` | Plain-language reason for the tool-capability override, rendered in the highlighted override note |
+
+### Upstream outcome, tools, and override (per card)
+
+Each pipeline card now shows an **upstream-outcome** row beneath the "why this rule" line:
+
+- **Success/fail badge.** A green `✅ 200 · 1.3s` badge when `upstreamSucceeded` is `true`,
+  or a red `❌ <status or "upstream error"> · <latency>` badge when the upstream call failed.
+  Latency renders as seconds (`1.3s`) for calls ≥ 1s and milliseconds (`850ms`) otherwise.
+- **Tools chip.** A 🛠 **tools** chip appears when `requestHadTools` is `true`, so you can
+  immediately tell an agentic/tool-calling request apart from a plain chat turn.
+- **Upstream error panel.** When `upstreamError` is present, a collapsible **Upstream error**
+  panel shows the raw provider message.
+- **Override note.** When `toolCapabilityOverrideApplied` is `true`, a prominent warning-style
+  callout renders `overrideReason`, e.g. *"Re-routed to 'foundry gpt-5-mini' because this
+  request needs tool-calling and the local model can't do it."* This makes it obvious why the
+  selected model differs from what the rule would normally pick. See
+  [Troubleshooting → Agentic / tool-calling request](Troubleshooting.md#tool-calling).
+
+### "Errors only" filter
+
+Alongside the existing text, model, and rule filters there is an **Errors only** checkbox.
+When ticked, the feed shows only requests where `upstreamSucceeded == false`, so you can
+zero in on failures without scrolling. It composes with the other filters, resets paging,
+survives the 2-second auto-refresh, and is cleared by **Clear filters**.
 
 ### Collapsible message detail (semantic routing)
 

@@ -42,7 +42,8 @@ public sealed class RoutingConfigurationStore(
                 ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
                 Enabled = model.Enabled,
                 IsProcessor = model.IsProcessor,
-                SupportsCustomTemperature = model.SupportsCustomTemperature
+                SupportsCustomTemperature = model.SupportsCustomTemperature,
+                SupportsToolCalling = model.SupportsToolCalling
             },
             StringComparer.OrdinalIgnoreCase);
 
@@ -166,7 +167,8 @@ public sealed class RoutingConfigurationStore(
             ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
             Enabled = model.Enabled,
             IsProcessor = model.IsProcessor,
-            SupportsCustomTemperature = model.SupportsCustomTemperature
+            SupportsCustomTemperature = model.SupportsCustomTemperature,
+            SupportsToolCalling = model.SupportsToolCalling
         };
     }
 
@@ -198,6 +200,7 @@ public sealed class RoutingConfigurationStore(
         entity.Enabled = request.Enabled;
         entity.IsProcessor = request.IsProcessor;
         entity.SupportsCustomTemperature = request.SupportsCustomTemperature;
+        entity.SupportsToolCalling = request.SupportsToolCalling;
         entity.UpdatedAtUtc = now;
 
         // null = leave key unchanged; empty = clear; value = replace.
@@ -578,6 +581,7 @@ public sealed class RoutingConfigurationStore(
             model.Enabled,
             model.IsProcessor,
             model.SupportsCustomTemperature,
+            model.SupportsToolCalling,
             model.UpdatedAtUtc);
 
     private static RoutingRuleRecord ToRecord(RoutingRuleEntity rule) =>

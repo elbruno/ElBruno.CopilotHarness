@@ -92,6 +92,11 @@ else
                     <option value="@rule">@rule</option>
                 }
             </select>
+            <label class="errors-only" title="Show only requests where the upstream model failed">
+                <input type="checkbox" checked="@_errorsOnly"
+                       @onchange="e => OnErrorsOnlyChanged(e.Value is bool b && b)" />
+                Errors only
+            </label>
             @if (HasActiveFilter)
             {
                 <button class="btn-ghost" @onclick="ClearFilters">Clear filters</button>
@@ -214,6 +219,40 @@ else
                         <span class="muted"><strong>Why this rule:</strong> @RuleSelectionReason(request)</span>
                         <span class="trace muted">@request.TraceId</span>
                     </div>
+                    <div class="upstream-outcome">
+                        @if (request.UpstreamSucceeded)
+                        {
+                            <span class="upstream-badge upstream-ok" title="Upstream model responded successfully">
+                                ✅ @(request.UpstreamStatusCode?.ToString() ?? "200") · @UpstreamLatencyLabel(request)
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="upstream-badge upstream-fail" title="Upstream model returned an error">
+                                ❌ @(request.UpstreamStatusCode?.ToString() ?? "upstream error") · @UpstreamLatencyLabel(request)
+                            </span>
+                        }
+                        @if (request.RequestHadTools)
+                        {
+                            <span class="tools-chip" title="This request asked the model to call tools (agentic request)">🛠 tools</span>
+                        }
+                    </div>
+                    @if (request.ToolCapabilityOverrideApplied)
+                    {
+                        <div class="override-callout" role="note">
+                            <span class="override-icon">🔀</span>
+                            <span>@(string.IsNullOrWhiteSpace(request.OverrideReason)
+                                ? $"Re-routed to '{request.SelectedModel}' because this request needs tool-calling and the original model can't do it."
+                                : request.OverrideReason)</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(request.UpstreamError))
+                    {
+                        <details class="payload-details upstream-error-details">
+                            <summary>Upstream error</summary>
+                            <div class="payload-text payload-raw">@request.UpstreamError</div>
+                        </details>
+                    }
                     <details class="payload-details">
                         <summary>User message — @PromptSummary(request)</summary>
                         <div class="payload-text">@DisplayPrompt(request)</div>
@@ -253,6 +292,7 @@ else
     private string _filterText = string.Empty;
     private string _modelFilter = string.Empty;
     private string _ruleFilter = string.Empty;
+    private bool _errorsOnly;
     private int _page;
 
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
@@ -289,7 +329,8 @@ else
     private bool HasActiveFilter =>
         !string.IsNullOrWhiteSpace(_filterText) ||
         !string.IsNullOrWhiteSpace(_modelFilter) ||
-        !string.IsNullOrWhiteSpace(_ruleFilter);
+        !string.IsNullOrWhiteSpace(_ruleFilter) ||
+        _errorsOnly;
 
     protected override async Task OnInitializedAsync()
     {
@@ -340,6 +381,11 @@ else
         if (!string.IsNullOrWhiteSpace(_ruleFilter))
         {
             items = items.Where(r => string.Equals(r.MatchedRuleName ?? string.Empty, _ruleFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (_errorsOnly)
+        {
+            items = items.Where(r => !r.UpstreamSucceeded);
         }
 
         if (!string.IsNullOrWhiteSpace(_filterText))
@@ -395,11 +441,19 @@ else
         Recompute();
     }
 
+    private void OnErrorsOnlyChanged(bool enabled)
+    {
+        _errorsOnly = enabled;
+        _page = 0;
+        Recompute();
+    }
+
     private void ClearFilters()
     {
         _filterText = string.Empty;
         _modelFilter = string.Empty;
         _ruleFilter = string.Empty;
+        _errorsOnly = false;
         _page = 0;
         Recompute();
     }
@@ -489,6 +543,18 @@ else
         !string.IsNullOrWhiteSpace(request.SemanticReason)
             ? request.SemanticReason!
             : request.Explanation;
+
+    private static string UpstreamLatencyLabel(RoutedRequestView request)
+    {
+        if (request.UpstreamLatencyMs is not { } ms)
+        {
+            return "—";
+        }
+
+        return ms >= 1000
+            ? $"{ms / 1000.0:0.0}s"
+            : $"{ms:0}ms";
+    }
 
     public async ValueTask DisposeAsync()
     {

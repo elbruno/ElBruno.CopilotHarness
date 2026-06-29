@@ -26,6 +26,7 @@ connection is an independent, fully-described endpoint:
 | `apiKey` | API key, **encrypted at rest** (Azure only; Ollama needs none). Never returned to the UI in plaintext. |
 | `isProcessor` | Marks the **processor model** — the single model used to classify incoming prompts into an intent. At most one connection can be the processor. See [Processor model](#processor-model). |
 | `supportsCustomTemperature` | Whether the upstream accepts a non-default `temperature`/`top_p`. When `false`, the harness strips those parameters before forwarding. See [Temperature capability](#temperature-capability). |
+| `supportsToolCalling` | Whether the upstream can serve **agentic / tool-calling** requests. When `false`, requests that ask for tools are automatically re-routed to a tool-capable model. Defaults to `true`. See [Tool-calling capability](#tool-calling). |
 | `enabled` | Whether the connection is eligible for routing. |
 
 The registry is the single source of truth for "which models exist." Routing rules and
@@ -99,6 +100,32 @@ See [Troubleshooting](Troubleshooting.md#temperature-400) for the end-to-end sym
 
 ---
 
+## Tool-calling capability {#tool-calling}
+
+Modern Copilot flows are increasingly **agentic**: a request is *streaming* and asks the
+model to *call tools* (function/tool calling). Small local models (e.g. `ollama llama3.2`)
+can't reliably serve these — they emit empty or malformed `tool_call` arguments over a
+stream, so the client (VS Code Copilot) reports the request as **failed** even though the
+proxy returned `HTTP 200`. Each connection therefore carries a `supportsToolCalling` flag:
+
+- When `true` (default) the model is considered able to serve tool-calling requests, so it is
+  used as routed.
+- When `false` the model is treated as **chat-only**. If a request that includes
+  `tools`/`functions` would otherwise route to this model, the **tool-capability guard**
+  automatically overrides the route and dispatches to a tool-capable model instead. The
+  override and its reason are surfaced on the [Live Routing](Live_Routing.md) page as a 🛠
+  **tools** chip plus a highlighted override note.
+
+The seeded `ollama llama3.2` connection ships with `supportsToolCalling = false`, because the
+small local model is great for cheap classification and simple chat but cannot serve agentic
+tool-calling turns. See [Troubleshooting → Agentic / tool-calling request](Troubleshooting.md#tool-calling)
+for the end-to-end symptom + fix.
+
+In the Admin UI, the **Models** page exposes a *Supports tool-calling* toggle in the model
+editor and a 🛠 **tools** capability chip in each model's list row.
+
+---
+
 ## API-key encryption
 
 API keys are encrypted at rest using **ASP.NET Core Data Protection**
@@ -154,10 +181,10 @@ A **Test connection** button calls the probe endpoint and shows the result inlin
 
 A fresh database is seeded with two example connections so routing works out of the box:
 
-| Name | Type | Endpoint | Model / Deployment | Processor | Custom temp |
-|---|---|---|---|---|---|
-| `ollama llama3.2` | `ollama` | `http://localhost:11434` | `llama3.2` | ✅ | ✅ |
-| `foundry gpt-5-mini` | `azure-openai` | *(shared Foundry endpoint)* | `gpt-5-mini` | — | ❌ |
+| Name | Type | Endpoint | Model / Deployment | Processor | Custom temp | Tools |
+|---|---|---|---|---|---|---|
+| `ollama llama3.2` | `ollama` | `http://localhost:11434` | `llama3.2` | ✅ | ✅ | ❌ |
+| `foundry gpt-5-mini` | `azure-openai` | *(shared Foundry endpoint)* | `gpt-5-mini` | — | ❌ | ✅ |
 
 `foundry gpt-5-mini` is also the seeded **default model**.
 

@@ -50,6 +50,34 @@ model. Common failures:
   is fixed. When a probe fails, the harness surfaces the **upstream error body** inline, so
   the exact provider message is shown instead of a generic failure.
 
+## Agentic / tool-calling request routed to a local model fails {#tool-calling}
+
+**Symptom.** VS Code Copilot shows the request as **failed** even though the router
+returned `HTTP 200`. On the [Live Routing](Live_Routing.md) page the request carries a
+🛠 **tools** chip and was routed to a small local model (e.g. `ollama llama3.2`). The
+upstream-outcome badge may still show `✅ 200`, yet Copilot reports an error in the editor.
+
+**Cause.** The request was **agentic** — it was *streaming* and asked the model to *call
+tools* (function/tool calling). Small local models can't reliably serve tool-calling over a
+stream: they emit empty/malformed `tool_call` arguments, so Copilot rejects the response on
+the client side even though the proxy forwarded a `200`. The router had no idea the request
+needed tools and routed it to a model that can't do the job.
+
+**Fix.** Each model connection now carries a `supportsToolCalling` flag (see
+[Model Registry → Tool-calling capability](Model_Registry.md#tool-calling)). The router
+detects when an incoming request includes `tools`/`functions` and, if the selected model has
+`supportsToolCalling = false`, automatically **overrides the route** to a tool-capable model
+before dispatch. The seeded `ollama llama3.2` ships with `supportsToolCalling = false`.
+
+On the [Live Routing](Live_Routing.md) page you can now see all of this:
+
+- a 🛠 **tools** chip marks requests that asked for tool-calling,
+- a green/red **upstream-outcome** badge shows the real upstream status, latency, and any
+  error body,
+- a highlighted **override note** explains when a request was re-routed because the original
+  model can't do tool-calling, and
+- the **Errors only** filter narrows the feed to failed upstream calls.
+
 ## Temperature 400 {#temperature-400}
 
 **Symptom.** A chat request from VS Code Copilot fails with:

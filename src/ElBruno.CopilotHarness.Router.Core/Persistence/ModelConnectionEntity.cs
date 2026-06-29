@@ -40,6 +40,12 @@ public sealed class ModelConnectionEntity
     /// </summary>
     public bool SupportsCustomTemperature { get; set; } = true;
 
+    /// <summary>
+    /// When false, the model cannot perform tool/function calling reliably. The router redirects
+    /// tool-calling requests away from such models to a tool-capable model (e.g. local Ollama models).
+    /// </summary>
+    public bool SupportsToolCalling { get; set; } = true;
+
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -27,6 +27,11 @@
 **Summary:** Implemented LiveRouting (filter bar, client-side paging, per-row delete, bulk delete, clear-all with two-step confirms); moved Models editor to Rules-style modal. Added AdminApiClient delete methods and shared CSS polish (page-header, empty-state, confirm-banner). Feed limit 50→200.
 **References:** src/ElBruno.CopilotHarness.Admin.Web/Components/Pages/{LiveRouting.razor,Models.razor}, Models.razor.css, AdminApiClient.cs, AdminContracts.cs, wwwroot/app.css
 
+### 2026-06-29T20-33-01: Live view now leads with the matched rule + decision source; classifier intent demoted to a muted secondary hint
+**By:** Trinity
+**Summary:** Fixed misleading Live-view intent pill. Matched rule is now the dominant signal (blue highlight, labeled "Matched rule"). Processor stage shows decision source ("🧠 Decided by local model" or "⚙️ Keyword/heuristic fallback"). Intent rendered as muted secondary hint with "(guess)" qualifier when model-decided. Top summary cards clarified to show "By classifier intent (heuristic)". Broadened default "GitHub actions" starter rule to cover read-only repo/issue/PR questions. Documented all starter rules + intent-vs-rule explainer in docs/Rules_Engine.md.
+**References:** src/ElBruno.CopilotHarness.Admin.Web/Components/Pages/LiveRouting.razor, LiveRouting.razor.css, Rules.razor, docs/Rules_Engine.md, AdminContracts.cs
+
 ## Governance
 
 - All meaningful changes require team consensus

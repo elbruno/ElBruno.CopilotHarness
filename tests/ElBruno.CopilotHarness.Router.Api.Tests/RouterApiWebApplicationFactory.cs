@@ -113,6 +113,17 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
             Thread.Sleep(400);
         }
 
+        // Markers used by upstream-outcome tests to simulate a failing upstream provider.
+        if (requestBody.Contains("force-upstream-timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new TaskCanceledException("Simulated upstream timeout.");
+        }
+
+        if (requestBody.Contains("force-upstream-error", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new HttpRequestException("Simulated upstream connection failure.");
+        }
+
         var acceptsStream = request.Headers.Accept.Any(static header =>
             string.Equals(header.MediaType, "text/event-stream", StringComparison.OrdinalIgnoreCase));
 

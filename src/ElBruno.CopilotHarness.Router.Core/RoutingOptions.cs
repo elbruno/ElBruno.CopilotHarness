@@ -56,6 +56,12 @@ public sealed class ModelProfileOptions
     /// forwarded upstream. Set false for models that only accept the default temperature (e.g. gpt-5 family).
     /// </summary>
     public bool SupportsCustomTemperature { get; init; } = true;
+
+    /// <summary>
+    /// When false, the model cannot reliably perform tool/function calling. Tool-calling requests are
+    /// redirected to a tool-capable model before being forwarded upstream.
+    /// </summary>
+    public bool SupportsToolCalling { get; init; } = true;
 }
 
 public sealed class BasicRulesOptions

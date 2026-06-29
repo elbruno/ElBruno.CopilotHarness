@@ -323,3 +323,82 @@
 
     .empty-state .empty-title { font-weight: 700; font-size: 1.05rem; margin: 0 0 0.35rem; }
 
+/* ── Upstream outcome (success/fail badge, tools chip, override) ───── */
+.upstream-outcome {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+.upstream-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.12rem 0.6rem;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.upstream-ok {
+    color: #0a6b2e;
+    background: #dafbe1;
+    border: 1px solid #4ac26b;
+}
+
+.upstream-fail {
+    color: #a40e26;
+    background: #ffebe9;
+    border: 1px solid #ff8182;
+}
+
+.tools-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #4c2889;
+    background: #f3eefc;
+    border: 1px solid #d8c5f0;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+}
+
+.override-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.85rem;
+    color: #6a4c00;
+    background: #fff8e6;
+    border: 1px solid #f0c850;
+    border-left: 4px solid #d4a72c;
+    border-radius: 6px;
+}
+
+    .override-callout .override-icon { font-size: 1rem; line-height: 1.2; }
+
+.upstream-error-details {
+    border-color: #ffc1c1;
+}
+
+    .upstream-error-details summary { color: #a40e26; }
+
+.errors-only {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    color: #334155;
+    cursor: pointer;
+    user-select: none;
+}
+
+    .errors-only input { width: 1rem; height: 1rem; cursor: pointer; margin: 0; }
+

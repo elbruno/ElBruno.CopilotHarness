@@ -14,6 +14,25 @@ public sealed record ClientRequestStart(
     bool Stream,
     string? RequestedModel);
 
+/// <summary>
+/// Final outcome of a forwarded client request, captured after the upstream call completes (or fails)
+/// so the Live feed and traces can surface upstream status, latency, errors and tool-capability overrides.
+/// </summary>
+public sealed record RequestOutcome(
+    int? StatusCode,
+    double? LatencyMs,
+    bool Succeeded,
+    string? Error,
+    bool HadTools,
+    bool ToolOverrideApplied,
+    string? OverrideReason)
+{
+    public static RequestOutcome None { get; } = new(null, null, true, null, false, false, null);
+
+    public static RequestOutcome Failure(string? error) =>
+        new(null, null, false, error, false, false, null);
+}
+
 public sealed record ConnectedClientSnapshot(
     string Client,
     bool IsConnected,
@@ -42,6 +61,7 @@ public interface IClientRequestActivityStore
     string Start(ClientRequestStart request);
     void MarkRouted(string requestId, RoutingSelectionResult selection);
     void Complete(string requestId);
+    void Complete(string requestId, RequestOutcome outcome);
     ClientDashboardSnapshot GetSnapshot(DateTimeOffset nowUtc);
 }
 
@@ -99,7 +119,9 @@ public sealed class InMemoryClientRequestActivityStore : IClientRequestActivityS
         }
     }
 
-    public void Complete(string requestId)
+    public void Complete(string requestId) => Complete(requestId, RequestOutcome.None);
+
+    public void Complete(string requestId, RequestOutcome outcome)
     {
         lock (_lock)
         {
@@ -118,7 +140,8 @@ public sealed class InMemoryClientRequestActivityStore : IClientRequestActivityS
                 state.SelectedDeployment,
                 state.TraceId,
                 state.StartedAtUtc,
-                DateTimeOffset.UtcNow));
+                DateTimeOffset.UtcNow,
+                outcome));
         }
     }
 
@@ -246,5 +269,6 @@ public sealed class InMemoryClientRequestActivityStore : IClientRequestActivityS
         string? SelectedDeployment,
         string? TraceId,
         DateTimeOffset StartedAtUtc,
-        DateTimeOffset CompletedAtUtc);
+        DateTimeOffset CompletedAtUtc,
+        RequestOutcome Outcome);
 }

@@ -11,7 +11,7 @@ public sealed class SqliteRoutingStoreInitializer(
 
     private const string SeedDefaultModel = "foundry gpt-5-mini";
 
-    private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled, bool IsProcessor, bool SupportsCustomTemperature)> SeedModels()
+    private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled, bool IsProcessor, bool SupportsCustomTemperature, bool SupportsToolCalling)> SeedModels()
     {
         yield return (
             "seed-ollama-llama32",
@@ -22,7 +22,8 @@ public sealed class SqliteRoutingStoreInitializer(
             "2024-10-21",
             true,
             true,   // processor model (classifier)
-            true);
+            true,
+            false); // llama3.2 cannot reliably perform tool/function calling
 
         yield return (
             "seed-foundry-gpt5mini",
@@ -33,7 +34,8 @@ public sealed class SqliteRoutingStoreInitializer(
             "2024-10-21",
             true,
             false,
-            false); // gpt-5 family only accepts the default temperature
+            false, // gpt-5 family only accepts the default temperature
+            true); // tool-calling capable
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -70,6 +72,7 @@ public sealed class SqliteRoutingStoreInitializer(
                 Enabled INTEGER NOT NULL DEFAULT 1,
                 IsProcessor INTEGER NOT NULL DEFAULT 0,
                 SupportsCustomTemperature INTEGER NOT NULL DEFAULT 1,
+                SupportsToolCalling INTEGER NOT NULL DEFAULT 1,
                 CreatedAtUtc TEXT NOT NULL,
                 UpdatedAtUtc TEXT NOT NULL
             );
@@ -82,6 +85,19 @@ public sealed class SqliteRoutingStoreInitializer(
         // Idempotent column upgrades for databases created before these columns existed.
         await AddColumnIfMissingAsync("Models", "IsProcessor", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
         await AddColumnIfMissingAsync("Models", "SupportsCustomTemperature", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
+        var supportsToolCallingAdded = await AddColumnIfMissingAsync("Models", "SupportsToolCalling", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
+
+        // Backfill for databases created before the SupportsToolCalling column existed: the ALTER above
+        // defaults every existing row to 1 (true), but Ollama models cannot reliably perform tool/function
+        // calling. Mark them not-tool-capable once, on the upgrade, so the tool-calling guard works without
+        // requiring users to edit each model by hand. Runs only when the column was just added, so it never
+        // clobbers a user's later choice.
+        if (supportsToolCallingAdded)
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE Models SET SupportsToolCalling = 0 WHERE ProviderType = {(int)ModelProviderType.Ollama};",
+                cancellationToken);
+        }
 
         await dbContext.Database.ExecuteSqlRawAsync(
             """
@@ -108,7 +124,7 @@ public sealed class SqliteRoutingStoreInitializer(
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                  INSERT OR IGNORE INTO Models (
-                     Id, Name, ProviderType, Endpoint, ModelName, ApiVersion, ApiKeyProtected, Enabled, IsProcessor, SupportsCustomTemperature, CreatedAtUtc, UpdatedAtUtc
+                     Id, Name, ProviderType, Endpoint, ModelName, ApiVersion, ApiKeyProtected, Enabled, IsProcessor, SupportsCustomTemperature, SupportsToolCalling, CreatedAtUtc, UpdatedAtUtc
                  ) VALUES (
                      {model.Id},
                      {model.Name},
@@ -120,6 +136,7 @@ public sealed class SqliteRoutingStoreInitializer(
                      {model.Enabled},
                      {model.IsProcessor},
                      {model.SupportsCustomTemperature},
+                     {model.SupportsToolCalling},
                      {DateTimeOffset.UtcNow},
                      {DateTimeOffset.UtcNow}
                  );
@@ -324,7 +341,7 @@ public sealed class SqliteRoutingStoreInitializer(
             cancellationToken);
     }
 
-    private async Task AddColumnIfMissingAsync(string table, string column, string definition, CancellationToken cancellationToken)
+    private async Task<bool> AddColumnIfMissingAsync(string table, string column, string definition, CancellationToken cancellationToken)
     {
         var connection = dbContext.Database.GetDbConnection();
         var shouldClose = connection.State != System.Data.ConnectionState.Open;
@@ -358,6 +375,8 @@ public sealed class SqliteRoutingStoreInitializer(
                 alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
                 await alter.ExecuteNonQueryAsync(cancellationToken);
             }
+
+            return !exists;
         }
         finally
         {

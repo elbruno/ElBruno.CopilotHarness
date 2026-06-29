@@ -47,6 +47,7 @@ else
                     <th>API key</th>
                     <th>Processor</th>
                     <th>Custom temp</th>
+                    <th>Tools</th>
                     <th>Enabled</th>
                     <th></th>
                 </tr>
@@ -91,6 +92,16 @@ else
                                   title="@(model.SupportsCustomTemperature ? "Accepts custom temperature/top_p" : "Non-default temperature/top_p stripped before forwarding")">
                                 @(model.SupportsCustomTemperature ? "yes" : "default-only")
                             </span>
+                        </td>
+                        <td>
+                            @if (model.SupportsToolCalling)
+                            {
+                                <span class="status-pill status-neutral" title="Can serve agentic / tool-calling requests">🛠 tools</span>
+                            }
+                            else
+                            {
+                                <span class="status-pill status-warn" title="Cannot serve tool-calling requests — those are re-routed to a tool-capable model">no tools</span>
+                            }
                         </td>
                         <td class="col-actions">
                             @if (_confirmDeleteId == model.Id)
@@ -168,6 +179,10 @@ else
                         <InputCheckbox @bind-Value="_editor.SupportsCustomTemperature" /> Supports custom temperature
                         <span class="field-hint">— uncheck for gpt-5 family models that only accept the default temperature.</span>
                     </label>
+                    <label class="checkbox span-2">
+                        <InputCheckbox @bind-Value="_editor.SupportsToolCalling" /> Supports tool-calling
+                        <span class="field-hint">— uncheck for small local models that can't serve agentic / tool-calling requests; those get re-routed to a tool-capable model.</span>
+                    </label>
                 </div>
             </div>
             <div class="modal-foot">
@@ -212,7 +227,7 @@ else
         _isNew = true;
         _editorId = null;
         _editorName = string.Empty;
-        _editor = new ModelEditor { Type = "azure-openai", ApiVersion = "2024-10-21", Enabled = true, SupportsCustomTemperature = true };
+        _editor = new ModelEditor { Type = "azure-openai", ApiVersion = "2024-10-21", Enabled = true, SupportsCustomTemperature = true, SupportsToolCalling = true };
     }
 
     private void StartEdit(ModelConnectionDto model)
@@ -231,7 +246,8 @@ else
             ApiKey = null,
             Enabled = model.Enabled,
             IsProcessor = model.IsProcessor,
-            SupportsCustomTemperature = model.SupportsCustomTemperature
+            SupportsCustomTemperature = model.SupportsCustomTemperature,
+            SupportsToolCalling = model.SupportsToolCalling
         };
     }
 
@@ -255,7 +271,8 @@ else
                 _editor.ApiKey,
                 _editor.Enabled,
                 _editor.IsProcessor,
-                _editor.SupportsCustomTemperature);
+                _editor.SupportsCustomTemperature,
+                _editor.SupportsToolCalling);
 
             if (_isNew)
             {
@@ -337,5 +354,6 @@ else
         public bool Enabled { get; set; } = true;
         public bool IsProcessor { get; set; }
         public bool SupportsCustomTemperature { get; set; } = true;
+        public bool SupportsToolCalling { get; set; } = true;
     }
 }

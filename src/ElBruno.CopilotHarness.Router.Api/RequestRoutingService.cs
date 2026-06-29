@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ElBruno.CopilotHarness.Router.Core;
@@ -219,6 +220,71 @@ public static class OpenAiApiUtilities
 
     public static string? GetRequestedModel(JsonObject? requestBody) =>
         GetNodeString(requestBody?["model"]);
+
+    /// <summary>
+    /// True when the incoming payload declares a non-empty <c>tools</c> array (i.e. the request expects the
+    /// model to perform tool/function calling). Used to redirect tool-calling requests to a tool-capable model.
+    /// </summary>
+    public static bool RequestHasTools(JsonObject? requestBody) =>
+        requestBody?["tools"] is JsonArray tools && tools.Count > 0;
+
+    /// <summary>
+    /// Finds the best enabled, tool-calling-capable model to redirect a tool request to, excluding
+    /// <paramref name="excludeProfileName"/>. Cloud/Azure models are preferred; ties broken by name for
+    /// deterministic selection. Returns null when no tool-capable model is available.
+    /// </summary>
+    public static (string ProfileName, ModelProfileOptions Profile)? FindToolCapableModel(
+        RoutingOptions options,
+        string? excludeProfileName)
+    {
+        var best = options.Profiles
+            .Where(entry =>
+                entry.Value.Enabled &&
+                entry.Value.SupportsToolCalling &&
+                !string.Equals(entry.Key, excludeProfileName, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(entry => entry.Value.Type == ModelProviderType.AzureOpenAI)
+            .ThenBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => ((string ProfileName, ModelProfileOptions Profile)?)(entry.Key, entry.Value))
+            .FirstOrDefault();
+
+        return best;
+    }
+
+    /// <summary>
+    /// Projects a <see cref="RequestOutcome"/> into trace context facts so the Live feed can surface
+    /// upstream status, latency, errors and tool-capability override details.
+    /// </summary>
+    public static IReadOnlyList<RoutingContextFact> BuildUpstreamFacts(RequestOutcome outcome)
+    {
+        var facts = new List<RoutingContextFact>
+        {
+            new("request.hadTools", outcome.HadTools ? "true" : "false"),
+            new("upstream.succeeded", outcome.Succeeded ? "true" : "false"),
+            new("routing.toolOverride", outcome.ToolOverrideApplied ? "true" : "false")
+        };
+
+        if (outcome.StatusCode is int statusCode)
+        {
+            facts.Add(new RoutingContextFact("upstream.status", statusCode.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (outcome.LatencyMs is double latencyMs)
+        {
+            facts.Add(new RoutingContextFact("upstream.latencyMs", latencyMs.ToString("0.##", CultureInfo.InvariantCulture)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(outcome.Error))
+        {
+            facts.Add(new RoutingContextFact("upstream.error", outcome.Error));
+        }
+
+        if (!string.IsNullOrWhiteSpace(outcome.OverrideReason))
+        {
+            facts.Add(new RoutingContextFact("routing.toolOverrideReason", outcome.OverrideReason));
+        }
+
+        return facts;
+    }
 
     private static JsonObject? TryGetClientObject(JsonNode? node)
     {

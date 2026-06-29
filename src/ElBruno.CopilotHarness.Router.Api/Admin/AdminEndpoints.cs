@@ -489,6 +489,19 @@ public static class AdminEndpoints
                         ?? (string.IsNullOrWhiteSpace(trace.Classification.Source) ? "deterministic" : trace.Classification.Source);
                     var processorModel = GetContextValue(trace, "classifier.processorModel") ?? trace.Classification.ProcessorModel;
                     var userAgent = GetContextValue(trace, "request.client.userAgent");
+                    int? upstreamStatusCode = int.TryParse(GetContextValue(trace, "upstream.status"), out var statusCode) ? statusCode : null;
+                    double? upstreamLatencyMs = double.TryParse(
+                        GetContextValue(trace, "upstream.latencyMs"),
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var latency) ? latency : null;
+                    var upstreamSucceededFact = GetContextValue(trace, "upstream.succeeded");
+                    var upstreamSucceeded = upstreamSucceededFact is null
+                        || string.Equals(upstreamSucceededFact, "true", StringComparison.OrdinalIgnoreCase);
+                    var upstreamError = GetContextValue(trace, "upstream.error");
+                    var requestHadTools = string.Equals(GetContextValue(trace, "request.hadTools"), "true", StringComparison.OrdinalIgnoreCase);
+                    var toolOverrideApplied = string.Equals(GetContextValue(trace, "routing.toolOverride"), "true", StringComparison.OrdinalIgnoreCase);
+                    var overrideReason = GetContextValue(trace, "routing.toolOverrideReason");
                     return new RoutedRequestView(
                         TraceId: trace.TraceId,
                         CreatedAtUtc: trace.CreatedAtUtc,
@@ -512,7 +525,14 @@ public static class AdminEndpoints
                         TotalPromptCharacters: totalPromptChars,
                         HasSystemMessage: hasSystemMessage,
                         RawUserMessage: rawUserMessage,
-                        SemanticReason: semanticReason);
+                        SemanticReason: semanticReason,
+                        UpstreamStatusCode: upstreamStatusCode,
+                        UpstreamLatencyMs: upstreamLatencyMs,
+                        UpstreamSucceeded: upstreamSucceeded,
+                        UpstreamError: upstreamError,
+                        RequestHadTools: requestHadTools,
+                        ToolCapabilityOverrideApplied: toolOverrideApplied,
+                        OverrideReason: overrideReason);
                 })
                 .ToList();
 
@@ -770,6 +790,7 @@ public static class AdminEndpoints
             model.Enabled,
             model.IsProcessor,
             model.SupportsCustomTemperature,
+            model.SupportsToolCalling,
             model.UpdatedAtUtc);
 
     private static UpsertModelConnectionRequest ToUpsertModelConnectionRequest(ModelConnectionUpsertRequest request) =>
@@ -782,7 +803,8 @@ public static class AdminEndpoints
             request.ApiKey,
             request.Enabled,
             request.IsProcessor,
-            request.SupportsCustomTemperature);
+            request.SupportsCustomTemperature,
+            request.SupportsToolCalling);
 
     private static RoutingRuleDto ToRoutingRuleDto(RoutingRuleRecord rule) =>
         new(

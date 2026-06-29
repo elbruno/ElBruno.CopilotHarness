@@ -88,6 +88,12 @@ public interface IExecutionTraceStore
     bool Remove(string traceId);
     int RemoveMany(IEnumerable<string> traceIds);
     void Clear();
+
+    /// <summary>
+    /// Appends post-routing context facts (e.g. upstream status/latency/errors, tool-override info) onto an
+    /// already-stored trace so the Live feed can surface the full request outcome. No-op when the trace is missing.
+    /// </summary>
+    void AppendFacts(string traceId, IReadOnlyList<RoutingContextFact> facts);
 }
 
 public sealed record RoutingWorkflowStep(string Name, string Outcome);
@@ -188,6 +194,25 @@ public sealed class InMemoryExecutionTraceStore : IExecutionTraceStore
         {
             _traces.Clear();
             _orderedTraceIds.Clear();
+        }
+    }
+
+    public void AppendFacts(string traceId, IReadOnlyList<RoutingContextFact> facts)
+    {
+        if (string.IsNullOrWhiteSpace(traceId) || facts is null || facts.Count == 0)
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            if (!_traces.TryGetValue(traceId, out var trace))
+            {
+                return;
+            }
+
+            var merged = trace.Context.Concat(facts).ToList();
+            _traces[traceId] = trace with { Context = merged };
         }
     }
 
@@ -555,7 +580,8 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
             ApiKey = string.IsNullOrEmpty(profile.ApiKey) ? string.Empty : "***redacted***",
             Enabled = profile.Enabled,
             IsProcessor = profile.IsProcessor,
-            SupportsCustomTemperature = profile.SupportsCustomTemperature
+            SupportsCustomTemperature = profile.SupportsCustomTemperature,
+            SupportsToolCalling = profile.SupportsToolCalling
         };
 
         return new RoutingDecision(decision.ProfileName, redacted, decision.Reason);

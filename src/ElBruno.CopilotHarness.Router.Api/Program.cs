@@ -241,6 +241,7 @@ app.MapPost("/v1/responses", async (
     IChatCompletionsProviderFactory providerFactory,
     IRequestRoutingService routingService,
     IClientRequestActivityStore requestActivityStore,
+    IExecutionTraceStore traceStore,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -265,6 +266,8 @@ app.MapPost("/v1/responses", async (
         false,
         OpenAiApiUtilities.GetRequestedModel(chatPayload)));
 
+    RequestOutcome? capturedOutcome = null;
+
     try
     {
         requestMetadata = OpenAiApiUtilities.BuildRequestMetadata(context.Request, responsesRequest, requestActivityId);
@@ -272,7 +275,9 @@ app.MapPost("/v1/responses", async (
         requestActivityStore.MarkRouted(requestActivityId, routingSelection);
 
         var routingDecision = routingSelection.Decision;
+        var traceId = routingSelection.TraceId;
         chatPayload["model"] = routingDecision.Profile.Deployment;
+        var requestHadTools = OpenAiApiUtilities.RequestHasTools(chatPayload);
 
         logger.LogInformation(
             "Responses compatibility routing selected profile {ProfileName} deployment {Deployment}. Reason: {Reason}",
@@ -280,32 +285,93 @@ app.MapPost("/v1/responses", async (
             routingDecision.Profile.Deployment,
             routingDecision.Reason);
 
-        using var upstreamResponse = await providerFactory
-            .GetProvider(routingDecision.Profile)
-            .SendChatCompletionsAsync(
-                chatPayload,
-                routingDecision.Profile,
-                stream: false,
-                cancellationToken);
-
-        context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-        OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
-        OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
-
-        var upstreamBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
-        if (!upstreamResponse.IsSuccessStatusCode)
+        var startedAt = DateTimeOffset.UtcNow;
+        HttpResponseMessage upstreamResponse;
+        try
         {
-            await context.Response.WriteAsync(upstreamBody, cancellationToken);
+            upstreamResponse = await providerFactory
+                .GetProvider(routingDecision.Profile)
+                .SendChatCompletionsAsync(
+                    chatPayload,
+                    routingDecision.Profile,
+                    stream: false,
+                    cancellationToken);
+        }
+        catch (Exception upstreamException) when (
+            upstreamException is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            var failedAtMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
+            var isTimeout = upstreamException is OperationCanceledException;
+            var statusCode = isTimeout ? StatusCodes.Status504GatewayTimeout : StatusCodes.Status502BadGateway;
+            var errorType = isTimeout ? "upstream_timeout" : "upstream_error";
+
+            logger.LogError(
+                upstreamException,
+                "Upstream responses call failed for trace {TraceId}. client={Client} selectedModel={SelectedModel} deployment={Deployment} statusCode={StatusCode}",
+                traceId,
+                requestMetadata.Id,
+                routingDecision.ProfileName,
+                routingDecision.Profile.Deployment,
+                statusCode);
+
+            capturedOutcome = new RequestOutcome(
+                statusCode,
+                failedAtMs,
+                Succeeded: false,
+                Error: upstreamException.Message,
+                HadTools: requestHadTools,
+                ToolOverrideApplied: false,
+                OverrideReason: null);
+            traceStore.AppendFacts(traceId, OpenAiApiUtilities.BuildUpstreamFacts(capturedOutcome));
+
+            context.Response.StatusCode = statusCode;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = new
+                {
+                    message = isTimeout
+                        ? "The upstream model did not respond in time."
+                        : "The upstream model could not be reached.",
+                    type = errorType
+                }
+            }, cancellationToken);
             return Results.Empty;
         }
 
-        var responsePayload = OpenAiCompatibilityMapper.CreateResponsesResponse(upstreamBody, routingDecision);
-        await context.Response.WriteAsJsonAsync(responsePayload, cancellationToken);
-        return Results.Empty;
+        using (upstreamResponse)
+        {
+            var elapsedMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
+            capturedOutcome = new RequestOutcome(
+                (int)upstreamResponse.StatusCode,
+                elapsedMs,
+                Succeeded: upstreamResponse.IsSuccessStatusCode,
+                Error: null,
+                HadTools: requestHadTools,
+                ToolOverrideApplied: false,
+                OverrideReason: null);
+            traceStore.AppendFacts(traceId, OpenAiApiUtilities.BuildUpstreamFacts(capturedOutcome));
+
+            context.Response.StatusCode = (int)upstreamResponse.StatusCode;
+            OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
+            OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
+
+            var upstreamBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
+            if (!upstreamResponse.IsSuccessStatusCode)
+            {
+                await context.Response.WriteAsync(upstreamBody, cancellationToken);
+                return Results.Empty;
+            }
+
+            var responsePayload = OpenAiCompatibilityMapper.CreateResponsesResponse(upstreamBody, routingDecision);
+            await context.Response.WriteAsJsonAsync(responsePayload, cancellationToken);
+            return Results.Empty;
+        }
     }
     finally
     {
-        requestActivityStore.Complete(requestActivityId);
+        requestActivityStore.Complete(
+            requestActivityId,
+            capturedOutcome ?? RequestOutcome.Failure("Request did not complete."));
     }
 });
 
@@ -315,6 +381,7 @@ app.MapPost("/v1/chat/completions", async (
     IRequestRoutingService routingService,
     IClientRequestActivityStore requestActivityStore,
     IShadowRoutingService shadowRoutingService,
+    IExecutionTraceStore traceStore,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -333,13 +400,20 @@ app.MapPost("/v1/chat/completions", async (
         stream,
         OpenAiApiUtilities.GetRequestedModel(requestPayload)));
 
+    RequestOutcome? capturedOutcome = null;
+    HttpResponseMessage? upstreamResponse = null;
+
     try
     {
         requestMetadata = OpenAiApiUtilities.BuildRequestMetadata(context.Request, requestPayload, requestActivityId);
         var routingSelection = await routingService.SelectModelWithTraceAsync(requestPayload, requestMetadata, cancellationToken);
         requestActivityStore.MarkRouted(requestActivityId, routingSelection);
         var routingDecision = routingSelection.Decision;
-        requestPayload["model"] = routingDecision.Profile.Deployment;
+        var traceId = routingSelection.TraceId;
+
+        var selectedProfileName = routingDecision.ProfileName;
+        var selectedProfile = routingDecision.Profile;
+        requestPayload["model"] = selectedProfile.Deployment;
 
         logger.LogInformation(
             "Routing decision selected profile {ProfileName} deployment {Deployment}. Reason: {Reason}",
@@ -347,28 +421,123 @@ app.MapPost("/v1/chat/completions", async (
             routingDecision.Profile.Deployment,
             routingDecision.Reason);
 
+        // Tool-calling capability guard: redirect tool requests away from models that cannot do tools.
+        var requestHadTools = OpenAiApiUtilities.RequestHasTools(requestPayload);
+        var toolOverrideApplied = false;
+        string? overrideReason = null;
+
+        if (requestHadTools && !selectedProfile.SupportsToolCalling)
+        {
+            var routingOptions = await routingService.GetRoutingOptionsAsync(cancellationToken);
+            var capable = OpenAiApiUtilities.FindToolCapableModel(routingOptions, selectedProfileName);
+            if (capable is { } target)
+            {
+                overrideReason =
+                    $"Request requires tool-calling; '{selectedProfileName}' does not support it, routed to '{target.ProfileName}'.";
+                selectedProfileName = target.ProfileName;
+                selectedProfile = target.Profile;
+                requestPayload["model"] = selectedProfile.Deployment;
+                toolOverrideApplied = true;
+                logger.LogInformation(
+                    "Tool-capability override applied for trace {TraceId}. {OverrideReason}",
+                    traceId,
+                    overrideReason);
+            }
+            else
+            {
+                overrideReason =
+                    $"Request requires tool-calling but '{selectedProfileName}' does not support it and no tool-capable model is enabled.";
+                logger.LogWarning(
+                    "Tool-capability override unavailable for trace {TraceId}. {OverrideReason}",
+                    traceId,
+                    overrideReason);
+            }
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
-        using var upstreamResponse = await providerFactory
-            .GetProvider(routingDecision.Profile)
-            .SendChatCompletionsAsync(
-                requestPayload,
-                routingDecision.Profile,
+        try
+        {
+            upstreamResponse = await providerFactory
+                .GetProvider(selectedProfile)
+                .SendChatCompletionsAsync(
+                    requestPayload,
+                    selectedProfile,
+                    stream,
+                    cancellationToken);
+        }
+        catch (Exception upstreamException) when (
+            upstreamException is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            var failedAtMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
+            var isTimeout = upstreamException is OperationCanceledException;
+            var statusCode = isTimeout ? StatusCodes.Status504GatewayTimeout : StatusCodes.Status502BadGateway;
+            var errorType = isTimeout ? "upstream_timeout" : "upstream_error";
+
+            logger.LogError(
+                upstreamException,
+                "Upstream chat completion call failed for trace {TraceId}. client={Client} selectedModel={SelectedModel} deployment={Deployment} stream={Stream} statusCode={StatusCode}",
+                traceId,
+                requestMetadata.Id,
+                selectedProfileName,
+                selectedProfile.Deployment,
                 stream,
-                cancellationToken);
+                statusCode);
+
+            capturedOutcome = new RequestOutcome(
+                statusCode,
+                failedAtMs,
+                Succeeded: false,
+                Error: upstreamException.Message,
+                HadTools: requestHadTools,
+                ToolOverrideApplied: toolOverrideApplied,
+                OverrideReason: overrideReason);
+            traceStore.AppendFacts(traceId, OpenAiApiUtilities.BuildUpstreamFacts(capturedOutcome));
+
+            context.Response.StatusCode = statusCode;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = new
+                {
+                    message = isTimeout
+                        ? "The upstream model did not respond in time."
+                        : "The upstream model could not be reached.",
+                    type = errorType
+                }
+            }, cancellationToken);
+            return Results.Empty;
+        }
+
         var elapsedMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
+        var upstreamSucceeded = upstreamResponse.IsSuccessStatusCode;
 
         logger.LogInformation(
-            "Upstream chat completion call finished with status {StatusCode} in {ElapsedMs} ms. Stream={Stream}",
+            "Upstream chat completion finished. traceId={TraceId} client={Client} selectedModel={SelectedModel} deployment={Deployment} stream={Stream} statusCode={StatusCode} latencyMs={LatencyMs} hadTools={HadTools} toolOverride={ToolOverride}",
+            traceId,
+            requestMetadata.Id,
+            selectedProfileName,
+            selectedProfile.Deployment,
+            stream,
             (int)upstreamResponse.StatusCode,
             elapsedMs,
-            stream);
+            requestHadTools,
+            toolOverrideApplied);
+
+        capturedOutcome = new RequestOutcome(
+            (int)upstreamResponse.StatusCode,
+            elapsedMs,
+            Succeeded: upstreamSucceeded,
+            Error: null,
+            HadTools: requestHadTools,
+            ToolOverrideApplied: toolOverrideApplied,
+            OverrideReason: overrideReason);
+        traceStore.AppendFacts(traceId, OpenAiApiUtilities.BuildUpstreamFacts(capturedOutcome));
 
         // Phase 8: fire shadow routing comparison in background (non-streaming only)
         if (!stream)
         {
             shadowRoutingService.FireAndForget(
                 requestPayload,
-                routingDecision.ProfileName,
+                selectedProfileName,
                 routingSelection.TraceId,
                 elapsedMs,
                 (int)upstreamResponse.StatusCode);
@@ -386,7 +555,10 @@ app.MapPost("/v1/chat/completions", async (
     }
     finally
     {
-        requestActivityStore.Complete(requestActivityId);
+        upstreamResponse?.Dispose();
+        requestActivityStore.Complete(
+            requestActivityId,
+            capturedOutcome ?? RequestOutcome.Failure("Request did not complete."));
     }
 });
 
