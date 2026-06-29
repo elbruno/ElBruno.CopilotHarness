@@ -12,6 +12,7 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
 {
     private const string OllamaModel = "ollama llama3.2";        // seeded: SupportsToolCalling = false
     private const string FoundryModel = "foundry gpt-5-mini";    // seeded: SupportsToolCalling = true
+    private const string LocalToolModel = "ollama llama3.1 (tools)"; // seeded: local tool-caller, preferred for overrides
 
     private static object ToolsPayload(string content) => new
     {
@@ -99,8 +100,8 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         Assert.True(entry.RequestHadTools);
         Assert.True(entry.ToolCapabilityOverrideApplied);
         Assert.False(string.IsNullOrWhiteSpace(entry.OverrideReason));
-        // The override redirected to the tool-capable Azure model.
-        Assert.Contains(FoundryModel, entry.OverrideReason!);
+        // The override redirected to the local tool-capable model (preferred over cloud).
+        Assert.Contains(LocalToolModel, entry.OverrideReason!);
     }
 
     [Fact]

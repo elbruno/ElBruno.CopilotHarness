@@ -67,7 +67,13 @@ needed tools and routed it to a model that can't do the job.
 [Model Registry → Tool-calling capability](Model_Registry.md#tool-calling)). The router
 detects when an incoming request includes `tools`/`functions` and, if the selected model has
 `supportsToolCalling = false`, automatically **overrides the route** to a tool-capable model
-before dispatch. The seeded `ollama llama3.2` ships with `supportsToolCalling = false`.
+before dispatch. The override **prefers a local (Ollama) tool-capable model** so tool requests
+stay local, falling back to the cloud model only when no local tool-caller is enabled. The
+seeded `ollama llama3.2` ships with `supportsToolCalling = false`; the seeded
+`ollama llama3.1 (tools)` (`llama3.1:8b`) ships with `supportsToolCalling = true` and is the
+default override target — run `ollama pull llama3.1:8b` once so it is available locally.
+`llama3.1:8b` streams *structured* `tool_calls` with valid arguments, which `llama3.2:3b`,
+`qwen2.5-coder`, and `gpt-oss` do not.
 
 On the [Live Routing](Live_Routing.md) page you can now see all of this:
 

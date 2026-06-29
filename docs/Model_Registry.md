@@ -113,12 +113,23 @@ proxy returned `HTTP 200`. Each connection therefore carries a `supportsToolCall
 - When `false` the model is treated as **chat-only**. If a request that includes
   `tools`/`functions` would otherwise route to this model, the **tool-capability guard**
   automatically overrides the route and dispatches to a tool-capable model instead. The
-  override and its reason are surfaced on the [Live Routing](Live_Routing.md) page as a 🛠
-  **tools** chip plus a highlighted override note.
+  override prefers a **local (Ollama) tool-capable model** so tool requests stay local, and
+  falls back to a cloud model only when no local tool-caller is enabled. The override and its
+  reason are surfaced on the [Live Routing](Live_Routing.md) page as a 🛠 **tools** chip plus
+  a highlighted override note.
 
-The seeded `ollama llama3.2` connection ships with `supportsToolCalling = false`, because the
-small local model is great for cheap classification and simple chat but cannot serve agentic
-tool-calling turns. See [Troubleshooting → Agentic / tool-calling request](Troubleshooting.md#tool-calling)
+The seeded models cover both jobs:
+
+- `ollama llama3.2` ships with `supportsToolCalling = false` (and is the **processor** model) —
+  it is great for cheap classification and simple chat, but its 3B size emits empty/malformed
+  `tool_call` arguments over a stream.
+- `ollama llama3.1 (tools)` ships with `supportsToolCalling = true` and is the **local
+  tool-caller**. `llama3.1:8b` reliably streams *structured* `tool_calls` with valid
+  arguments, so agentic/tool requests are overridden here instead of going to the cloud. You
+  must pull the model once: `ollama pull llama3.1:8b`. If it is not installed (or you disable
+  it), tool requests fall back to the cloud tool-capable model.
+
+See [Troubleshooting → Agentic / tool-calling request](Troubleshooting.md#tool-calling)
 for the end-to-end symptom + fix.
 
 In the Admin UI, the **Models** page exposes a *Supports tool-calling* toggle in the model

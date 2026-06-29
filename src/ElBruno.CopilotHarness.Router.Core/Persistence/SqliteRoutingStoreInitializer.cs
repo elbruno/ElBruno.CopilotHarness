@@ -26,6 +26,18 @@ public sealed class SqliteRoutingStoreInitializer(
             false); // llama3.2 cannot reliably perform tool/function calling
 
         yield return (
+            "seed-ollama-llama31-tools",
+            "ollama llama3.1 (tools)",
+            (int)ModelProviderType.Ollama,
+            "http://localhost:11434",
+            "llama3.1:8b",
+            "2024-10-21",
+            true,
+            false,
+            true,
+            true);  // local tool-caller: streams structured tool_calls with valid args (run: ollama pull llama3.1:8b)
+
+        yield return (
             "seed-foundry-gpt5mini",
             SeedDefaultModel,
             (int)ModelProviderType.AzureOpenAI,

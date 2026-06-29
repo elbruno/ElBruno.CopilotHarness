@@ -230,8 +230,9 @@ public static class OpenAiApiUtilities
 
     /// <summary>
     /// Finds the best enabled, tool-calling-capable model to redirect a tool request to, excluding
-    /// <paramref name="excludeProfileName"/>. Cloud/Azure models are preferred; ties broken by name for
-    /// deterministic selection. Returns null when no tool-capable model is available.
+    /// <paramref name="excludeProfileName"/>. Local (Ollama) models are preferred so tool requests stay
+    /// local; cloud/Azure models are used only as a fallback. Ties broken by name for deterministic
+    /// selection. Returns null when no tool-capable model is available.
     /// </summary>
     public static (string ProfileName, ModelProfileOptions Profile)? FindToolCapableModel(
         RoutingOptions options,
@@ -242,7 +243,7 @@ public static class OpenAiApiUtilities
                 entry.Value.Enabled &&
                 entry.Value.SupportsToolCalling &&
                 !string.Equals(entry.Key, excludeProfileName, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(entry => entry.Value.Type == ModelProviderType.AzureOpenAI)
+            .OrderByDescending(entry => entry.Value.Type == ModelProviderType.Ollama)
             .ThenBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
             .Select(entry => ((string ProfileName, ModelProfileOptions Profile)?)(entry.Key, entry.Value))
             .FirstOrDefault();

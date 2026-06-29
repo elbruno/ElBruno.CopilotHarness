@@ -55,7 +55,7 @@ public sealed class ToolCallingRoutingTests
     // ── B. FindToolCapableModel ───────────────────────────────────────────────
 
     [Fact]
-    public void FindToolCapableModel_ReturnsEnabledCapableModel_PreferringAzure()
+    public void FindToolCapableModel_ReturnsEnabledCapableModel_PreferringLocalOllama()
     {
         var options = new RoutingOptions
         {
@@ -63,7 +63,7 @@ public sealed class ToolCallingRoutingTests
             Profiles = new Dictionary<string, ModelProfileOptions>(StringComparer.OrdinalIgnoreCase)
             {
                 ["ollama"] = new() { Deployment = "llama3.2", Type = ModelProviderType.Ollama, Enabled = true, SupportsToolCalling = false },
-                ["local-capable"] = new() { Deployment = "qwen", Type = ModelProviderType.Ollama, Enabled = true, SupportsToolCalling = true },
+                ["local-capable"] = new() { Deployment = "llama3.1:8b", Type = ModelProviderType.Ollama, Enabled = true, SupportsToolCalling = true },
                 ["gpt5mini"] = new() { Deployment = "gpt-5-mini", Type = ModelProviderType.AzureOpenAI, Enabled = true, SupportsToolCalling = true }
             }
         };
@@ -71,9 +71,28 @@ public sealed class ToolCallingRoutingTests
         var result = OpenAiApiUtilities.FindToolCapableModel(options, excludeProfileName: "ollama");
 
         Assert.NotNull(result);
-        // Azure model is preferred over the Ollama one even though both are tool-capable.
+        // The local Ollama tool-caller is preferred over the cloud model so tool requests stay local.
+        Assert.Equal("local-capable", result!.Value.ProfileName);
+        Assert.Equal("llama3.1:8b", result.Value.Profile.Deployment);
+    }
+
+    [Fact]
+    public void FindToolCapableModel_FallsBackToCloud_WhenNoLocalToolModel()
+    {
+        var options = new RoutingOptions
+        {
+            DefaultProfile = "ollama",
+            Profiles = new Dictionary<string, ModelProfileOptions>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ollama"] = new() { Deployment = "llama3.2", Type = ModelProviderType.Ollama, Enabled = true, SupportsToolCalling = false },
+                ["gpt5mini"] = new() { Deployment = "gpt-5-mini", Type = ModelProviderType.AzureOpenAI, Enabled = true, SupportsToolCalling = true }
+            }
+        };
+
+        var result = OpenAiApiUtilities.FindToolCapableModel(options, excludeProfileName: "ollama");
+
+        Assert.NotNull(result);
         Assert.Equal("gpt5mini", result!.Value.ProfileName);
-        Assert.Equal("gpt-5-mini", result.Value.Profile.Deployment);
     }
 
     [Fact]
