@@ -38,19 +38,22 @@ else
 
     @if (_feed.Requests.Count > 0)
     {
+        <p class="summary-caption muted" title="These badges group requests by the classifier's secondary intent guess — not by the rule that was actually chosen.">
+            By classifier intent (heuristic) · the matched <strong>rule</strong> below is what actually routes each request.
+        </p>
         <div class="summary-cards">
             @foreach (var group in _feed.Requests.GroupBy(r => string.IsNullOrWhiteSpace(r.ClassificationIntent) ? "unknown" : r.ClassificationIntent).OrderByDescending(g => g.Count()))
             {
                 <article class="summary-card">
-                    <span class="intent-badge intent-@group.Key">@group.Key</span>
+                    <span class="intent-badge intent-@group.Key">intent: @group.Key</span>
                     <p>@group.Count() request(s) · @((100.0 * group.Count() / _feed.Requests.Count).ToString("0")) %</p>
                 </article>
             }
             <article class="summary-card">
-                <span class="muted">Classifier source</span>
+                <span class="muted">Decision source</span>
                 <p>
-                    🧠 @_feed.Requests.Count(r => r.ClassifierSource == "processor-model") processor ·
-                    ⚙️ @_feed.Requests.Count(r => r.ClassifierSource != "processor-model") deterministic
+                    🧠 @_feed.Requests.Count(r => r.ClassifierSource == "processor-model") local model ·
+                    ⚙️ @_feed.Requests.Count(r => r.ClassifierSource != "processor-model") heuristic
                 </p>
             </article>
         </div>
@@ -181,18 +184,23 @@ else
                         </div>
                         <span class="arrow">→</span>
                         <div class="stage stage-processor">
-                            <span class="stage-label">@(request.ClassifierSource == "processor-model" ? "🧠 Processor" : "⚙️ Heuristic")</span>
-                            <span class="intent-badge intent-@(string.IsNullOrWhiteSpace(request.ClassificationIntent) ? "unknown" : request.ClassificationIntent)">
-                                @(string.IsNullOrWhiteSpace(request.ClassificationIntent) ? "unknown" : request.ClassificationIntent)
+                            <span class="stage-label" title="How the rule below was chosen">
+                                @(request.ClassifierSource == "processor-model" ? "🧠 Decided by local model" : "⚙️ Keyword/heuristic fallback")
                             </span>
                             <span class="stage-sub">
                                 @(string.IsNullOrWhiteSpace(request.ProcessorModel) ? request.ClassificationComplexity : request.ProcessorModel)
                                 · @request.ClassificationConfidence.ToString("0.00")
                             </span>
+                            @if (!string.IsNullOrWhiteSpace(request.ClassificationIntent))
+                            {
+                                <span class="intent-hint" title="Secondary heuristic guess about the request — NOT the rule that was chosen.">
+                                    @(request.ClassifierSource == "processor-model" ? "intent (guess): " : "intent: ")@request.ClassificationIntent
+                                </span>
+                            }
                         </div>
                         <span class="arrow">→</span>
-                        <div class="stage stage-rule">
-                            <span class="stage-label">Rule</span>
+                        <div class="stage stage-rule stage-primary">
+                            <span class="stage-label">Matched rule</span>
                             <span class="stage-value"><strong>@(request.MatchedRuleName ?? "—")</strong></span>
                         </div>
                         <span class="arrow">→</span>

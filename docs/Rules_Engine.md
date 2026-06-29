@@ -192,9 +192,81 @@ Key properties:
 | Rule | Paragraph (summary) | Engine |
 |---|---|---|
 | Simple chat | Greetings and small talk in any language (`hi`, `hola`, `thanks`) plus lightweight web-search lookups answered with Copilot's search tools. | `ollama llama3.2` (local) |
-| GitHub actions | Commit / push / open PRs and other Git operations. | `ollama llama3.2` (local) |
+| GitHub actions | GitHub *actions* (commit / push / open or merge PRs, branches, tags, releases, labels) **and** read-only GitHub questions (open issues, PR status, repository status). | `ollama llama3.2` (local) |
 | Launch App actions | Run / build / start the application. | `ollama llama3.2` (local) |
 | Others actions *(catch-all)* | Everything else, including complex coding tasks. | `foundry gpt-5-mini` (cloud) |
+
+> The exact paragraphs, priorities, and engines for every seeded rule are documented in
+> [Default starter rules](#default-starter-rules).
+
+## Default starter rules
+
+When no rules exist, the **Rules** page (and the Setup wizard) seeds the starter set below via
+`GenerateStarterRulesAsync`. All four are `SemanticMatch` rules. The first three route to the
+**local** processor model (🖥️, the model flagged `IsProcessor`); the catch-all routes to the
+**cloud** model (☁️). They are listed here in evaluation order (lowest priority first).
+
+| # | Name | Condition type | Target engine | Priority | Enabled | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | Simple chat | `SemanticMatch` | local 🖥️ | 5 | ✅ | Greetings, small talk, and lightweight web-search lookups. |
+| 2 | GitHub actions | `SemanticMatch` | local 🖥️ | 10 | ✅ | Any GitHub request — repo-changing actions **and** read-only repo/issue/PR questions. |
+| 3 | Launch App actions | `SemanticMatch` | local 🖥️ | 20 | ✅ | Launch / run / build / start the application. |
+| 4 | Others actions *(catch-all)* | `SemanticMatch` | cloud ☁️ | 30 | ✅ | Everything else, including complex coding tasks. |
+
+The **full semantic paragraph** for each rule (so they can be recreated from scratch):
+
+**1 · Simple chat** — *local, priority 5*
+
+> Captures short, simple, conversational prompts in any language - greetings and small talk
+> such as 'hi', 'hello', 'hola', 'thanks', 'gracias', 'how are you' - that do not require
+> reading or changing code. Also captures lightweight information lookups that GitHub Copilot
+> answers using its web search tools, for example 'search the web for ...', 'look up ...',
+> 'find online ...', 'what is the latest ...', or general questions about current facts or
+> documentation.
+
+**2 · GitHub actions** — *local, priority 10*
+
+> Captures all GitHub-related requests - both actions that change the repository (commit all
+> the changes, push to GitHub, create or merge a pull request, manage branches, tags, releases
+> or labels) AND read-only questions about the repository or its GitHub state (are there any
+> open issues, list or check issues, pull request status, repository status, list branches,
+> labels, releases, who opened an issue, what PRs are open). Any request about GitHub issues,
+> pull requests, or repository status belongs here.
+
+**3 · Launch App actions** — *local, priority 20*
+
+> Captures all actions where the user asks Copilot to launch, run, build or start the
+> application.
+
+**4 · Others actions** *(catch-all)* — *cloud, priority 30*
+
+> Catch-all rule. Captures every request that does not match the other rules, including complex
+> coding tasks.
+
+> Because *Others actions* is the **last enabled** semantic rule, it also doubles as the
+> fallback when the processor model is unavailable (see [How the analyzer works](#how-the-analyzer-works)).
+
+### Intent vs. rule (why the Live view shows both)
+
+A request carries **two independent classification signals**, and they can legitimately differ:
+
+- **Classifier intent** — a *secondary heuristic* label (`simple-chat`, `github-actions`,
+  `launch-app`, `code-task`, `long-form`) produced by the quick intent classifier from the
+  first ~200 characters. It is only a guess and is **not** what routes the request.
+- **Matched rule** — the rule the **local processor model** actually picks by reading the
+  semantic rule paragraphs (or the deterministic fallback). This is what determines the target
+  engine and is shown in the **rule** and **model** columns.
+
+For example, the prompt *"are there any open issues in the repo?"* may get the intent guess
+`github-actions` while the analyzer correctly matches a different rule (e.g. the broadened
+*GitHub actions* paragraph, or *Others actions*). The matched rule wins. For that reason the
+[Live Routing](Live_Routing.md) page presents the **matched rule** as the dominant signal,
+shows **how** it was decided (🧠 *decided by local model* vs ⚙️ *keyword/heuristic fallback*),
+and renders the intent only as a small, muted `intent:` / `intent (guess):` hint so it is never
+mistaken for the chosen rule. The intent-grouped badges near the top of the page are likewise
+labelled *By classifier intent (heuristic)*.
+
+---
 
 ## Editing rules in the Admin UI
 

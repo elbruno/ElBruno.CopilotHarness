@@ -498,7 +498,7 @@ else
 
             await Api.CreateRuleAsync(new RoutingRuleUpsertRequest(
                 "GitHub actions",
-                "Captures all GitHub related actions, for example: commit all the changes, push to GitHub, create a pull request.",
+                "Captures all GitHub-related requests - both actions that change the repository (commit all the changes, push to GitHub, create or merge a pull request, manage branches, tags, releases or labels) AND read-only questions about the repository or its GitHub state (are there any open issues, list or check issues, pull request status, repository status, list branches, labels, releases, who opened an issue, what PRs are open). Any request about GitHub issues, pull requests, or repository status belongs here.",
                 "SemanticMatch",
                 string.Empty,
                 localModel.Name,

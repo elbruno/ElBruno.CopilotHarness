@@ -37,6 +37,27 @@
     text-transform: lowercase;
 }
 
+.summary-caption {
+    margin: 1rem 0 0.35rem;
+    font-size: 0.82rem;
+}
+
+/* Secondary, muted intent guess shown inside a pipeline card. It must never
+   compete visually with the matched rule. */
+.intent-hint {
+    display: inline-block;
+    margin-top: 0.2rem;
+    font-size: 0.72rem;
+    font-style: italic;
+    color: #6e7781;
+    background: #eef1f4;
+    border: 1px solid #e1e4e8;
+    border-radius: 4px;
+    padding: 0.02rem 0.35rem;
+    text-transform: lowercase;
+    cursor: help;
+}
+
 .intent-simple-chat { background: #1f883d; }
 .intent-github-actions { background: #8250df; }
 .intent-launch-app { background: #0969da; }
@@ -93,6 +114,26 @@
     font-size: 0.92rem;
     word-break: break-word;
 }
+
+/* The matched rule is the dominant signal in every card. */
+.stage-primary {
+    background: #ddf4ff;
+    border: 1px solid #54aeff;
+    flex: 1.4 1 9rem;
+}
+
+    .stage-primary .stage-label {
+        color: #0550ae;
+        font-weight: 700;
+    }
+
+    .stage-primary .stage-value {
+        font-size: 1.02rem;
+    }
+
+    .stage-primary .stage-value strong {
+        color: #0a3069;
+    }
 
 .stage-sub {
     font-size: 0.78rem;
