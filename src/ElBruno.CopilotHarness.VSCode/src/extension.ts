@@ -78,6 +78,9 @@ type RoutedRequestView = {
   promptCharacters: number;
   classificationIntent: string;
   classificationComplexity: string;
+  classifierSource?: string;
+  processorModel?: string | null;
+  classificationConfidence?: number;
 };
 
 type RoutingFeedResponse = {
@@ -327,13 +330,20 @@ function renderLiveRoutingHtml(feed: RoutingFeedResponse): string {
   const nonce = createNonce();
   const rows = feed.requests.map(request => {
     const prompt = request.promptPreview
-      ? escapeHtml(request.promptPreview.length > 80 ? `${request.promptPreview.slice(0, 80)}…` : request.promptPreview)
+      ? escapeHtml(request.promptPreview.length > 60 ? `${request.promptPreview.slice(0, 60)}…` : request.promptPreview)
       : `<span class="muted">(${request.promptCharacters} chars)</span>`;
+    const intent = request.classificationIntent ? escapeHtml(request.classificationIntent) : 'unknown';
+    const sourceIcon = request.classifierSource === 'processor-model' ? '🧠' : '⚙️';
+    const confidence = typeof request.classificationConfidence === 'number'
+      ? ` (${request.classificationConfidence.toFixed(2)})`
+      : '';
+    const intentCell = `<span class="badge badge-${intent}">${intent}</span> <span class="muted">${sourceIcon}${escapeHtml(confidence)}</span>`;
     return `<tr>
       <td>${escapeHtml(new Date(request.createdAtUtc).toLocaleTimeString())}</td>
-      <td>${prompt}</td>
-      <td><strong>${escapeHtml(request.selectedModel)}</strong></td>
+      <td>${prompt}<br/><span class="muted">${escapeHtml(request.clientDisplayName)}</span></td>
+      <td>${intentCell}</td>
       <td>${escapeHtml(request.matchedRuleName ?? '-')}</td>
+      <td><strong>${escapeHtml(request.selectedModel)}</strong></td>
       <td>${escapeHtml(request.explanation)}</td>
       <td><a href="#" data-trace="${escapeHtml(request.traceId)}">${escapeHtml(request.traceId)}</a></td>
     </tr>`;
@@ -357,16 +367,22 @@ function renderLiveRoutingHtml(feed: RoutingFeedResponse): string {
       .muted { color: var(--vscode-descriptionForeground); }
       button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; margin-bottom: 8px; }
       a { color: var(--vscode-textLink-foreground); }
+      .badge { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #fff; background: #57606a; }
+      .badge-simple-chat { background: #1f883d; }
+      .badge-github-actions { background: #8250df; }
+      .badge-launch-app { background: #0969da; }
+      .badge-code-task { background: #bc4c00; }
+      .badge-long-form { background: #cf222e; }
     </style>
   </head>
   <body>
     <h2>Live Routing</h2>
-    <p class="muted">Prompt → model → rule → explanation. Snapshot at ${escapeHtml(feed.generatedAtUtc)}.</p>
+    <p class="muted">Prompt → processor classifies intent → rule → model. Snapshot at ${escapeHtml(feed.generatedAtUtc)}.</p>
     ${captureNote}
     <button id="refresh">Refresh</button>
     <table>
-      <thead><tr><th>Time</th><th>Prompt</th><th>Model</th><th>Rule</th><th>Explanation</th><th>Trace</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" class="muted">No routed requests yet.</td></tr>'}</tbody>
+      <thead><tr><th>Time</th><th>Prompt</th><th>Intent</th><th>Rule</th><th>Model</th><th>Explanation</th><th>Trace</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" class="muted">No routed requests yet.</td></tr>'}</tbody>
     </table>
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();

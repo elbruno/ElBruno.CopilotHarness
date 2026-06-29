@@ -47,6 +47,15 @@ public sealed class ModelProfileOptions
     public string ApiKey { get; init; } = string.Empty;
 
     public bool Enabled { get; init; } = true;
+
+    /// <summary>True when this model is the classifier "processor" model. At most one model is the processor.</summary>
+    public bool IsProcessor { get; init; }
+
+    /// <summary>
+    /// When false, non-default sampling parameters (temperature, top_p) are stripped before the request is
+    /// forwarded upstream. Set false for models that only accept the default temperature (e.g. gpt-5 family).
+    /// </summary>
+    public bool SupportsCustomTemperature { get; init; } = true;
 }
 
 public sealed class BasicRulesOptions
@@ -88,7 +97,10 @@ public enum RoutingRuleConditionType
     PromptContainsKeyword = 5,
 
     /// <summary>Matches when any prompt text matches the regular expression value.</summary>
-    PromptMatchesRegex = 6
+    PromptMatchesRegex = 6,
+
+    /// <summary>Matches when the classifier-detected intent equals the value (case-insensitive).</summary>
+    IntentEquals = 7
 }
 
 /// <summary>

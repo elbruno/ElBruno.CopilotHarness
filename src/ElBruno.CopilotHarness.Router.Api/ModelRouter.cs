@@ -16,7 +16,10 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
 
     public RoutingDecision SelectModel(JsonObject requestBody) => SelectModel(requestBody, _options);
 
-    public static RoutingDecision SelectModel(JsonObject requestBody, RoutingOptions options)
+    public static RoutingDecision SelectModel(JsonObject requestBody, RoutingOptions options) =>
+        SelectModel(requestBody, options, intent: null);
+
+    public static RoutingDecision SelectModel(JsonObject requestBody, RoutingOptions options, string? intent)
     {
         var requestedModel = GetStringValue(requestBody["model"]);
         if (!string.IsNullOrWhiteSpace(requestedModel) &&
@@ -30,7 +33,7 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
         {
             foreach (var rule in options.RuleSet.Where(rule => rule.Enabled).OrderBy(rule => rule.Priority))
             {
-                if (Matches(rule, requestBody) &&
+                if (Matches(rule, requestBody, intent) &&
                     TryGetEnabledProfile(options, rule.TargetModel, out var ruleProfileName, out var ruleProfile))
                 {
                     return new RoutingDecision(ruleProfileName, ruleProfile, $"Matched rule '{rule.Name}'.");
@@ -76,7 +79,7 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
         return new RoutingDecision(fallback.Key, fallback.Value, "Fallback to first enabled model.");
     }
 
-    private static bool Matches(RoutingRuleDefinition rule, JsonObject requestBody) =>
+    private static bool Matches(RoutingRuleDefinition rule, JsonObject requestBody, string? intent) =>
         rule.ConditionType switch
         {
             RoutingRuleConditionType.Always => true,
@@ -90,6 +93,9 @@ public sealed class BasicModelRouter(IOptions<RoutingOptions> options) : IModelR
                 !string.IsNullOrWhiteSpace(rule.ConditionValue) &&
                 GetPromptText(requestBody).Contains(rule.ConditionValue, StringComparison.OrdinalIgnoreCase),
             RoutingRuleConditionType.PromptMatchesRegex => MatchesRegex(rule.ConditionValue, GetPromptText(requestBody)),
+            RoutingRuleConditionType.IntentEquals =>
+                !string.IsNullOrWhiteSpace(intent) &&
+                string.Equals(intent, rule.ConditionValue, StringComparison.OrdinalIgnoreCase),
             _ => false
         };
 

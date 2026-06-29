@@ -28,6 +28,18 @@ public sealed class ModelConnectionEntity
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// When true, this model is the "processor" used by the classifier to read the first chars of a
+    /// prompt and decide intent/routing. At most one model should be the processor (default: the Ollama model).
+    /// </summary>
+    public bool IsProcessor { get; set; }
+
+    /// <summary>
+    /// When false, the router strips non-default sampling parameters (e.g. <c>temperature</c>, <c>top_p</c>)
+    /// before forwarding upstream. Required for models such as gpt-5 that only accept the default temperature.
+    /// </summary>
+    public bool SupportsCustomTemperature { get; set; } = true;
+
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

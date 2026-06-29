@@ -67,11 +67,13 @@ public sealed class AzureFoundryChatCompletionsProvider(IHttpClientFactory httpC
         var client = httpClientFactory.CreateClient("model-provider");
         client.BaseAddress = FoundryOptions.GetAzureResourceBase(endpoint);
 
+        var body = PayloadSanitizer.Sanitize(payload, model);
+
         var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"openai/deployments/{Uri.EscapeDataString(model.Deployment)}/chat/completions?api-version={Uri.EscapeDataString(apiVersion)}")
         {
-            Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json")
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
         };
 
         request.Headers.Add("api-key", apiKey);
@@ -98,7 +100,7 @@ public sealed class OllamaChatCompletionsProvider(IHttpClientFactory httpClientF
         var client = httpClientFactory.CreateClient("model-provider");
         client.BaseAddress = FoundryOptions.GetNormalizedEndpoint(model.Endpoint);
 
-        var body = (JsonObject)payload.DeepClone();
+        var body = (JsonObject)PayloadSanitizer.Sanitize(payload, model).DeepClone();
         body["model"] = model.Deployment;
         body["stream"] = stream;
 

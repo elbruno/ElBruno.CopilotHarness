@@ -56,12 +56,12 @@ Multi-provider LLM connections. See [Model Registry](Model_Registry.md).
 |---|---|---|
 | `GET` | `/admin/models` | List all model connections. API keys are never returned; each entry exposes `hasApiKey`. |
 | `GET` | `/admin/models/{id}` | Get one model connection. |
-| `POST` | `/admin/models` | Create a connection. Body: `ModelConnectionUpsertRequest` `{ name, type, endpoint, modelName, apiVersion, apiKey?, enabled }`. `type` is `ollama` or `azure-openai`. |
+| `POST` | `/admin/models` | Create a connection. Body: `ModelConnectionUpsertRequest` `{ name, type, endpoint, modelName, apiVersion, apiKey?, enabled, isProcessor?, supportsCustomTemperature? }`. `type` is `ollama` or `azure-openai`. `isProcessor=true` clears the flag on all other models (single-processor invariant). `supportsCustomTemperature` defaults to `true`. |
 | `PUT` | `/admin/models/{id}` | Update a connection. `apiKey`: `null` keeps the existing key, `""` clears it, non-empty replaces it. |
 | `DELETE` | `/admin/models/{id}` | Delete a connection. |
 | `POST` | `/admin/models/{id}/test` | Connectivity probe. Returns `{ success, message, latencyMs }`. |
 
-`ModelConnectionDto`: `{ id, name, type, endpoint, modelName, apiVersion, hasApiKey, enabled, updatedAtUtc }`.
+`ModelConnectionDto`: `{ id, name, type, endpoint, modelName, apiVersion, hasApiKey, enabled, isProcessor, supportsCustomTemperature, updatedAtUtc }`.
 
 ### Rules Engine — `/admin/rules`
 
@@ -79,7 +79,7 @@ Condition-based routing rules + default model. See [Rules Engine](Rules_Engine.m
 | `GET` | `/admin/rules/default` | Get the default model name. |
 | `PUT` | `/admin/rules/default` | Set the default model. Body: `{ modelName }`. |
 
-`conditionType` is one of: `Always`, `PromptSizeAtLeast`, `IsStreaming`, `HasSystemMessage`, `RequestedModelEquals`, `PromptContainsKeyword`, `PromptMatchesRegex`.
+`conditionType` is one of: `Always`, `PromptSizeAtLeast`, `IsStreaming`, `HasSystemMessage`, `RequestedModelEquals`, `PromptContainsKeyword`, `PromptMatchesRegex`, `IntentEquals`. For `IntentEquals`, `conditionValue` is an intent label (`simple-chat`, `github-actions`, `launch-app`, `code-task`, `long-form`) produced by the processor-model classifier — see [Rules Engine](Rules_Engine.md#intent-classification).
 
 `RoutingRuleDto`: `{ id, name, description, conditionType, conditionValue, targetModel, priority, enabled, updatedAtUtc }`.
 
@@ -114,17 +114,26 @@ Returns the **Live Routing** feed — one row per routed request combining promp
       "requestedModel": "elbruno.copilotharness",
       "selectedModel": "small",
       "deployment": "llama3.2",
-      "matchedRuleName": "Short prompts",
-      "reason": "Matched rule 'Short prompts'.",
-      "explanation": "Routed to 'small' because rule 'Short prompts' matched. Classified as conversational/low.",
+      "matchedRuleName": "Simple chat",
+      "reason": "Matched rule 'Simple chat'.",
+      "explanation": "processor 'ollama llama3.2' classified intent=simple-chat (0.92) → rule 'Simple chat' matched → routed to 'ollama llama3.2'.",
       "promptPreview": "hi",
       "promptCharacters": 2,
-      "classificationIntent": "conversational",
-      "classificationComplexity": "low"
+      "classificationIntent": "simple-chat",
+      "classificationComplexity": "low",
+      "classifierSource": "processor-model",
+      "processorModel": "ollama llama3.2",
+      "classificationConfidence": 0.92
     }
   ]
 }
 ```
+
+`classifierSource` is `processor-model` when the designated processor model classified the
+request, or `deterministic` when the built-in fallback was used (processor disabled,
+unreachable, timed out, or returned an unusable answer). `processorModel` names the model
+that performed the classification. `clientDisplayName` is mapped from the user-agent (e.g.
+VS Code Copilot).
 
 `promptPreview` is only populated when `Telemetry:CapturePromptText=true` on the router (truncated to `Telemetry:PromptPreviewMaxChars`, secrets redacted when `Telemetry:RedactSecrets=true`). When capture is off, `promptCaptureEnabled` is `false` and `promptPreview` is empty, but the model/rule/explanation are still returned.
 

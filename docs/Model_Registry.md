@@ -24,6 +24,8 @@ connection is an independent, fully-described endpoint:
 | `modelName` | The upstream model identifier — the Ollama model name **or** the Azure deployment name. |
 | `apiVersion` | Azure API version (Azure only; ignored for Ollama). |
 | `apiKey` | API key, **encrypted at rest** (Azure only; Ollama needs none). Never returned to the UI in plaintext. |
+| `isProcessor` | Marks the **processor model** — the single model used to classify incoming prompts into an intent. At most one connection can be the processor. See [Processor model](#processor-model). |
+| `supportsCustomTemperature` | Whether the upstream accepts a non-default `temperature`/`top_p`. When `false`, the harness strips those parameters before forwarding. See [Temperature capability](#temperature-capability). |
 | `enabled` | Whether the connection is eligible for routing. |
 
 The registry is the single source of truth for "which models exist." Routing rules and
@@ -51,6 +53,49 @@ the default-model selector simply point at registry entries by `name`.
   Foundry configuration.
 - `modelName` is the **deployment name** (e.g. `gpt-5-mini`, `gpt-5.5`).
 - `apiVersion` defaults to `2024-10-21`.
+
+---
+
+## Processor model
+
+The harness uses one designated **processor model** to classify each incoming request
+before routing it. The processor reads only the first ~200 characters of the prompt and
+returns a compact intent label (e.g. `simple-chat`, `github-actions`, `launch-app`,
+`code-task`, `long-form`). Routing rules can then match on that intent (see the
+`IntentEquals` condition in [Rules Engine](Rules_Engine.md)).
+
+- **Single processor invariant.** At most one connection has `isProcessor = true`. Setting
+  it on one model automatically clears it on every other model (enforced server-side).
+- **Default.** The seeded `ollama llama3.2` connection is the processor, so classification
+  runs locally and cheaply by default.
+- **Real LLM call with deterministic fallback.** The processor is invoked per request via
+  its provider. If it is disabled, missing, unreachable, times out, or returns an
+  off-vocabulary/unparseable answer, the harness falls back to a fast built-in
+  **deterministic** keyword classifier. The path actually used is surfaced on the
+  [Live Routing](Live_Routing.md) page as the *classifier source*
+  (`processor-model` vs `deterministic`).
+- **Tuning.** Configure via the `Classifier` options section: `Enabled` (default `true`),
+  `PreviewChars` (default `200`), `TimeoutMs` (default `4000`).
+
+In the Admin UI, the **Models** page shows which connection is the processor and lets you
+move the flag with a single toggle.
+
+---
+
+## Temperature capability
+
+Some upstreams (notably `gpt-5-mini`) reject any non-default `temperature` — VS Code
+Copilot sends `temperature: 0.1`, which produces a `400 Unsupported value` error. Each
+connection therefore carries a `supportsCustomTemperature` flag:
+
+- When `true` (default) the client payload is forwarded unchanged.
+- When `false` the harness strips `temperature` and `top_p` from the outgoing payload
+  before dispatch, so the upstream applies its own default. This is handled generically by
+  `PayloadSanitizer`, so any future model that rejects these parameters just needs the flag
+  cleared — no code changes.
+
+The seeded `foundry gpt-5-mini` connection ships with `supportsCustomTemperature = false`.
+See [Troubleshooting](Troubleshooting.md#temperature-400) for the end-to-end symptom + fix.
 
 ---
 
@@ -101,10 +146,10 @@ A **Test connection** button calls the probe endpoint and shows the result inlin
 
 A fresh database is seeded with two example connections so routing works out of the box:
 
-| Name | Type | Endpoint | Model / Deployment |
-|---|---|---|---|
-| `ollama llama3.2` | `ollama` | `http://localhost:11434` | `llama3.2` |
-| `foundry gpt-5-mini` | `azure-openai` | *(shared Foundry endpoint)* | `gpt-5-mini` |
+| Name | Type | Endpoint | Model / Deployment | Processor | Custom temp |
+|---|---|---|---|---|---|
+| `ollama llama3.2` | `ollama` | `http://localhost:11434` | `llama3.2` | ✅ | ✅ |
+| `foundry gpt-5-mini` | `azure-openai` | *(shared Foundry endpoint)* | `gpt-5-mini` | — | ❌ |
 
 `foundry gpt-5-mini` is also the seeded **default model**.
 

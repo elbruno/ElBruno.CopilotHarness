@@ -398,11 +398,15 @@ public static class AdminEndpoints
                     var clientId = GetContextValue(trace, "request.client.id") ?? "unknown";
                     var matchedRule = ExtractMatchedRuleName(trace.Decision.Reason);
                     int.TryParse(GetContextValue(trace, "request.promptCharacters"), out var promptChars);
+                    var classifierSource = GetContextValue(trace, "classifier.source")
+                        ?? (string.IsNullOrWhiteSpace(trace.Classification.Source) ? "deterministic" : trace.Classification.Source);
+                    var processorModel = GetContextValue(trace, "classifier.processorModel") ?? trace.Classification.ProcessorModel;
+                    var userAgent = GetContextValue(trace, "request.client.userAgent");
                     return new RoutedRequestView(
                         TraceId: trace.TraceId,
                         CreatedAtUtc: trace.CreatedAtUtc,
                         ClientId: clientId,
-                        ClientDisplayName: GetClientDisplayName(clientId),
+                        ClientDisplayName: GetClientDisplayName(clientId, userAgent),
                         Endpoint: GetContextValue(trace, "request.endpoint") ?? "unknown",
                         Stream: string.Equals(GetContextValue(trace, "request.stream"), "true", StringComparison.OrdinalIgnoreCase),
                         RequestedModel: GetContextValue(trace, "request.requestedModel"),
@@ -410,11 +414,14 @@ public static class AdminEndpoints
                         Deployment: trace.Decision.Profile.Deployment,
                         MatchedRuleName: matchedRule,
                         Reason: trace.Decision.Reason,
-                        Explanation: BuildExplanation(trace, matchedRule),
+                        Explanation: BuildExplanation(trace, matchedRule, classifierSource, processorModel),
                         PromptPreview: GetContextValue(trace, PromptPrivacy.PromptPreviewFactKey),
                         PromptCharacters: promptChars,
                         ClassificationIntent: trace.Classification.Intent,
-                        ClassificationComplexity: trace.Classification.Complexity);
+                        ClassificationComplexity: trace.Classification.Complexity,
+                        ClassifierSource: classifierSource,
+                        ProcessorModel: processorModel,
+                        ClassificationConfidence: trace.Classification.Confidence);
                 })
                 .ToList();
 
@@ -651,6 +658,8 @@ public static class AdminEndpoints
             model.ApiVersion,
             model.HasApiKey,
             model.Enabled,
+            model.IsProcessor,
+            model.SupportsCustomTemperature,
             model.UpdatedAtUtc);
 
     private static UpsertModelConnectionRequest ToUpsertModelConnectionRequest(ModelConnectionUpsertRequest request) =>
@@ -661,7 +670,9 @@ public static class AdminEndpoints
             request.ModelName?.Trim() ?? string.Empty,
             request.ApiVersion?.Trim() ?? string.Empty,
             request.ApiKey,
-            request.Enabled);
+            request.Enabled,
+            request.IsProcessor,
+            request.SupportsCustomTemperature);
 
     private static RoutingRuleDto ToRoutingRuleDto(RoutingRuleRecord rule) =>
         new(
@@ -743,36 +754,50 @@ public static class AdminEndpoints
         return end < 0 ? null : reason[start..end];
     }
 
-    private static string BuildExplanation(RoutingExecutionTrace trace, string? matchedRule)
+    private static string BuildExplanation(
+        RoutingExecutionTrace trace,
+        string? matchedRule,
+        string classifierSource,
+        string? processorModel)
     {
         var model = trace.Decision.ProfileName;
         var classification = trace.Classification;
-        var classificationSuffix = string.IsNullOrWhiteSpace(classification.Intent)
-            ? string.Empty
-            : $" Classified as {classification.Intent}/{classification.Complexity}.";
+
+        var classifierPhrase = classifierSource switch
+        {
+            "processor-model" when !string.IsNullOrWhiteSpace(processorModel) =>
+                $"processor '{processorModel}' classified intent={classification.Intent} ({classification.Confidence:0.00})",
+            "processor-model" =>
+                $"the processor model classified intent={classification.Intent} ({classification.Confidence:0.00})",
+            _ when !string.IsNullOrWhiteSpace(classification.Intent) =>
+                $"the deterministic classifier detected intent={classification.Intent} ({classification.Confidence:0.00})",
+            _ => string.Empty
+        };
+
+        var prefix = string.IsNullOrWhiteSpace(classifierPhrase) ? string.Empty : $"{classifierPhrase} → ";
 
         if (!string.IsNullOrWhiteSpace(matchedRule))
         {
-            return $"Routed to '{model}' because rule '{matchedRule}' matched.{classificationSuffix}";
+            return $"{prefix}rule '{matchedRule}' matched → routed to '{model}'.";
         }
 
         var reason = trace.Decision.Reason;
         if (reason.Contains("Explicit", StringComparison.OrdinalIgnoreCase))
         {
-            return $"Routed to '{model}' because the client explicitly requested it.{classificationSuffix}";
+            return $"{prefix}client explicitly requested → routed to '{model}'.";
         }
 
         if (reason.Contains("Default", StringComparison.OrdinalIgnoreCase))
         {
-            return $"Routed to '{model}' as the configured default model.{classificationSuffix}";
+            return $"{prefix}no rule matched → routed to default model '{model}'.";
         }
 
         if (reason.Contains("Fallback", StringComparison.OrdinalIgnoreCase))
         {
-            return $"Routed to '{model}' as a fallback (no rule or default matched).{classificationSuffix}";
+            return $"{prefix}no rule or default matched → fell back to '{model}'.";
         }
 
-        return $"Routed to '{model}'. {reason}{classificationSuffix}".Trim();
+        return $"{prefix}routed to '{model}'. {reason}".Trim();
     }
 
     private static async Task<ModelConnectionTestResult> ProbeModelAsync(
@@ -843,14 +868,40 @@ public static class AdminEndpoints
     private static string? GetContextValue(RoutingExecutionTrace trace, string key) =>
         trace.Context.FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase))?.Value;
 
-    private static string GetClientDisplayName(string clientId) =>
-        clientId.ToLowerInvariant() switch
+    private static string GetClientDisplayName(string clientId) => GetClientDisplayName(clientId, null);
+
+    private static string GetClientDisplayName(string clientId, string? userAgent)
+    {
+        var byId = clientId.ToLowerInvariant() switch
         {
-            "vscode" => "VS Code",
+            "vscode" => "VS Code Copilot",
+            "vscode-copilot" => "VS Code Copilot",
             "copilot-cli" => "Copilot CLI",
             "copilot-app" => "Copilot App",
-            _ => "Unknown"
+            _ => null
         };
+
+        if (byId is not null)
+        {
+            return byId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(userAgent))
+        {
+            var ua = userAgent.ToLowerInvariant();
+            if (ua.Contains("vscode") || ua.Contains("visual studio code") || ua.Contains("copilot-chat"))
+            {
+                return "VS Code Copilot";
+            }
+
+            if (ua.Contains("copilot"))
+            {
+                return "GitHub Copilot";
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(clientId) || clientId == "unknown" ? "Unknown client" : clientId;
+    }
 
     // ── Phase 8 mapping helpers ───────────────────────────────────────────────
 

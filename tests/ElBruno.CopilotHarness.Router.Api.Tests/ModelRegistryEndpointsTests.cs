@@ -24,6 +24,47 @@ public sealed class ModelRegistryEndpointsTests : IClassFixture<RouterApiWebAppl
     }
 
     [Fact]
+    public async Task Models_Seed_FlagsTemperatureCapability()
+    {
+        var models = await _client.GetFromJsonAsync<List<ModelConnectionDto>>("/admin/models");
+
+        var ollama = models!.First(m => m.Name == "ollama llama3.2");
+        var gpt5 = models.First(m => m.Name == "foundry gpt-5-mini");
+
+        // gpt-5-mini rejects custom temperature; ollama accepts it. (The processor
+        // flag is mutable global state exercised by other tests, so it is asserted
+        // separately in Models_SettingProcessor_ClearsItOnOtherModels.)
+        Assert.True(ollama.SupportsCustomTemperature);
+        Assert.False(gpt5.SupportsCustomTemperature);
+    }
+
+    [Fact]
+    public async Task Models_SettingProcessor_ClearsItOnOtherModels()
+    {
+        // Create a brand new model and flag it as the processor.
+        var create = new ModelConnectionUpsertRequest(
+            Name: $"processor-{Guid.NewGuid():N}",
+            Type: "ollama",
+            Endpoint: "http://localhost:11434",
+            ModelName: "phi3",
+            ApiVersion: "2024-10-21",
+            ApiKey: null,
+            Enabled: true,
+            IsProcessor: true,
+            SupportsCustomTemperature: true);
+
+        var created = await (await _client.PostAsJsonAsync("/admin/models", create))
+            .Content.ReadFromJsonAsync<ModelConnectionDto>();
+        Assert.NotNull(created);
+        Assert.True(created!.IsProcessor);
+
+        // Exactly one model is the processor across the registry.
+        var models = await _client.GetFromJsonAsync<List<ModelConnectionDto>>("/admin/models");
+        Assert.Single(models!, m => m.IsProcessor);
+        Assert.Equal(created.Id, models!.Single(m => m.IsProcessor).Id);
+    }
+
+    [Fact]
     public async Task Models_FullCrud_Lifecycle()
     {
         var create = new ModelConnectionUpsertRequest(

@@ -1,0 +1,129 @@
+.summary-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 1rem 0;
+}
+
+.summary-card {
+    border: 1px solid var(--border-color, #d0d7de);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    background: var(--surface, #fff);
+    min-width: 9rem;
+}
+
+    .summary-card p {
+        margin: 0.35rem 0 0;
+        font-size: 0.9rem;
+    }
+
+.notice {
+    border-left: 4px solid #d4a72c;
+    background: #fff8e6;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.intent-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #fff;
+    background: #57606a;
+    text-transform: lowercase;
+}
+
+.intent-simple-chat { background: #1f883d; }
+.intent-github-actions { background: #8250df; }
+.intent-launch-app { background: #0969da; }
+.intent-code-task { background: #bc4c00; }
+.intent-long-form { background: #cf222e; }
+.intent-unknown { background: #57606a; }
+
+.pipeline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.pipeline-row {
+    border: 1px solid var(--border-color, #d0d7de);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    background: var(--surface, #fff);
+}
+
+.pipeline-time {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.8rem;
+    color: #57606a;
+    margin-bottom: 0.4rem;
+}
+
+.pipeline-flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.stage {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    background: #f6f8fa;
+    min-width: 8rem;
+    flex: 1 1 8rem;
+}
+
+.stage-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #57606a;
+}
+
+.stage-value {
+    font-size: 0.92rem;
+    word-break: break-word;
+}
+
+.stage-sub {
+    font-size: 0.78rem;
+    color: #57606a;
+}
+
+.arrow {
+    align-self: center;
+    color: #8c959f;
+    font-size: 1.1rem;
+}
+
+.pipeline-why {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.83rem;
+    flex-wrap: wrap;
+}
+
+    .pipeline-why .trace {
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 0.75rem;
+    }
+
+.muted {
+    color: #57606a;
+}
+
+.error {
+    color: #cf222e;
+    font-weight: 600;
+}

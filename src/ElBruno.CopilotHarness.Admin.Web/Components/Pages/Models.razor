@@ -41,6 +41,8 @@ else
                     <th>Endpoint</th>
                     <th>Model / Deployment</th>
                     <th>API key</th>
+                    <th>Processor</th>
+                    <th>Custom temp</th>
                     <th>Enabled</th>
                     <th></th>
                 </tr>
@@ -68,6 +70,22 @@ else
                         <td>
                             <span class="status-pill @(model.Enabled ? "status-good" : "status-neutral")">
                                 @(model.Enabled ? "enabled" : "disabled")
+                            </span>
+                        </td>
+                        <td>
+                            @if (model.IsProcessor)
+                            {
+                                <span class="status-pill status-good" title="Classifier model that reads the first chars of each prompt">🧠 processor</span>
+                            }
+                            else
+                            {
+                                <span class="muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="status-pill @(model.SupportsCustomTemperature ? "status-neutral" : "status-warn")"
+                                  title="@(model.SupportsCustomTemperature ? "Accepts custom temperature/top_p" : "Non-default temperature/top_p stripped before forwarding")">
+                                @(model.SupportsCustomTemperature ? "yes" : "default-only")
                             </span>
                         </td>
                         <td>
@@ -124,6 +142,14 @@ else
                 <label class="checkbox">
                     <InputCheckbox @bind-Value="_editor.Enabled" /> Enabled
                 </label>
+                <label class="checkbox">
+                    <InputCheckbox @bind-Value="_editor.IsProcessor" /> Processor model (classifier)
+                    <span class="muted">— reads the first chars of each prompt to decide intent. Only one model can be the processor.</span>
+                </label>
+                <label class="checkbox">
+                    <InputCheckbox @bind-Value="_editor.SupportsCustomTemperature" /> Supports custom temperature
+                    <span class="muted">— uncheck for gpt-5 family models that only accept the default temperature.</span>
+                </label>
             </div>
             <button type="submit">@(_isNew ? "Create" : "Save")</button>
             <button type="button" class="btn-reject" @onclick="CancelEdit">Cancel</button>
@@ -163,7 +189,7 @@ else
         _isNew = true;
         _editorId = null;
         _editorName = string.Empty;
-        _editor = new ModelEditor { Type = "azure-openai", ApiVersion = "2024-10-21", Enabled = true };
+        _editor = new ModelEditor { Type = "azure-openai", ApiVersion = "2024-10-21", Enabled = true, SupportsCustomTemperature = true };
     }
 
     private void StartEdit(ModelConnectionDto model)
@@ -179,7 +205,9 @@ else
             ModelName = model.ModelName,
             ApiVersion = string.IsNullOrWhiteSpace(model.ApiVersion) ? "2024-10-21" : model.ApiVersion,
             ApiKey = null,
-            Enabled = model.Enabled
+            Enabled = model.Enabled,
+            IsProcessor = model.IsProcessor,
+            SupportsCustomTemperature = model.SupportsCustomTemperature
         };
     }
 
@@ -201,7 +229,9 @@ else
                 _editor.ModelName ?? string.Empty,
                 _editor.ApiVersion ?? string.Empty,
                 _editor.ApiKey,
-                _editor.Enabled);
+                _editor.Enabled,
+                _editor.IsProcessor,
+                _editor.SupportsCustomTemperature);
 
             if (_isNew)
             {
@@ -280,5 +310,7 @@ else
         public string? ApiVersion { get; set; } = "2024-10-21";
         public string? ApiKey { get; set; }
         public bool Enabled { get; set; } = true;
+        public bool IsProcessor { get; set; }
+        public bool SupportsCustomTemperature { get; set; } = true;
     }
 }

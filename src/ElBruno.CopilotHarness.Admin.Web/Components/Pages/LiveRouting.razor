@@ -6,7 +6,8 @@
 <PageTitle>Live Routing</PageTitle>
 
 <h1>Live Routing</h1>
-<p>Every incoming prompt, the model it was routed to, the rule that matched, and why.</p>
+<p>Watch the harness pipeline in real time: each prompt is read by the <strong>processor model</strong>,
+   classified into an <strong>intent</strong>, matched to a <strong>rule</strong>, and routed to a <strong>target model</strong>.</p>
 
 @if (!string.IsNullOrWhiteSpace(_error))
 {
@@ -21,10 +22,10 @@ else
 {
     @if (!_feed.PromptCaptureEnabled)
     {
-        <article class="card">
+        <article class="card notice">
             <strong>Prompt text capture is disabled.</strong>
             <p>
-                Models, rules, and explanations are shown below. To also display a redacted preview
+                Models, intents, rules, and explanations are shown below. To also display a redacted preview
                 of each prompt, set <code>Telemetry__CapturePromptText=true</code> on the router
                 (already enabled by default in the local Aspire AppHost).
             </p>
@@ -33,14 +34,21 @@ else
 
     @if (_feed.Requests.Count > 0)
     {
-        <div class="cards">
-            @foreach (var group in _feed.Requests.GroupBy(r => r.SelectedModel).OrderByDescending(g => g.Count()))
+        <div class="summary-cards">
+            @foreach (var group in _feed.Requests.GroupBy(r => string.IsNullOrWhiteSpace(r.ClassificationIntent) ? "unknown" : r.ClassificationIntent).OrderByDescending(g => g.Count()))
             {
-                <article class="card">
-                    <h3>@group.Key</h3>
+                <article class="summary-card">
+                    <span class="intent-badge intent-@group.Key">@group.Key</span>
                     <p>@group.Count() request(s) · @((100.0 * group.Count() / _feed.Requests.Count).ToString("0")) %</p>
                 </article>
             }
+            <article class="summary-card">
+                <span class="muted">Classifier source</span>
+                <p>
+                    🧠 @_feed.Requests.Count(r => r.ClassifierSource == "processor-model") processor ·
+                    ⚙️ @_feed.Requests.Count(r => r.ClassifierSource != "processor-model") deterministic
+                </p>
+            </article>
         </div>
     }
 
@@ -51,37 +59,53 @@ else
     }
     else
     {
-        <table>
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Prompt</th>
-                    <th>Model</th>
-                    <th>Rule</th>
-                    <th>Explanation</th>
-                    <th>Client</th>
-                    <th>Trace</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var request in _feed.Requests)
-                {
-                    <tr>
-                        <td>@request.CreatedAtUtc.ToLocalTime().ToString("HH:mm:ss")</td>
-                        <td class="prompt-cell" title="@request.PromptPreview">
-                            @(string.IsNullOrWhiteSpace(request.PromptPreview)
-                                ? $"({request.PromptCharacters} chars)"
-                                : Truncate(request.PromptPreview!, 80))
-                        </td>
-                        <td><strong>@request.SelectedModel</strong><br /><span class="muted">@request.Deployment</span></td>
-                        <td>@(request.MatchedRuleName ?? "-")</td>
-                        <td class="explain-cell">@request.Explanation</td>
-                        <td>@request.ClientDisplayName</td>
-                        <td class="muted">@request.TraceId</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+        <div class="pipeline-list">
+            @foreach (var request in _feed.Requests)
+            {
+                <article class="pipeline-row">
+                    <div class="pipeline-time" title="@request.CreatedAtUtc.ToLocalTime().ToString("u")">
+                        @request.CreatedAtUtc.ToLocalTime().ToString("HH:mm:ss")
+                    </div>
+                    <div class="pipeline-flow">
+                        <div class="stage stage-prompt">
+                            <span class="stage-label">Prompt</span>
+                            <span class="stage-value" title="@request.PromptPreview">
+                                @(string.IsNullOrWhiteSpace(request.PromptPreview)
+                                    ? $"({request.PromptCharacters} chars)"
+                                    : Truncate(request.PromptPreview!, 60))
+                            </span>
+                            <span class="stage-sub">@request.ClientDisplayName</span>
+                        </div>
+                        <span class="arrow">→</span>
+                        <div class="stage stage-processor">
+                            <span class="stage-label">@(request.ClassifierSource == "processor-model" ? "🧠 Processor" : "⚙️ Heuristic")</span>
+                            <span class="intent-badge intent-@(string.IsNullOrWhiteSpace(request.ClassificationIntent) ? "unknown" : request.ClassificationIntent)">
+                                @(string.IsNullOrWhiteSpace(request.ClassificationIntent) ? "unknown" : request.ClassificationIntent)
+                            </span>
+                            <span class="stage-sub">
+                                @(string.IsNullOrWhiteSpace(request.ProcessorModel) ? request.ClassificationComplexity : request.ProcessorModel)
+                                · @request.ClassificationConfidence.ToString("0.00")
+                            </span>
+                        </div>
+                        <span class="arrow">→</span>
+                        <div class="stage stage-rule">
+                            <span class="stage-label">Rule</span>
+                            <span class="stage-value">@(request.MatchedRuleName ?? "—")</span>
+                        </div>
+                        <span class="arrow">→</span>
+                        <div class="stage stage-model">
+                            <span class="stage-label">Model</span>
+                            <span class="stage-value"><strong>@request.SelectedModel</strong></span>
+                            <span class="stage-sub">@request.Deployment</span>
+                        </div>
+                    </div>
+                    <div class="pipeline-why">
+                        <span class="muted">@request.Explanation</span>
+                        <span class="trace muted">@request.TraceId</span>
+                    </div>
+                </article>
+            }
+        </div>
     }
 
     <p class="muted">Snapshot: @_feed.GeneratedAtUtc.ToLocalTime().ToString("u")</p>

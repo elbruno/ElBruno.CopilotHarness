@@ -48,6 +48,10 @@ builder.Services
     .AddOptions<TelemetryOptions>()
     .Bind(builder.Configuration.GetSection(TelemetryOptions.SectionName));
 
+builder.Services
+    .AddOptions<ClassifierOptions>()
+    .Bind(builder.Configuration.GetSection(ClassifierOptions.SectionName));
+
 var persistenceOptions = builder.Configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>() ?? new PersistenceOptions();
 var redisConnectionString = builder.Configuration.GetConnectionString("redis");
 var postgresConnectionString = builder.Configuration.GetConnectionString("copilotharness");
@@ -137,7 +141,8 @@ builder.Services.AddScoped<IExecutionTraceStore, PersistentExecutionTraceStore>(
 builder.Services.AddScoped<IRequestContextProvider, RequestedModelContextProvider>();
 builder.Services.AddScoped<IRequestContextProvider, StreamingContextProvider>();
 builder.Services.AddScoped<IRequestContextProvider, PromptShapeContextProvider>();
-builder.Services.AddScoped<IClassificationAgent, DeterministicClassificationAgent>();
+builder.Services.AddScoped<DeterministicClassificationAgent>();
+builder.Services.AddScoped<IClassificationAgent, ProcessorModelClassificationAgent>();
 builder.Services.AddScoped<IRuleAdvisorAgent, DeterministicRuleAdvisorAgent>();
 builder.Services.AddScoped<IRoutingWorkflow, MicrosoftAgentFrameworkRoutingWorkflow>();
 builder.Services.AddScoped<IRequestRoutingService, RequestRoutingService>();

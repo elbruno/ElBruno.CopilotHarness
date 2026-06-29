@@ -44,6 +44,41 @@ model. Common failures:
   blank, the Azure provider uses the shared `Foundry:Endpoint` / `Foundry:ApiKey`. Set the
   per-model values to override.
 
+## Temperature 400 {#temperature-400}
+
+**Symptom.** A chat request from VS Code Copilot fails with:
+
+```
+400 { "error": { "message": "Unsupported value: 'temperature' does not support 0.1
+with this model. Only the default (1) value is supported.", "code": "unsupported_value" } }
+```
+
+**Cause.** VS Code Copilot sends `temperature: 0.1`. Some models (notably `gpt-5-mini`)
+reject any non-default temperature, and the router forwards the client payload upstream
+verbatim, so the upstream 400 surfaces to Copilot.
+
+**Fix.** The target model connection carries a `supportsCustomTemperature` flag. Set it to
+`false` on the **Models** page for any model that rejects custom temperature; the harness
+then strips `temperature` and `top_p` from the outgoing payload (`PayloadSanitizer`) so the
+upstream applies its own default. The seeded `foundry gpt-5-mini` ships with this flag
+already cleared. See [Model Registry → Temperature capability](Model_Registry.md#temperature-capability).
+
+## Intent classification fell back to deterministic
+
+On the **Live Routing** page the *classifier source* shows `deterministic` instead of
+`processor-model`. This means the processor model (default `ollama llama3.2`) could not be
+used to classify the prompt, so the built-in keyword classifier was used as a fallback.
+Routing still works, but intent quality is lower. Common causes:
+
+- The Ollama server (or whichever model is flagged as processor) is not running/reachable.
+- No model is flagged as the processor in the registry.
+- The processor call timed out (`Classifier:TimeoutMs`, default 4000 ms) or returned an
+  unparseable answer.
+
+Start the processor model (`ollama pull llama3.2` + run Ollama), confirm exactly one model
+has the processor flag on the **Models** page, and the source returns to `processor-model`.
+See [Model Registry → Processor model](Model_Registry.md#processor-model).
+
 ## Stored API keys stop working after a reset
 
 API keys are encrypted with ASP.NET Core Data Protection. If the Data Protection key ring

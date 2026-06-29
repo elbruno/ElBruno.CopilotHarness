@@ -12,17 +12,36 @@ It is available in two places, both backed by a single shared feed
 
 ## What each row shows
 
-| Column | Meaning |
+The page now presents each request as a **pipeline card** that tells the routing story
+left-to-right: *Prompt → Processor classifies intent → Rule matches → Target model → Why*.
+
+| Field | Meaning |
 | --- | --- |
 | Time | When the request was routed |
 | Prompt | Redacted, truncated preview of the prompt (opt-in — see below) |
-| Model | The selected model profile + upstream deployment |
+| Processor | Which model classified the request, the **intent** it assigned, and the confidence |
+| Classifier source | Whether the intent came from the **processor model** (real LLM call) or the **deterministic** fallback |
 | Rule | The routing rule that matched (if any) |
-| Explanation | A human sentence, e.g. *"Routed to 'small' because rule 'Short prompts' matched. Classified as conversational/low."* |
-| Client | VS Code / Copilot CLI / Copilot App |
+| Model | The selected model + upstream deployment |
+| Why | A pipeline sentence, e.g. *"processor 'ollama llama3.2' classified intent=simple-chat (0.92) → rule 'Simple chat' matched → routed to 'ollama llama3.2'."* |
+| Client | VS Code Copilot / Copilot CLI / Copilot App (mapped from the user-agent) |
 | Trace | Trace id (deep-links to the full routing trace) |
 
-The dashboard also shows a per-model share summary (how many requests went to each model).
+The dashboard also shows per-intent and per-classifier-source summary cards, plus a
+per-model share summary (how many requests went to each model).
+
+### Enriched feed fields
+
+`GET /admin/telemetry/feed` surfaces these additional per-request fields used by the cards:
+
+| Field | Meaning |
+| --- | --- |
+| `classificationIntent` | The intent label (`simple-chat`, `github-actions`, `launch-app`, `code-task`, `long-form`) |
+| `classifierSource` | `processor-model` or `deterministic` |
+| `processorModel` | Name of the model that performed the classification |
+| `classificationConfidence` | Classifier confidence (0–1) |
+| `clientDisplayName` | Friendly client name mapped from the user-agent |
+
 
 ## Prompt-text capture is opt-in (privacy-first)
 
@@ -49,9 +68,11 @@ Telemetry__RedactSecrets=true
 
 ## How it works
 
-- Each routed request runs through the routing workflow, which captures **context facts**
-  (stream, prompt characters, requested model, client, and — when enabled — a redacted
-  `request.promptPreview`) and a **decision** (selected model + reason).
+- Each routed request runs through the routing workflow, which first **classifies** the
+  prompt (processor model or deterministic fallback) into an intent, then captures
+  **context facts** (stream, prompt characters, requested model, client, intent, classifier
+  source, processor model, and — when enabled — a redacted `request.promptPreview`) and a
+  **decision** (selected model + reason).
 - The decision reason embeds the matched rule name (`Matched rule 'X'.`), which the feed
   promotes to a first-class `matchedRuleName` field and turns into a plain-language
   `explanation`.

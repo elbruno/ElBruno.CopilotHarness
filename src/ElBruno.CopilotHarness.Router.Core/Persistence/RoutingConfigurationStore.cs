@@ -40,7 +40,9 @@ public sealed class RoutingConfigurationStore(
                 Deployment = model.ModelName,
                 ApiVersion = model.ApiVersion,
                 ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
-                Enabled = model.Enabled
+                Enabled = model.Enabled,
+                IsProcessor = model.IsProcessor,
+                SupportsCustomTemperature = model.SupportsCustomTemperature
             },
             StringComparer.OrdinalIgnoreCase);
 
@@ -162,7 +164,9 @@ public sealed class RoutingConfigurationStore(
             Deployment = model.ModelName,
             ApiVersion = model.ApiVersion,
             ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
-            Enabled = model.Enabled
+            Enabled = model.Enabled,
+            IsProcessor = model.IsProcessor,
+            SupportsCustomTemperature = model.SupportsCustomTemperature
         };
     }
 
@@ -192,6 +196,8 @@ public sealed class RoutingConfigurationStore(
         entity.ModelName = request.ModelName.Trim();
         entity.ApiVersion = string.IsNullOrWhiteSpace(request.ApiVersion) ? "2024-10-21" : request.ApiVersion.Trim();
         entity.Enabled = request.Enabled;
+        entity.IsProcessor = request.IsProcessor;
+        entity.SupportsCustomTemperature = request.SupportsCustomTemperature;
         entity.UpdatedAtUtc = now;
 
         // null = leave key unchanged; empty = clear; value = replace.
@@ -203,6 +209,25 @@ public sealed class RoutingConfigurationStore(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Single-processor invariant: when this model becomes the processor, clear the flag on every other model.
+        if (entity.IsProcessor)
+        {
+            var others = await dbContext.Models
+                .Where(model => model.Id != entity.Id && model.IsProcessor)
+                .ToListAsync(cancellationToken);
+            if (others.Count > 0)
+            {
+                foreach (var other in others)
+                {
+                    other.IsProcessor = false;
+                    other.UpdatedAtUtc = now;
+                }
+
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         return ToRecord(entity);
     }
 
@@ -305,12 +330,60 @@ public sealed class RoutingConfigurationStore(
         dbContext.RoutingRules.AddRange(
             new RoutingRuleEntity
             {
+                Name = "Simple chat",
+                Description = "Short greetings and small talk stay on the local processor model.",
+                ConditionType = (int)RoutingRuleConditionType.IntentEquals,
+                ConditionValue = ClassifierIntentNames.SimpleChat,
+                TargetModel = smallModel.Name,
+                Priority = 10,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "GitHub actions",
+                Description = "Git/GitHub operations (commit, push, open PR) route to the local model. Copilot drives the tools.",
+                ConditionType = (int)RoutingRuleConditionType.IntentEquals,
+                ConditionValue = ClassifierIntentNames.GithubActions,
+                TargetModel = smallModel.Name,
+                Priority = 20,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Launch app",
+                Description = "Requests to run or launch the application route to the local model.",
+                ConditionType = (int)RoutingRuleConditionType.IntentEquals,
+                ConditionValue = ClassifierIntentNames.LaunchApp,
+                TargetModel = smallModel.Name,
+                Priority = 30,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Code tasks",
+                Description = "Writing, refactoring, or debugging code routes to the cloud model.",
+                ConditionType = (int)RoutingRuleConditionType.IntentEquals,
+                ConditionValue = ClassifierIntentNames.CodeTask,
+                TargetModel = largeModel.Name,
+                Priority = 40,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
                 Name = "Large prompts",
                 Description = "Route prompts over 2500 characters to the larger model.",
                 ConditionType = (int)RoutingRuleConditionType.PromptSizeAtLeast,
                 ConditionValue = "2500",
                 TargetModel = largeModel.Name,
-                Priority = 10,
+                Priority = 50,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -322,7 +395,7 @@ public sealed class RoutingConfigurationStore(
                 ConditionType = (int)RoutingRuleConditionType.HasSystemMessage,
                 ConditionValue = string.Empty,
                 TargetModel = largeModel.Name,
-                Priority = 20,
+                Priority = 60,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -334,7 +407,7 @@ public sealed class RoutingConfigurationStore(
                 ConditionType = (int)RoutingRuleConditionType.IsStreaming,
                 ConditionValue = string.Empty,
                 TargetModel = smallModel.Name,
-                Priority = 30,
+                Priority = 70,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -503,6 +576,8 @@ public sealed class RoutingConfigurationStore(
             model.ApiVersion,
             !string.IsNullOrEmpty(model.ApiKeyProtected),
             model.Enabled,
+            model.IsProcessor,
+            model.SupportsCustomTemperature,
             model.UpdatedAtUtc);
 
     private static RoutingRuleRecord ToRecord(RoutingRuleEntity rule) =>

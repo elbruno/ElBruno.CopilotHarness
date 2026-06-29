@@ -22,6 +22,8 @@ public sealed record ModelConnectionDto(
     string ApiVersion,
     bool HasApiKey,
     bool Enabled,
+    bool IsProcessor,
+    bool SupportsCustomTemperature,
     DateTimeOffset UpdatedAtUtc);
 
 public sealed record ModelConnectionUpsertRequest(
@@ -31,7 +33,9 @@ public sealed record ModelConnectionUpsertRequest(
     string ModelName,
     string ApiVersion,
     string? ApiKey,
-    bool Enabled);
+    bool Enabled,
+    bool IsProcessor = false,
+    bool SupportsCustomTemperature = true);
 
 public sealed record ModelConnectionTestResponse(
     bool Success,
@@ -152,7 +156,10 @@ public sealed record RoutedRequestView(
     string? PromptPreview,
     int PromptCharacters,
     string ClassificationIntent,
-    string ClassificationComplexity);
+    string ClassificationComplexity,
+    string ClassifierSource,
+    string? ProcessorModel,
+    double ClassificationConfidence);
 
 public sealed record RoutingFeedResponse(
     DateTimeOffset GeneratedAtUtc,

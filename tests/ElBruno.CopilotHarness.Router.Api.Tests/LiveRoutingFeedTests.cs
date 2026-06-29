@@ -86,6 +86,29 @@ public sealed class LiveRoutingFeedTests
         Assert.False(string.IsNullOrWhiteSpace(entry.SelectedModel));
         Assert.False(string.IsNullOrWhiteSpace(entry.Explanation));
     }
+
+    [Fact]
+    public async Task Feed_PopulatesClassifierSourceAndIntent()
+    {
+        using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>
+        {
+            ["Telemetry:CapturePromptText"] = "true"
+        });
+        var client = factory.CreateClient();
+
+        var routed = await client.PostAsJsonAsync("/v1/chat/completions", new
+        {
+            messages = new[] { new { role = "user", content = "hi" } }
+        });
+        routed.EnsureSuccessStatusCode();
+
+        var feed = await client.GetFromJsonAsync<RoutingFeedResponse>("/admin/telemetry/feed");
+
+        var entry = Assert.Single(feed!.Requests);
+        // Ollama is unreachable in tests, so the classifier falls back to deterministic.
+        Assert.Equal("deterministic", entry.ClassifierSource);
+        Assert.False(string.IsNullOrWhiteSpace(entry.ClassificationIntent));
+    }
 }
 
 public sealed record RoutingFeedResponse(
@@ -109,4 +132,7 @@ public sealed record RoutedRequestViewTest(
     string? PromptPreview,
     int PromptCharacters,
     string ClassificationIntent,
-    string ClassificationComplexity);
+    string ClassificationComplexity,
+    string ClassifierSource,
+    string? ProcessorModel,
+    double ClassificationConfidence);

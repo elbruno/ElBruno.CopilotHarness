@@ -19,6 +19,8 @@ caller that pins a specific model).
 
 ### Evaluation order
 
+0. **Intent classification** — the processor model (or deterministic fallback) labels the
+   request intent so `IntentEquals` rules can match. See [Intent classification](#intent-classification).
 1. **Explicit requested model** — if the request names a model that exists in the
    registry, use it. Reason: *"Explicit model profile requested by client."*
 2. **Rule set** — evaluate enabled rules by ascending priority; first match wins.
@@ -57,6 +59,49 @@ caller that pins a specific model).
 | `RequestedModelEquals` | model name | The client-requested model equals the value (case-insensitive). |
 | `PromptContainsKeyword` | keyword | Any prompt text contains the keyword (case-insensitive). |
 | `PromptMatchesRegex` | regex | Any prompt text matches the regular expression. Regex evaluation is bounded by a 250 ms timeout; an invalid or timing-out pattern simply does not match. |
+| `IntentEquals` | intent label | The **processor model's** classification of the prompt equals the value (case-insensitive). See [Intent classification](#intent-classification). |
+
+---
+
+## Intent classification
+
+Before the rules are evaluated, the harness asks the **processor model** (see
+[Model Registry → Processor model](Model_Registry.md#processor-model)) to classify the
+request from its first ~200 characters into a fixed intent vocabulary:
+
+| Intent | Typical request |
+|---|---|
+| `simple-chat` | Short conversational prompts (`hi`, `thanks`). |
+| `github-actions` | Git/GitHub operations (`push to gh`, `open a PR`). |
+| `launch-app` | Running/starting the app (`launch the app`, `dotnet run`). |
+| `code-task` | Deeper code work (refactors, multi-file edits, debugging). |
+| `long-form` | Large prompts / long-form generation. |
+
+The chosen intent is exposed to the rules via the `IntentEquals` condition, so you can say
+*"route `simple-chat` to ollama llama3.2"* and *"route `code-task` to foundry gpt-5-mini"*
+explicitly and editably.
+
+**Classifier source.** The classification is a real LLM call to the processor model. If the
+processor is disabled, unreachable, times out, or returns an unusable answer, the harness
+falls back to a built-in **deterministic** keyword classifier so routing never blocks. The
+path used (`processor-model` vs `deterministic`) is shown on the
+[Live Routing](Live_Routing.md) page.
+
+> When intent classification is unavailable for a request (e.g. the classifier is disabled),
+> `IntentEquals` rules simply do not match and evaluation continues with the remaining rules.
+
+### Seeded intent rules
+
+The starter rule set (and the first-run wizard) seeds intent rules that mirror the
+vocabulary above:
+
+| Rule | Condition | Target |
+|---|---|---|
+| Simple chat | `IntentEquals simple-chat` | `ollama llama3.2` |
+| GitHub actions | `IntentEquals github-actions` | `ollama llama3.2` |
+| Launch app | `IntentEquals launch-app` | `ollama llama3.2` |
+| Code tasks | `IntentEquals code-task` | `foundry gpt-5-mini` |
+| Large prompts | `PromptSizeAtLeast` | `foundry gpt-5-mini` |
 
 ---
 

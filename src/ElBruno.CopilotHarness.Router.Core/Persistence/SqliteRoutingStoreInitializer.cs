@@ -11,7 +11,7 @@ public sealed class SqliteRoutingStoreInitializer(
 
     private const string SeedDefaultModel = "foundry gpt-5-mini";
 
-    private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled)> SeedModels()
+    private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled, bool IsProcessor, bool SupportsCustomTemperature)> SeedModels()
     {
         yield return (
             "seed-ollama-llama32",
@@ -20,6 +20,8 @@ public sealed class SqliteRoutingStoreInitializer(
             "http://localhost:11434",
             "llama3.2",
             "2024-10-21",
+            true,
+            true,   // processor model (classifier)
             true);
 
         yield return (
@@ -29,7 +31,9 @@ public sealed class SqliteRoutingStoreInitializer(
             string.Empty,
             "gpt-5-mini",
             "2024-10-21",
-            true);
+            true,
+            false,
+            false); // gpt-5 family only accepts the default temperature
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -64,6 +68,8 @@ public sealed class SqliteRoutingStoreInitializer(
                 ApiVersion TEXT NOT NULL DEFAULT '2024-10-21',
                 ApiKeyProtected TEXT NULL,
                 Enabled INTEGER NOT NULL DEFAULT 1,
+                IsProcessor INTEGER NOT NULL DEFAULT 0,
+                SupportsCustomTemperature INTEGER NOT NULL DEFAULT 1,
                 CreatedAtUtc TEXT NOT NULL,
                 UpdatedAtUtc TEXT NOT NULL
             );
@@ -72,6 +78,10 @@ public sealed class SqliteRoutingStoreInitializer(
         await dbContext.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS IX_Models_Name ON Models (Name);",
             cancellationToken);
+
+        // Idempotent column upgrades for databases created before these columns existed.
+        await AddColumnIfMissingAsync("Models", "IsProcessor", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync("Models", "SupportsCustomTemperature", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
 
         await dbContext.Database.ExecuteSqlRawAsync(
             """
@@ -98,7 +108,7 @@ public sealed class SqliteRoutingStoreInitializer(
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                  INSERT OR IGNORE INTO Models (
-                     Id, Name, ProviderType, Endpoint, ModelName, ApiVersion, ApiKeyProtected, Enabled, CreatedAtUtc, UpdatedAtUtc
+                     Id, Name, ProviderType, Endpoint, ModelName, ApiVersion, ApiKeyProtected, Enabled, IsProcessor, SupportsCustomTemperature, CreatedAtUtc, UpdatedAtUtc
                  ) VALUES (
                      {model.Id},
                      {model.Name},
@@ -108,6 +118,8 @@ public sealed class SqliteRoutingStoreInitializer(
                      {model.ApiVersion},
                      {(string?)null},
                      {model.Enabled},
+                     {model.IsProcessor},
+                     {model.SupportsCustomTemperature},
                      {DateTimeOffset.UtcNow},
                      {DateTimeOffset.UtcNow}
                  );
@@ -310,5 +322,49 @@ public sealed class SqliteRoutingStoreInitializer(
         await dbContext.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS IX_ProjectProfiles_TeamId ON ProjectProfiles (TeamId);",
             cancellationToken);
+    }
+
+    private async Task AddColumnIfMissingAsync(string table, string column, string definition, CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            bool exists;
+            await using (var pragma = connection.CreateCommand())
+            {
+                pragma.CommandText = $"PRAGMA table_info({table});";
+                exists = false;
+                await using var reader = await pragma.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    // column 1 ("name") holds the column name.
+                    if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!exists)
+            {
+                await using var alter = connection.CreateCommand();
+                alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+                await alter.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
     }
 }

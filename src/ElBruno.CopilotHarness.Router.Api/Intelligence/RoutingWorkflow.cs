@@ -54,12 +54,20 @@ public sealed record RoutingContext(IReadOnlyList<RoutingContextFact> Facts)
 public interface IClassificationAgent
 {
     Task<ClassificationResult> ClassifyAsync(
+        JsonObject requestBody,
         RoutingContext context,
         RoutingOptions routingOptions,
         CancellationToken cancellationToken);
 }
 
-public sealed record ClassificationResult(string Intent, string Complexity, double Confidence, string Reasoning);
+public sealed record ClassificationResult(string Intent, string Complexity, double Confidence, string Reasoning)
+{
+    /// <summary>Which classifier produced this result: "processor-model" or "deterministic".</summary>
+    public string Source { get; init; } = "deterministic";
+
+    /// <summary>Name of the processor model that classified the request, when an LLM call was used.</summary>
+    public string? ProcessorModel { get; init; }
+}
 
 public interface IRuleAdvisorAgent
 {
@@ -215,35 +223,83 @@ public sealed class RequestedModelContextProvider : IRequestContextProvider
 public sealed class DeterministicClassificationAgent : IClassificationAgent
 {
     public Task<ClassificationResult> ClassifyAsync(
+        JsonObject requestBody,
         RoutingContext context,
         RoutingOptions routingOptions,
         CancellationToken cancellationToken)
     {
-        if (context.TryGetInteger("request.promptCharacters", out var promptCharacters) &&
-            promptCharacters >= routingOptions.Rules.BigPromptCharacterThreshold)
-        {
-            return Task.FromResult(new ClassificationResult(
-                Intent: "long-form-generation",
-                Complexity: "high",
-                Confidence: 0.93,
-                Reasoning: "Prompt size crossed big prompt threshold."));
-        }
-
-        if (context.TryGetBoolean("request.hasSystemMessage", out var hasSystemMessage) && hasSystemMessage)
-        {
-            return Task.FromResult(new ClassificationResult(
-                Intent: "policy-guided-conversation",
-                Complexity: "medium",
-                Confidence: 0.86,
-                Reasoning: "System message indicates structured guidance."));
-        }
-
-        return Task.FromResult(new ClassificationResult(
-            Intent: "standard-conversation",
-            Complexity: "low",
-            Confidence: 0.81,
-            Reasoning: "No high-complexity indicators found."));
+        return Task.FromResult(Classify(requestBody, context, routingOptions));
     }
+
+    /// <summary>
+    /// Heuristic classification into the fixed intent vocabulary (<see cref="ClassifierIntents"/>).
+    /// Shared by the deterministic agent and used as the fallback for the processor-model classifier.
+    /// </summary>
+    public static ClassificationResult Classify(
+        JsonObject requestBody,
+        RoutingContext context,
+        RoutingOptions routingOptions)
+    {
+        var promptText = BasicModelRouter.GetPromptText(requestBody);
+        var preview = (promptText.Length > 200 ? promptText[..200] : promptText).ToLowerInvariant();
+
+        var promptCharacters = BasicModelRouter.GetPromptCharacterCount(requestBody);
+
+        // Source-control / GitHub actions intent.
+        if (ContainsAny(preview, "push to gh", "git push", "git commit", "commit and push", "open a pr", "pull request", "push to github"))
+        {
+            return new ClassificationResult(
+                Intent: ClassifierIntents.GithubActions,
+                Complexity: "low",
+                Confidence: 0.7,
+                Reasoning: "Prompt mentions a source-control / GitHub action.")
+            { Source = "deterministic" };
+        }
+
+        // Launch / run the application intent.
+        if (ContainsAny(preview, "launch the app", "run the app", "start the app", "aspire run", "dotnet run", "start aspire"))
+        {
+            return new ClassificationResult(
+                Intent: ClassifierIntents.LaunchApp,
+                Complexity: "low",
+                Confidence: 0.7,
+                Reasoning: "Prompt asks to launch or run the application.")
+            { Source = "deterministic" };
+        }
+
+        // Large prompts → long-form.
+        if (promptCharacters >= routingOptions.Rules.BigPromptCharacterThreshold)
+        {
+            return new ClassificationResult(
+                Intent: ClassifierIntents.LongForm,
+                Complexity: "high",
+                Confidence: 0.85,
+                Reasoning: "Prompt size crossed the big-prompt threshold.")
+            { Source = "deterministic" };
+        }
+
+        // Code-oriented work.
+        if (ContainsAny(preview, "refactor", "implement", "fix the bug", "write a function", "add a test", "debug", "stack trace", "exception"))
+        {
+            return new ClassificationResult(
+                Intent: ClassifierIntents.CodeTask,
+                Complexity: "medium",
+                Confidence: 0.7,
+                Reasoning: "Prompt describes a code task.")
+            { Source = "deterministic" };
+        }
+
+        // Default: short, simple conversational prompt.
+        return new ClassificationResult(
+            Intent: ClassifierIntents.SimpleChat,
+            Complexity: "low",
+            Confidence: 0.75,
+            Reasoning: "Short prompt with no complex indicators.")
+        { Source = "deterministic" };
+    }
+
+    private static bool ContainsAny(string haystack, params string[] needles) =>
+        needles.Any(needle => haystack.Contains(needle, StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed class DeterministicRuleAdvisorAgent : IRuleAdvisorAgent
@@ -322,10 +378,10 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
 
         var context = new RoutingContext(state.Facts);
         var classification = state.Classification
-            ?? await _classificationAgent.ClassifyAsync(context, routingOptions, cancellationToken);
+            ?? await _classificationAgent.ClassifyAsync(requestBody, context, routingOptions, cancellationToken);
         var advisorResult = state.AdvisorResult
             ?? await _ruleAdvisorAgent.AdviseAsync(context, classification, routingOptions, cancellationToken);
-        var decision = state.Decision ?? BasicModelRouter.SelectModel(requestBody, routingOptions);
+        var decision = state.Decision ?? BasicModelRouter.SelectModel(requestBody, routingOptions, classification.Intent);
 
         _logger.LogInformation(
             "Routing workflow classification intent={Intent}, complexity={Complexity}, confidence={Confidence}",
@@ -431,12 +487,22 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
             CancellationToken cancellationToken = default)
         {
             message.Classification = await _classificationAgent.ClassifyAsync(
+                message.RequestBody,
                 new RoutingContext(message.Facts),
                 message.RoutingOptions,
                 cancellationToken);
+            message.Facts.Add(new RoutingContextFact("request.intent", message.Classification.Intent));
+            message.Facts.Add(new RoutingContextFact("classifier.source", message.Classification.Source));
+            if (!string.IsNullOrWhiteSpace(message.Classification.ProcessorModel))
+            {
+                message.Facts.Add(new RoutingContextFact("classifier.processorModel", message.Classification.ProcessorModel!));
+            }
+            message.Facts.Add(new RoutingContextFact(
+                "classifier.confidence",
+                message.Classification.Confidence.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
             message.Steps.Add(new RoutingWorkflowStep(
                 "classification-agent",
-                $"{message.Classification.Intent} / {message.Classification.Complexity}"));
+                $"{message.Classification.Intent} / {message.Classification.Complexity} ({message.Classification.Source})"));
             return message;
         }
     }
@@ -472,7 +538,10 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
             IWorkflowContext context,
             CancellationToken cancellationToken = default)
         {
-            message.Decision = BasicModelRouter.SelectModel(message.RequestBody, message.RoutingOptions);
+            message.Decision = BasicModelRouter.SelectModel(
+                message.RequestBody,
+                message.RoutingOptions,
+                message.Classification?.Intent);
             message.Steps.Add(new RoutingWorkflowStep(
                 "routing-decision",
                 $"{message.Decision.ProfileName} => {message.Decision.Profile.Deployment}"));
