@@ -44,11 +44,25 @@ Stop the AppHost process from the terminal or IDE. Docker containers (if running
 Remove-Item .\src\ElBruno.CopilotHarness.Router.Api\App_Data\copilotharness-admin.db
 ```
 
+Deleting the database recreates the seeded model registry (example Ollama + Foundry
+connections), starter rules, and setup state on next start.
+
 **Docker mode** — remove the named Docker volumes:
 
 ```powershell
 docker volume rm copilotharness-postgres-data copilotharness-redis-data
 ```
+
+## Manage models and rules
+
+- Add/edit/test model connections on the Admin **Models** page (or via
+  `/admin/models*`). API keys are encrypted at rest with ASP.NET Core Data Protection.
+- Manage routing rules and the default model on the Admin **Rules** page (or via
+  `/admin/rules*`). Use **Generate starter rules** for a first set, and the **Test** panel
+  to dry-run routing.
+- **Data Protection key ring**: encrypted API keys are tied to the local Data Protection
+  key ring. If it is lost or rotated, re-enter affected model API keys. See
+  [Troubleshooting](Troubleshooting.md).
 
 ## Validate
 

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using ElBruno.CopilotHarness.Router.Core;
 using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.Options;
 
 namespace ElBruno.CopilotHarness.Router.Api;
 
@@ -148,8 +149,10 @@ public sealed class StreamingContextProvider : IRequestContextProvider
     }
 }
 
-public sealed class PromptShapeContextProvider : IRequestContextProvider
+public sealed class PromptShapeContextProvider(IOptions<TelemetryOptions> telemetryOptions) : IRequestContextProvider
 {
+    private readonly TelemetryOptions _telemetryOptions = telemetryOptions.Value;
+
     public string Name => "prompt-shape";
 
     public ValueTask<IReadOnlyList<RoutingContextFact>> ProvideAsync(
@@ -165,11 +168,22 @@ public sealed class PromptShapeContextProvider : IRequestContextProvider
                                        StringComparison.OrdinalIgnoreCase));
 
         var promptCharacters = BasicModelRouter.GetPromptCharacterCount(requestBody);
-        return ValueTask.FromResult<IReadOnlyList<RoutingContextFact>>(
-        [
-            new RoutingContextFact("request.hasSystemMessage", hasSystemMessage.ToString()),
-            new RoutingContextFact("request.promptCharacters", promptCharacters.ToString())
-        ]);
+        var facts = new List<RoutingContextFact>
+        {
+            new("request.hasSystemMessage", hasSystemMessage.ToString()),
+            new("request.promptCharacters", promptCharacters.ToString())
+        };
+
+        if (_telemetryOptions.CapturePromptText)
+        {
+            var preview = PromptPrivacy.BuildPreview(BasicModelRouter.GetPromptText(requestBody), _telemetryOptions);
+            if (!string.IsNullOrEmpty(preview))
+            {
+                facts.Add(new RoutingContextFact(PromptPrivacy.PromptPreviewFactKey, preview));
+            }
+        }
+
+        return ValueTask.FromResult<IReadOnlyList<RoutingContextFact>>(facts);
     }
 }
 

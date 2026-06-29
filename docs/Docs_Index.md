@@ -19,6 +19,16 @@
 
 ---
 
+## Core features
+
+| Doc | Description |
+|---|---|
+| [Model Registry](Model_Registry.md) | Multi-provider LLM connections (Ollama, Azure OpenAI/Foundry), fields, API-key encryption, CRUD + test |
+| [Rules Engine](Rules_Engine.md) | Condition-based routing rules, priority/default, first-run wizard, and rule testing |
+| [Live Routing](Live_Routing.md) | Visual prompt → model → rule → explanation feed (dashboard + VS Code), opt-in prompt capture |
+
+---
+
 ## Phase docs
 
 | Doc | Description |

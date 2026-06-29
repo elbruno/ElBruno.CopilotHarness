@@ -1,78 +1,180 @@
 @page "/setup"
-@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+@using ElBruno.CopilotHarness.Admin.Web.Services
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@inject AdminApiClient Api
+@inject IJSRuntime JS
 
 <PageTitle>Setup Wizard</PageTitle>
 
 <h1>Setup Wizard</h1>
-<p>The wizard never asks for secrets. Configure logical profiles and bootstrap starter rules.</p>
+<p class="muted">
+    The wizard never asks for secrets here — configure model connections (including API keys) on the
+    <a href="/models">Model Registry</a> page. This step picks the default model used when no routing rule matches,
+    and optionally generates a starter set of routing rules.
+</p>
 
-<EditForm Model="_model" OnValidSubmit="SaveAsync">
-    <div class="form-grid">
-        <label>
-            Local deployment
-            <InputText @bind-Value="_model.LocalDeployment" />
-        </label>
-        <label>
-            Small cloud deployment
-            <InputText @bind-Value="_model.SmallDeployment" />
-        </label>
-        <label>
-            Big cloud deployment
-            <InputText @bind-Value="_model.BigDeployment" />
-        </label>
-        <label>
-            Default profile
-            <InputSelect @bind-Value="_model.DefaultProfile">
-                <option value="local">local</option>
-                <option value="small">small</option>
-                <option value="big">big</option>
-            </InputSelect>
-        </label>
-        <label class="checkbox">
-            <InputCheckbox @bind-Value="_model.GenerateFirstRules" />
-            Generate my first rules
-        </label>
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else if (_models.Count == 0)
+{
+    <div class="card">
+        <p>No models are configured yet.</p>
+        <a href="/models"><button>Go to Model Registry</button></a>
     </div>
-    <button type="submit">Save setup</button>
-</EditForm>
+}
+else
+{
+    <EditForm Model="_model" OnValidSubmit="SaveAsync">
+        <div class="form-grid">
+            <label>
+                Default model
+                <InputSelect @bind-Value="_model.DefaultModel">
+                    @foreach (var model in _models)
+                    {
+                        <option value="@model.Name">@model.Name</option>
+                    }
+                </InputSelect>
+            </label>
+            <label class="checkbox">
+                <InputCheckbox @bind-Value="_model.GenerateFirstRules" />
+                Generate my first rules
+            </label>
+        </div>
+        <button type="submit">Save setup</button>
+    </EditForm>
+}
 
 @if (!string.IsNullOrWhiteSpace(_status))
 {
-    <p>@_status</p>
+    <p class="@(_statusOk ? "status-good-text" : "status-bad-text")">@_status</p>
 }
 
+<div class="card">
+    <h2>Connect to VS Code (BYOK)</h2>
+    <p class="muted">
+        Generate the <code>chatLanguageModels.json</code> entry for GitHub Copilot's custom endpoint. Confirm the
+        Router URL you reach the harness on, copy the config, then paste it into VS Code via
+        <em>Chat: Manage Language Models &rarr; Add Models &rarr; Custom Endpoint</em>.
+    </p>
+    <div class="form-grid">
+        <label>
+            Router URL
+            <input type="text" @bind="_routerUrl" @bind:event="oninput" placeholder="http://localhost:5117" />
+        </label>
+        <label>
+            Model id / label
+            <input type="text" @bind="_modelId" @bind:event="oninput" placeholder="elbruno.copilotharness" />
+        </label>
+    </div>
+    <p class="muted">
+        The model id is just a label &mdash; the router selects the real model from your routing rules. VS Code asks
+        for an API key on first use; any non-empty value works unless you set an admin key.
+    </p>
+    <div class="row">
+        <button type="button" @onclick="CopyConfigAsync">Copy config</button>
+        <a class="button-link" href="@ConnectPageUrl" target="_blank" rel="noopener">Open self-service page</a>
+        @if (!string.IsNullOrWhiteSpace(_copyStatus))
+        {
+            <span class="status-good-text">@_copyStatus</span>
+        }
+    </div>
+    <pre class="config-block">@GeneratedConfig</pre>
+</div>
+
 @code {
-    private SetupModel _model = new();
+    private List<ModelConnectionDto> _models = [];
+    private readonly SetupModel _model = new();
+    private bool _loading = true;
     private string? _status;
+    private bool _statusOk = true;
+
+    private string _routerUrl = "http://localhost:5117";
+    private string _modelId = "elbruno.copilotharness";
+    private string? _copyStatus;
+
+    private string ConnectPageUrl => $"{(_routerUrl ?? string.Empty).TrimEnd('/')}/connect";
+
+    private string GeneratedConfig
+    {
+        get
+        {
+            var chatUrl = $"{(_routerUrl ?? string.Empty).TrimEnd('/')}/v1/chat/completions";
+            var id = string.IsNullOrWhiteSpace(_modelId) ? "elbruno.copilotharness" : _modelId.Trim();
+            var config = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["name"] = "SmartRouter",
+                    ["vendor"] = "customendpoint",
+                    ["apiKey"] = "${input:chat.lm.secret.copilotharness}",
+                    ["apiType"] = "chat-completions",
+                    ["models"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["id"] = id,
+                            ["name"] = id,
+                            ["url"] = chatUrl,
+                            ["toolCalling"] = true,
+                            ["vision"] = true,
+                            ["maxInputTokens"] = 128000,
+                            ["maxOutputTokens"] = 16000
+                        }
+                    }
+                }
+            };
+            return config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        }
+    }
+
+    private async Task CopyConfigAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", GeneratedConfig);
+            _copyStatus = "Copied!";
+        }
+        catch
+        {
+            _copyStatus = "Copy failed — select the text below and copy manually.";
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        var models = await Api.GetModelsAsync();
-        _model.LocalDeployment = models.FirstOrDefault(model => model.Name == "local")?.Deployment ?? "gpt-5-mini";
-        _model.SmallDeployment = models.FirstOrDefault(model => model.Name == "small")?.Deployment ?? "gpt-5-mini";
-        _model.BigDeployment = models.FirstOrDefault(model => model.Name == "big")?.Deployment ?? "gpt-5-mini";
-        _model.DefaultProfile = (await Api.GetSetupStateAsync()).DefaultProfile;
+        _models = (await Api.GetModelsAsync()).ToList();
+        var state = await Api.GetSetupStateAsync();
+        _model.DefaultModel = !string.IsNullOrWhiteSpace(state.DefaultProfile)
+            ? state.DefaultProfile
+            : _models.FirstOrDefault()?.Name ?? string.Empty;
+        _loading = false;
     }
 
     private async Task SaveAsync()
     {
-        var response = await Api.SaveSetupAsync(new(
-            _model.LocalDeployment,
-            _model.SmallDeployment,
-            _model.BigDeployment,
-            _model.DefaultProfile,
-            _model.GenerateFirstRules));
-        _status = response.IsCompleted
-            ? $"Setup completed at {response.CompletedAtUtc:O}."
-            : "Setup not completed.";
+        try
+        {
+            var response = await Api.SaveSetupAsync(new SetupWizardRequest(
+                _model.DefaultModel,
+                _model.GenerateFirstRules));
+            _statusOk = response.IsCompleted;
+            _status = response.IsCompleted
+                ? $"Setup completed. Default model: {response.DefaultProfile}."
+                : "Setup not completed.";
+        }
+        catch (Exception ex)
+        {
+            _statusOk = false;
+            _status = $"Setup failed: {ex.Message}";
+        }
     }
 
     private sealed class SetupModel
     {
-        public string LocalDeployment { get; set; } = "gpt-5-mini";
-        public string SmallDeployment { get; set; } = "gpt-5-mini";
-        public string BigDeployment { get; set; } = "gpt-5-mini";
-        public string DefaultProfile { get; set; } = "small";
+        public string DefaultModel { get; set; } = string.Empty;
         public bool GenerateFirstRules { get; set; } = true;
     }
 }

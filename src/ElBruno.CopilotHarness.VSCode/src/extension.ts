@@ -61,12 +61,39 @@ type DashboardSnapshot = {
   generatedAtUtc: string;
 };
 
+type RoutedRequestView = {
+  traceId: string;
+  createdAtUtc: string;
+  clientId: string;
+  clientDisplayName: string;
+  endpoint: string;
+  stream: boolean;
+  requestedModel?: string | null;
+  selectedModel: string;
+  deployment: string;
+  matchedRuleName?: string | null;
+  reason: string;
+  explanation: string;
+  promptPreview?: string | null;
+  promptCharacters: number;
+  classificationIntent: string;
+  classificationComplexity: string;
+};
+
+type RoutingFeedResponse = {
+  generatedAtUtc: string;
+  promptCaptureEnabled: boolean;
+  requests: RoutedRequestView[];
+};
+
 const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
 let statusPanel: vscode.WebviewPanel | undefined;
+let livePanel: vscode.WebviewPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   statusBarItem.text = 'Harness: Ready';
-  statusBarItem.command = 'harness.showStatusPanel';
+  statusBarItem.command = 'harness.showLiveRouting';
+  statusBarItem.tooltip = 'Show Harness live routing (prompt → model → rule)';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
@@ -74,8 +101,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('harness.showStatusPanel', () => showStatusPanel(context)),
     vscode.commands.registerCommand('harness.explainRouting', () => explainRouting(context)),
     vscode.commands.registerCommand('harness.openDashboard', () => openDashboard(context)),
-    vscode.commands.registerCommand('harness.openTrace', () => openTrace(context))
+    vscode.commands.registerCommand('harness.openTrace', () => openTrace(context)),
+    vscode.commands.registerCommand('harness.showLiveRouting', () => showLiveRouting(context))
   );
+
+  // Keep the status bar showing the most recent routed model.
+  void refreshStatusBar(context);
+  const statusBarTimer = setInterval(() => void refreshStatusBar(context), 5000);
+  context.subscriptions.push({ dispose: () => clearInterval(statusBarTimer) });
 
   const chatApi = (vscode as any).chat;
   if (chatApi?.createChatParticipant) {
@@ -201,7 +234,8 @@ async function fetchRoutingExplanation(
   const response = await fetchJson<PlaygroundResponse>(`${adminBaseUrl}/admin/playground/evaluate`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...adminAuthHeaders()
     },
     body: JSON.stringify(request)
   });
@@ -211,14 +245,141 @@ async function fetchRoutingExplanation(
 
 async function fetchTrace(context: vscode.ExtensionContext, traceId: string, token: vscode.CancellationToken): Promise<TraceResponse> {
   return await fetchJson<TraceResponse>(`${getAdminBaseUrl()}/admin/traces/${encodeURIComponent(traceId)}`, {
-    method: 'GET'
+    method: 'GET',
+    headers: adminAuthHeaders()
   });
 }
 
 async function fetchSnapshot(context: vscode.ExtensionContext, token: vscode.CancellationToken): Promise<DashboardSnapshot> {
   return await fetchJson<DashboardSnapshot>(`${getAdminBaseUrl()}/admin/dashboard/snapshot`, {
-    method: 'GET'
+    method: 'GET',
+    headers: adminAuthHeaders()
   });
+}
+
+async function fetchRoutingFeed(context: vscode.ExtensionContext, limit = 50): Promise<RoutingFeedResponse> {
+  return await fetchJson<RoutingFeedResponse>(`${getAdminBaseUrl()}/admin/telemetry/feed?limit=${limit}`, {
+    method: 'GET',
+    headers: adminAuthHeaders()
+  });
+}
+
+async function refreshStatusBar(context: vscode.ExtensionContext) {
+  try {
+    const feed = await fetchRoutingFeed(context, 1);
+    const latest = feed.requests[0];
+    statusBarItem.text = latest
+      ? `Harness: ${latest.selectedModel}`
+      : 'Harness: Ready';
+    statusBarItem.tooltip = latest
+      ? `Last routed to ${latest.selectedModel}${latest.matchedRuleName ? ` via rule '${latest.matchedRuleName}'` : ''}. Click for live routing.`
+      : 'Show Harness live routing (prompt → model → rule)';
+  } catch {
+    statusBarItem.text = 'Harness: Offline';
+  }
+}
+
+async function showLiveRouting(context: vscode.ExtensionContext) {
+  const panel = getOrCreateLivePanel(context);
+  await renderLivePanel(context, panel);
+  panel.reveal(vscode.ViewColumn.One);
+}
+
+function getOrCreateLivePanel(context: vscode.ExtensionContext) {
+  if (livePanel) {
+    return livePanel;
+  }
+
+  livePanel = vscode.window.createWebviewPanel(
+    'harnessLiveRouting',
+    'Harness Live Routing',
+    vscode.ViewColumn.One,
+    { enableScripts: true }
+  );
+
+  livePanel.onDidDispose(() => {
+    livePanel = undefined;
+  }, undefined, context.subscriptions);
+
+  livePanel.webview.onDidReceiveMessage(async message => {
+    if (message?.command === 'refresh' && livePanel) {
+      await renderLivePanel(context, livePanel);
+    } else if (message?.command === 'openTrace' && typeof message.traceId === 'string') {
+      await openTrace(context, message.traceId);
+    }
+  }, undefined, context.subscriptions);
+
+  return livePanel;
+}
+
+async function renderLivePanel(context: vscode.ExtensionContext, panel: vscode.WebviewPanel) {
+  let feed: RoutingFeedResponse;
+  try {
+    feed = await fetchRoutingFeed(context, 50);
+  } catch (error) {
+    feed = { generatedAtUtc: new Date().toISOString(), promptCaptureEnabled: false, requests: [] };
+  }
+
+  panel.webview.html = renderLiveRoutingHtml(feed);
+}
+
+function renderLiveRoutingHtml(feed: RoutingFeedResponse): string {
+  const nonce = createNonce();
+  const rows = feed.requests.map(request => {
+    const prompt = request.promptPreview
+      ? escapeHtml(request.promptPreview.length > 80 ? `${request.promptPreview.slice(0, 80)}…` : request.promptPreview)
+      : `<span class="muted">(${request.promptCharacters} chars)</span>`;
+    return `<tr>
+      <td>${escapeHtml(new Date(request.createdAtUtc).toLocaleTimeString())}</td>
+      <td>${prompt}</td>
+      <td><strong>${escapeHtml(request.selectedModel)}</strong></td>
+      <td>${escapeHtml(request.matchedRuleName ?? '-')}</td>
+      <td>${escapeHtml(request.explanation)}</td>
+      <td><a href="#" data-trace="${escapeHtml(request.traceId)}">${escapeHtml(request.traceId)}</a></td>
+    </tr>`;
+  }).join('');
+
+  const captureNote = feed.promptCaptureEnabled
+    ? ''
+    : '<p class="muted">Prompt text capture is disabled on the router. Set <code>Telemetry__CapturePromptText=true</code> to show prompt previews.</p>';
+
+  return `<!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style nonce="${nonce}">
+      body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 1rem; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border-bottom: 1px solid var(--vscode-panel-border); padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; }
+      th { color: var(--vscode-descriptionForeground); }
+      .muted { color: var(--vscode-descriptionForeground); }
+      button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; margin-bottom: 8px; }
+      a { color: var(--vscode-textLink-foreground); }
+    </style>
+  </head>
+  <body>
+    <h2>Live Routing</h2>
+    <p class="muted">Prompt → model → rule → explanation. Snapshot at ${escapeHtml(feed.generatedAtUtc)}.</p>
+    ${captureNote}
+    <button id="refresh">Refresh</button>
+    <table>
+      <thead><tr><th>Time</th><th>Prompt</th><th>Model</th><th>Rule</th><th>Explanation</th><th>Trace</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="muted">No routed requests yet.</td></tr>'}</tbody>
+    </table>
+    <script nonce="${nonce}">
+      const vscode = acquireVsCodeApi();
+      document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ command: 'refresh' }));
+      document.querySelectorAll('a[data-trace]').forEach(link => {
+        link.addEventListener('click', event => {
+          event.preventDefault();
+          vscode.postMessage({ command: 'openTrace', traceId: link.getAttribute('data-trace') });
+        });
+      });
+    </script>
+  </body>
+  </html>`;
 }
 
 async function buildStatusHtml(context: vscode.ExtensionContext, webview: vscode.Webview): Promise<string> {
@@ -312,11 +473,11 @@ async function getStatusSummary(context: vscode.ExtensionContext) {
 }
 
 function getRouterUrl() {
-  return getConfiguration().get<string>('routerBaseUrl') ?? 'http://localhost:5080';
+  return getConfiguration().get<string>('routerBaseUrl') ?? 'http://localhost:5117';
 }
 
 function getAdminBaseUrl() {
-  return getConfiguration().get<string>('adminBaseUrl') ?? 'http://localhost:5080';
+  return getConfiguration().get<string>('adminBaseUrl') ?? 'http://localhost:5117';
 }
 
 function getDashboardUrl() {
@@ -329,6 +490,15 @@ function getTraceUrl(traceId: string) {
 
 function getConfiguration() {
   return vscode.workspace.getConfiguration('harness');
+}
+
+function getAdminApiKey() {
+  return getConfiguration().get<string>('adminApiKey')?.trim() ?? '';
+}
+
+function adminAuthHeaders(): Record<string, string> {
+  const key = getAdminApiKey();
+  return key ? { Authorization: `Bearer ${key}` } : {};
 }
 
 async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {

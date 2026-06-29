@@ -21,4 +21,25 @@ public sealed class FoundryOptions
 
         return new Uri(baseAddress, UriKind.Absolute);
     }
+
+    /// <summary>
+    /// Returns the Azure OpenAI resource root (with a trailing slash) for an Azure endpoint, tolerating
+    /// values that already include an <c>/openai</c> or <c>/openai/v1</c> suffix. This prevents a doubled
+    /// path (e.g. <c>/openai/v1/openai/deployments/...</c>) when the deployments path is appended.
+    /// </summary>
+    public static Uri GetAzureResourceBase(string endpoint)
+    {
+        var trimmed = (endpoint ?? string.Empty).Trim().TrimEnd('/');
+
+        if (trimmed.EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[..^"/openai/v1".Length];
+        }
+        else if (trimmed.EndsWith("/openai", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[..^"/openai".Length];
+        }
+
+        return new Uri($"{trimmed}/", UriKind.Absolute);
+    }
 }

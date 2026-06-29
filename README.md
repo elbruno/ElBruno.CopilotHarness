@@ -17,7 +17,8 @@ Route every GitHub Copilot request through your own infrastructure. Choose which
 | Feature | Description |
 |---|---|
 | **OpenAI-compatible router** | Drop-in proxy for GitHub Copilot BYOK — no client-side changes needed |
-| **Intelligent model routing** | Rules + AI agents select the best model per request |
+| **Multi-provider model registry** | Register any number of LLM connections — Ollama and Azure OpenAI/Foundry — with API keys encrypted at rest |
+| **Condition-based routing rules** | Map prompt size, streaming, system message, keyword, or regex conditions to a target model, with a first-run wizard and a built-in rule tester |
 | **Admin dashboard** | Manage models, rules, routing history, and approval workflows |
 | **AI Judge** | Replay prompts, benchmark models, score quality with an AI evaluator |
 | **Continuous evaluation** | Shadow routing, rule confidence scoring, human approval before changes apply |
@@ -35,6 +36,10 @@ Route every GitHub Copilot request through your own infrastructure. Choose which
 ### Admin — Routing Dashboard
 
 ![Admin Dashboard](docs/images/admin-dashboard.png)
+
+### Admin — Live Routing (prompt → model → rule → explanation)
+
+![Admin Live Routing](docs/images/admin-live-routing.png)
 
 ### Admin — Rules Editor
 
@@ -89,6 +94,14 @@ aspire run
 <a id="3--set-up-byok-in-github-copilot"></a>
 ### 3 — Set up BYOK in GitHub Copilot (VS Code)
 
+> **Quickest path — let the harness generate the config for you:**
+> - Open **`http://localhost:5117/connect`** (the Router.Api self-service page) and click **Copy config**, or
+> - Open the Admin dashboard **Setup Wizard → Connect to VS Code (BYOK)** panel, confirm the Router URL, and click **Copy config**.
+>
+> Both produce the exact `chatLanguageModels.json` shown below, with the chat URL already filled in. Then jump to step 5.
+
+![Setup Wizard — Connect to VS Code (BYOK) panel](docs/images/admin-setup-connect.png)
+
 1. Start the harness with `aspire run` and copy the **Router.Api** URL from the Aspire dashboard (for example `http://localhost:5117`).
 2. In VS Code, open **Copilot Chat** and then open the model picker at the bottom of chat.
 3. Select **Manage Models** (or run **Chat: Manage Language Models** from the Command Palette).
@@ -96,7 +109,8 @@ aspire run
 5. Configure the model to call your harness endpoint:
    - API type: **Chat Completions**
    - URL: `<Router.Api URL>/v1/chat/completions` (for example `http://localhost:5117/v1/chat/completions`)
-   - Model id/name: use one configured by the router (for example `gpt-5-mini`)
+   - Model id/name: any label you like (for example `elbruno.copilotharness`) — the router selects the real model from your routing rules.
+   - API key: VS Code asks for one on first use; any non-empty value works unless you set an admin key.
 6. Save the model configuration, pick this model in Copilot Chat, and send a prompt.
 
 > **Notes**
@@ -107,6 +121,32 @@ aspire run
 >   - https://code.visualstudio.com/docs/agent-customization/language-models#_add-a-custom-endpoint-model
 >   - https://docs.github.com/en/copilot/how-tos/use-ai-models/change-the-chat-model#adding-more-models
 
+If VS Code opens `chatLanguageModels.json`, this working example matches the harness:
+
+```json
+[
+  {
+    "name": "SmartRouter",
+    "vendor": "customendpoint",
+    "apiKey": "${input:chat.lm.secret.-32311979}",
+    "apiType": "chat-completions",
+    "models": [
+      {
+        "id": "elbruno.copilotharness",
+        "name": "elbruno.copilotharness",
+        "url": "http://localhost:5117/v1/chat/completions",
+        "toolCalling": true,
+        "vision": true,
+        "maxInputTokens": 128000,
+        "maxOutputTokens": 16000
+      }
+    ]
+  }
+]
+```
+
+![VS Code Custom Endpoint JSON example](docs/images/byok-chatLanguageModels-json.png)
+
 ---
 
 ## Documentation
@@ -114,6 +154,9 @@ aspire run
 | Doc | Description |
 |---|---|
 | [User Manual](docs/User_Manual.md) | Full setup and feature walkthrough |
+| [Model Registry](docs/Model_Registry.md) | Multi-provider model connections and API-key encryption |
+| [Rules Engine](docs/Rules_Engine.md) | Condition-based routing rules, wizard, and rule testing |
+| [Live Routing](docs/Live_Routing.md) | Visual prompt → model → rule → explanation feed (dashboard + VS Code) |
 | [Architecture](docs/Architecture.md) | System design and component boundaries |
 | [API Reference](docs/API_Reference.md) | All router and admin endpoints |
 | [Current Progress](docs/Current_Progress.md) | Phase status and what's implemented |

@@ -1,117 +1,357 @@
 @page "/rules"
-@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+@using ElBruno.CopilotHarness.Admin.Web.Services
+@inject AdminApiClient Api
 
 <PageTitle>Rules Editor</PageTitle>
 
 <h1>Rules Editor</h1>
-<p>Phase 2 supports deterministic basic routing rules. Rule confidence indicators are provided by the Phase 8 Recommendation Agent.</p>
+<p class="muted">
+    Condition-based routing rules. Each rule matches a request condition (prompt size, streaming, system message,
+    requested model, keyword, or regex) and routes to a target model. Rules are evaluated by ascending priority;
+    the first match wins. If nothing matches, the default model is used.
+</p>
 
-<button @onclick="GenerateStarterRulesAsync">Generate my first rules</button>
-
-@if (_model is null)
+@if (_loading)
 {
-    <p>Loading rules...</p>
+    <p>Loading rules…</p>
 }
 else
 {
-    <EditForm Model="_model" OnValidSubmit="SaveAsync">
-        <div class="form-grid">
-            <label>Default profile <InputText @bind-Value="_model.DefaultProfile" /></label>
-            <label>Big prompt threshold <InputNumber @bind-Value="_model.BigPromptCharacterThreshold" /></label>
-            <label>Big profile <InputText @bind-Value="_model.BigProfile" /></label>
-            <label>Streaming profile <InputText @bind-Value="_model.StreamingProfile" /></label>
-            <label class="checkbox"><InputCheckbox @bind-Value="_model.PreferBigWhenSystemMessageExists" /> Prefer big when system exists</label>
-            <label class="checkbox"><InputCheckbox @bind-Value="_model.PreferStreamingProfileWhenStreaming" /> Prefer streaming profile</label>
-        </div>
-        <button type="submit">Save rules</button>
-    </EditForm>
+    <div class="dashboard-actions">
+        <button @onclick="StartCreate">➕ Add rule</button>
+        @if (_rules.Count == 0)
+        {
+            <button class="btn-approve" @onclick="GenerateStarterRulesAsync">✨ Generate my first rules</button>
+        }
+    </div>
+
+    @if (_rules.Count == 0)
+    {
+        <p class="muted">No rules yet. Use the wizard to generate a sensible starter set, or add one manually.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Priority</th>
+                    <th>Name</th>
+                    <th>Condition</th>
+                    <th>Target model</th>
+                    <th>Enabled</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rule in _rules)
+                {
+                    <tr>
+                        <td>@rule.Priority</td>
+                        <td><strong>@rule.Name</strong><br /><span class="muted">@rule.Description</span></td>
+                        <td>@DescribeCondition(rule)</td>
+                        <td>@rule.TargetModel</td>
+                        <td>
+                            <span class="status-pill @(rule.Enabled ? "status-good" : "status-neutral")">
+                                @(rule.Enabled ? "enabled" : "disabled")
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn-approve" @onclick="() => StartEdit(rule)">Edit</button>
+                            <button class="btn-reject" @onclick="() => DeleteAsync(rule)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@if (_editor is not null)
+{
+    <div class="card">
+        <h2>@(_isNew ? "Add rule" : $"Edit '{_editorName}'")</h2>
+        <EditForm Model="_editor" OnValidSubmit="SaveAsync">
+            <div class="form-grid">
+                <label>
+                    Name
+                    <InputText @bind-Value="_editor.Name" placeholder="e.g. Large prompts to Foundry" />
+                </label>
+                <label>
+                    Priority
+                    <InputNumber @bind-Value="_editor.Priority" />
+                </label>
+                <label>
+                    Description
+                    <InputText @bind-Value="_editor.Description" />
+                </label>
+                <label>
+                    Condition type
+                    <InputSelect @bind-Value="_editor.ConditionType">
+                        @foreach (var option in ConditionTypes)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </InputSelect>
+                </label>
+                @if (ConditionNeedsValue(_editor.ConditionType))
+                {
+                    <label>
+                        @ConditionValueLabel(_editor.ConditionType)
+                        <InputText @bind-Value="_editor.ConditionValue" />
+                    </label>
+                }
+                <label>
+                    Target model
+                    <InputSelect @bind-Value="_editor.TargetModel">
+                        <option value="">— select —</option>
+                        @foreach (var model in _models)
+                        {
+                            <option value="@model.Name">@model.Name</option>
+                        }
+                    </InputSelect>
+                </label>
+                <label class="checkbox">
+                    <InputCheckbox @bind-Value="_editor.Enabled" /> Enabled
+                </label>
+            </div>
+            <button type="submit">@(_isNew ? "Create" : "Save")</button>
+            <button type="button" class="btn-reject" @onclick="CancelEdit">Cancel</button>
+        </EditForm>
+    </div>
 }
 
 @if (!string.IsNullOrWhiteSpace(_status))
 {
-    <p>@_status</p>
+    <p class="@(_statusOk ? "status-good-text" : "status-bad-text")">@_status</p>
 }
+
+<div class="card">
+    <h2>Test the ruleset</h2>
+    <p class="muted">Enter a sample request and see which rule matches and which model is selected.</p>
+    <EditForm Model="_test" OnValidSubmit="RunTestAsync">
+        <div class="form-grid">
+            <label>
+                Prompt
+                <InputTextArea @bind-Value="_test.Prompt" rows="3" />
+            </label>
+            <label>
+                System message (optional)
+                <InputTextArea @bind-Value="_test.SystemMessage" rows="3" />
+            </label>
+            <label>
+                Requested model (optional)
+                <InputText @bind-Value="_test.RequestedModel" />
+            </label>
+            <label class="checkbox">
+                <InputCheckbox @bind-Value="_test.Stream" /> Streaming request
+            </label>
+        </div>
+        <button type="submit">Run test</button>
+    </EditForm>
+
+    @if (_testResult is not null)
+    {
+        <div class="card">
+            <p><strong>Selected model:</strong> @_testResult.SelectedModel</p>
+            <p><strong>Matched rule:</strong> @(_testResult.MatchedRuleName ?? "(none — used default/fallback)")</p>
+            <p class="muted">@_testResult.Reason · @_testResult.PromptCharacters prompt characters</p>
+        </div>
+    }
+</div>
 
 @if (_confidence is not null && _confidence.Items.Count > 0)
 {
     <h2>Rule confidence</h2>
-    <p class="muted">Confidence levels from the Phase 8 Recommendation Agent. High confidence rules are well-supported by benchmark data.</p>
+    <p class="muted">Confidence levels from the Phase 8 Recommendation Agent.</p>
     <div class="model-list">
         @foreach (var item in _confidence.Items)
         {
             <div class="card confidence-row">
                 <div class="approval-header">
                     <strong>@item.RuleKey</strong>
-                    <span class="confidence-pill @GetConfidenceClass(item.Confidence)">
-                        @FormatConfidence(item.Confidence)
-                    </span>
+                    <span class="confidence-pill @GetConfidenceClass(item.Confidence)">@FormatConfidence(item.Confidence)</span>
                     <span class="muted">@item.Trend</span>
                 </div>
                 <div class="confidence-bar-track">
                     <div class="confidence-bar-fill @GetConfidenceClass(item.Confidence)"
                          style="width: @(Math.Round(item.Confidence * 100))%"></div>
                 </div>
-                <p class="muted">Last evaluated @item.LastEvaluatedAtUtc.ToLocalTime().ToString("u")</p>
             </div>
         }
     </div>
 }
 
 @code {
-    private MutableRules? _model;
+    private List<RoutingRuleDto> _rules = [];
+    private List<ModelConnectionDto> _models = [];
+    private RulesConfidenceResponse? _confidence;
+    private bool _loading = true;
     private string? _status;
-    private ElBruno.CopilotHarness.Admin.Web.Services.RulesConfidenceResponse? _confidence;
+    private bool _statusOk = true;
 
-    protected override async Task OnInitializedAsync()
+    private RuleEditor? _editor;
+    private bool _isNew;
+    private int _editorId;
+    private string _editorName = string.Empty;
+
+    private readonly RuleTestModel _test = new();
+    private RuleTestResponse? _testResult;
+
+    private static readonly (string Value, string Label)[] ConditionTypes =
+    [
+        ("Always", "Always (catch-all)"),
+        ("PromptSizeAtLeast", "Prompt size at least (characters)"),
+        ("IsStreaming", "Request is streaming"),
+        ("HasSystemMessage", "Has a system message"),
+        ("RequestedModelEquals", "Requested model equals"),
+        ("PromptContainsKeyword", "Prompt contains keyword"),
+        ("PromptMatchesRegex", "Prompt matches regex")
+    ];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
     {
-        _model = new MutableRules(await Api.GetBasicRulesAsync());
+        _loading = true;
+        _rules = (await Api.GetRulesAsync()).OrderBy(rule => rule.Priority).ToList();
+        _models = (await Api.GetModelsAsync()).ToList();
         _confidence = await Api.GetRulesConfidenceAsync();
+        _loading = false;
     }
 
-    private async Task GenerateStarterRulesAsync()
+    private void StartCreate()
     {
-        await Api.GenerateFirstRulesAsync();
-        _model = new MutableRules(await Api.GetBasicRulesAsync());
-        _status = "Starter rules generated.";
+        _isNew = true;
+        _editorId = 0;
+        _editorName = string.Empty;
+        _editor = new RuleEditor
+        {
+            ConditionType = "PromptSizeAtLeast",
+            ConditionValue = "8000",
+            Priority = (_rules.Count + 1) * 10,
+            Enabled = true,
+            TargetModel = _models.FirstOrDefault()?.Name ?? string.Empty
+        };
     }
+
+    private void StartEdit(RoutingRuleDto rule)
+    {
+        _isNew = false;
+        _editorId = rule.Id;
+        _editorName = rule.Name;
+        _editor = new RuleEditor
+        {
+            Name = rule.Name,
+            Description = rule.Description,
+            ConditionType = rule.ConditionType,
+            ConditionValue = rule.ConditionValue,
+            TargetModel = rule.TargetModel,
+            Priority = rule.Priority,
+            Enabled = rule.Enabled
+        };
+    }
+
+    private void CancelEdit() => _editor = null;
 
     private async Task SaveAsync()
     {
-        if (_model is null)
+        if (_editor is null)
         {
             return;
         }
 
-        var updated = await Api.UpdateBasicRulesAsync(new(
-            _model.DefaultProfile,
-            _model.BigPromptCharacterThreshold,
-            _model.BigProfile,
-            _model.StreamingProfile,
-            _model.PreferBigWhenSystemMessageExists,
-            _model.PreferStreamingProfileWhenStreaming));
-        _model = new MutableRules(updated);
-        _status = $"Rules updated at {updated.UpdatedAtUtc:O}.";
-    }
-
-    private sealed class MutableRules
-    {
-        public MutableRules(BasicRulesDto source)
+        try
         {
-            DefaultProfile = source.DefaultProfile;
-            BigPromptCharacterThreshold = source.BigPromptCharacterThreshold;
-            BigProfile = source.BigProfile;
-            StreamingProfile = source.StreamingProfile;
-            PreferBigWhenSystemMessageExists = source.PreferBigWhenSystemMessageExists;
-            PreferStreamingProfileWhenStreaming = source.PreferStreamingProfileWhenStreaming;
-        }
+            var request = new RoutingRuleUpsertRequest(
+                _editor.Name,
+                _editor.Description ?? string.Empty,
+                _editor.ConditionType,
+                ConditionNeedsValue(_editor.ConditionType) ? _editor.ConditionValue ?? string.Empty : string.Empty,
+                _editor.TargetModel,
+                _editor.Priority,
+                _editor.Enabled);
 
-        public string DefaultProfile { get; set; }
-        public int BigPromptCharacterThreshold { get; set; }
-        public string BigProfile { get; set; }
-        public string StreamingProfile { get; set; }
-        public bool PreferBigWhenSystemMessageExists { get; set; }
-        public bool PreferStreamingProfileWhenStreaming { get; set; }
+            if (_isNew)
+            {
+                await Api.CreateRuleAsync(request);
+                SetStatus($"Created rule '{_editor.Name}'.", true);
+            }
+            else
+            {
+                await Api.UpdateRuleAsync(_editorId, request);
+                SetStatus($"Saved rule '{_editor.Name}'.", true);
+            }
+
+            _editor = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Save failed: {ex.Message}", false);
+        }
     }
+
+    private async Task DeleteAsync(RoutingRuleDto rule)
+    {
+        try
+        {
+            await Api.DeleteRuleAsync(rule.Id);
+            SetStatus($"Deleted rule '{rule.Name}'.", true);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Delete failed: {ex.Message}", false);
+        }
+    }
+
+    private async Task GenerateStarterRulesAsync()
+    {
+        await Api.GenerateStarterRulesAsync();
+        SetStatus("Starter rules generated.", true);
+        await ReloadAsync();
+    }
+
+    private async Task RunTestAsync()
+    {
+        _testResult = await Api.TestRuleAsync(new RuleTestRequest(
+            _test.Prompt ?? string.Empty,
+            string.IsNullOrWhiteSpace(_test.SystemMessage) ? null : _test.SystemMessage,
+            _test.Stream,
+            string.IsNullOrWhiteSpace(_test.RequestedModel) ? null : _test.RequestedModel));
+    }
+
+    private void SetStatus(string message, bool ok)
+    {
+        _status = message;
+        _statusOk = ok;
+    }
+
+    private static bool ConditionNeedsValue(string conditionType) =>
+        conditionType is "PromptSizeAtLeast" or "RequestedModelEquals" or "PromptContainsKeyword" or "PromptMatchesRegex";
+
+    private static string ConditionValueLabel(string conditionType) =>
+        conditionType switch
+        {
+            "PromptSizeAtLeast" => "Minimum characters",
+            "RequestedModelEquals" => "Model name",
+            "PromptContainsKeyword" => "Keyword",
+            "PromptMatchesRegex" => "Regular expression",
+            _ => "Value"
+        };
+
+    private static string DescribeCondition(RoutingRuleDto rule) =>
+        rule.ConditionType switch
+        {
+            "Always" => "Always",
+            "IsStreaming" => "Streaming request",
+            "HasSystemMessage" => "Has system message",
+            "PromptSizeAtLeast" => $"Prompt ≥ {rule.ConditionValue} chars",
+            "RequestedModelEquals" => $"Requested model = '{rule.ConditionValue}'",
+            "PromptContainsKeyword" => $"Contains '{rule.ConditionValue}'",
+            "PromptMatchesRegex" => $"Matches /{rule.ConditionValue}/",
+            _ => rule.ConditionType
+        };
 
     private static string GetConfidenceClass(double confidence) =>
         confidence switch
@@ -121,6 +361,24 @@ else
             _ => "confidence-low"
         };
 
-    private static string FormatConfidence(double confidence) =>
-        $"{Math.Round(confidence * 100)}%";
+    private static string FormatConfidence(double confidence) => $"{Math.Round(confidence * 100)}%";
+
+    private sealed class RuleEditor
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string ConditionType { get; set; } = "Always";
+        public string? ConditionValue { get; set; }
+        public string TargetModel { get; set; } = string.Empty;
+        public int Priority { get; set; }
+        public bool Enabled { get; set; } = true;
+    }
+
+    private sealed class RuleTestModel
+    {
+        public string? Prompt { get; set; }
+        public string? SystemMessage { get; set; }
+        public string? RequestedModel { get; set; }
+        public bool Stream { get; set; }
+    }
 }

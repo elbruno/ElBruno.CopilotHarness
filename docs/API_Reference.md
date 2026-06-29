@@ -34,11 +34,99 @@ Returns routing trace details for a trace id.
 
 Returns the chat participant, dashboard link, and language model tool metadata used by the VS Code extension.
 
+### `GET /v1/vscode-config`
+
+Returns a ready-to-paste `chatLanguageModels.json` document for GitHub Copilot's BYOK custom endpoint.
+The chat completions URL is derived from the inbound request host, so it is correct for whatever
+host/port you reached the router on. Optional query parameters: `modelId` (the model id/label, default
+`elbruno.copilotharness`) and `name` (the config name, default `SmartRouter`).
+
+### `GET /connect`
+
+A friendly HTML page that renders the `chatLanguageModels.json` config with **Copy** and
+**Download** helpers plus step-by-step VS Code instructions. Open `http://localhost:5117/connect`.
+
 ## Admin
+
+### Model Registry — `/admin/models`
+
+Multi-provider LLM connections. See [Model Registry](Model_Registry.md).
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/admin/models` | List all model connections. API keys are never returned; each entry exposes `hasApiKey`. |
+| `GET` | `/admin/models/{id}` | Get one model connection. |
+| `POST` | `/admin/models` | Create a connection. Body: `ModelConnectionUpsertRequest` `{ name, type, endpoint, modelName, apiVersion, apiKey?, enabled }`. `type` is `ollama` or `azure-openai`. |
+| `PUT` | `/admin/models/{id}` | Update a connection. `apiKey`: `null` keeps the existing key, `""` clears it, non-empty replaces it. |
+| `DELETE` | `/admin/models/{id}` | Delete a connection. |
+| `POST` | `/admin/models/{id}/test` | Connectivity probe. Returns `{ success, message, latencyMs }`. |
+
+`ModelConnectionDto`: `{ id, name, type, endpoint, modelName, apiVersion, hasApiKey, enabled, updatedAtUtc }`.
+
+### Rules Engine — `/admin/rules`
+
+Condition-based routing rules + default model. See [Rules Engine](Rules_Engine.md).
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/admin/rules` | List all rules. |
+| `GET` | `/admin/rules/{id}` | Get one rule. |
+| `POST` | `/admin/rules` | Create a rule. Body: `RoutingRuleUpsertRequest` `{ name, description, conditionType, conditionValue, targetModel, priority, enabled }`. |
+| `PUT` | `/admin/rules/{id}` | Update a rule. |
+| `DELETE` | `/admin/rules/{id}` | Delete a rule. |
+| `POST` | `/admin/rules/wizard` | Generate the starter rule set (first-run). |
+| `POST` | `/admin/rules/test` | Dry-run evaluation. Body: `{ prompt, systemMessage?, stream, requestedModel? }`. Returns `{ matchedRuleName, selectedModel, reason, promptCharacters }`. |
+| `GET` | `/admin/rules/default` | Get the default model name. |
+| `PUT` | `/admin/rules/default` | Set the default model. Body: `{ modelName }`. |
+
+`conditionType` is one of: `Always`, `PromptSizeAtLeast`, `IsStreaming`, `HasSystemMessage`, `RequestedModelEquals`, `PromptContainsKeyword`, `PromptMatchesRegex`.
+
+`RoutingRuleDto`: `{ id, name, description, conditionType, conditionValue, targetModel, priority, enabled, updatedAtUtc }`.
+
+### Setup — `/admin/setup`
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/admin/setup/state` | Returns setup completion state and the default model. |
+| `POST` | `/admin/setup/wizard` | Complete first-run setup. Body: `{ defaultModel, generateFirstRules }`. |
+| `POST` | `/admin/setup/generate-first-rules` | Generate the starter rule set. |
 
 ### `GET /admin/dashboard/snapshot`
 
 Returns connected clients and live requests for the Admin dashboard.
+
+### `GET /admin/telemetry/feed`
+
+Returns the **Live Routing** feed — one row per routed request combining prompt preview, selected model, matched rule, and a human explanation. Query string: `?limit=` (1–200, default 50). Response shape:
+
+```json
+{
+  "generatedAtUtc": "2026-...",
+  "promptCaptureEnabled": true,
+  "requests": [
+    {
+      "traceId": "trace-...",
+      "createdAtUtc": "2026-...",
+      "clientId": "vscode",
+      "clientDisplayName": "VS Code",
+      "endpoint": "/v1/chat/completions",
+      "stream": true,
+      "requestedModel": "elbruno.copilotharness",
+      "selectedModel": "small",
+      "deployment": "llama3.2",
+      "matchedRuleName": "Short prompts",
+      "reason": "Matched rule 'Short prompts'.",
+      "explanation": "Routed to 'small' because rule 'Short prompts' matched. Classified as conversational/low.",
+      "promptPreview": "hi",
+      "promptCharacters": 2,
+      "classificationIntent": "conversational",
+      "classificationComplexity": "low"
+    }
+  ]
+}
+```
+
+`promptPreview` is only populated when `Telemetry:CapturePromptText=true` on the router (truncated to `Telemetry:PromptPreviewMaxChars`, secrets redacted when `Telemetry:RedactSecrets=true`). When capture is off, `promptCaptureEnabled` is `false` and `promptPreview` is empty, but the model/rule/explanation are still returned.
 
 ### `GET /admin/operations/status`
 

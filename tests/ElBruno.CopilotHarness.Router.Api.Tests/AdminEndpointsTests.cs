@@ -14,17 +14,16 @@ public sealed class AdminEndpointsTests : IClassFixture<RouterApiWebApplicationF
     }
 
     [Fact]
-    public async Task ModelsEndpoint_ReturnsThreeSeededProfiles()
+    public async Task ModelsEndpoint_ReturnsSeededConnections()
     {
         var response = await _client.GetAsync("/admin/models");
 
         response.EnsureSuccessStatusCode();
-        var models = await response.Content.ReadFromJsonAsync<List<ModelProfileDto>>();
+        var models = await response.Content.ReadFromJsonAsync<List<ModelConnectionDto>>();
 
         Assert.NotNull(models);
-        Assert.Contains(models, model => model.Name == "local");
-        Assert.Contains(models, model => model.Name == "small");
-        Assert.Contains(models, model => model.Name == "big");
+        Assert.Contains(models, model => model.Name == "ollama llama3.2" && model.Type == "ollama");
+        Assert.Contains(models, model => model.Name == "foundry gpt-5-mini" && model.Type == "azure-openai");
     }
 
     [Fact]
@@ -54,10 +53,7 @@ public sealed class AdminEndpointsTests : IClassFixture<RouterApiWebApplicationF
     public async Task SetupWizard_UpdatesSetupState()
     {
         var response = await _client.PostAsJsonAsync("/admin/setup/wizard", new SetupWizardRequest(
-            LocalDeployment: "gpt-local",
-            SmallDeployment: "gpt-small",
-            BigDeployment: "gpt-big",
-            DefaultProfile: "small",
+            DefaultModel: "foundry gpt-5-mini",
             GenerateFirstRules: true));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -68,7 +64,7 @@ public sealed class AdminEndpointsTests : IClassFixture<RouterApiWebApplicationF
 
         Assert.NotNull(setupState);
         Assert.True(setupState.IsCompleted);
-        Assert.Equal("small", setupState.DefaultProfile);
+        Assert.Equal("foundry gpt-5-mini", setupState.DefaultProfile);
     }
 
     [Fact]

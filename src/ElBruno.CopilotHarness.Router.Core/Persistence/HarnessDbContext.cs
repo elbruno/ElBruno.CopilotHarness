@@ -4,7 +4,8 @@ namespace ElBruno.CopilotHarness.Router.Core.Persistence;
 
 public sealed class HarnessDbContext(DbContextOptions<HarnessDbContext> options) : DbContext(options)
 {
-    public DbSet<ModelProfileEntity> ModelProfiles => Set<ModelProfileEntity>();
+    public DbSet<ModelConnectionEntity> Models => Set<ModelConnectionEntity>();
+    public DbSet<RoutingRuleEntity> RoutingRules => Set<RoutingRuleEntity>();
     public DbSet<RoutingRuleSettingsEntity> RoutingRuleSettings => Set<RoutingRuleSettingsEntity>();
     public DbSet<RoutingExecutionTraceEntity> RoutingExecutionTraces => Set<RoutingExecutionTraceEntity>();
     public DbSet<SetupStateEntity> SetupState => Set<SetupStateEntity>();
@@ -20,13 +21,25 @@ public sealed class HarnessDbContext(DbContextOptions<HarnessDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        var profiles = modelBuilder.Entity<ModelProfileEntity>();
-        profiles.ToTable("ModelProfiles");
-        profiles.HasKey(entity => entity.ProfileName);
-        profiles.Property(entity => entity.ProfileName).HasMaxLength(64);
-        profiles.Property(entity => entity.DisplayName).HasMaxLength(128);
-        profiles.Property(entity => entity.Deployment).HasMaxLength(128);
-        profiles.Property(entity => entity.ApiVersion).HasMaxLength(32);
+        var models = modelBuilder.Entity<ModelConnectionEntity>();
+        models.ToTable("Models");
+        models.HasKey(entity => entity.Id);
+        models.Property(entity => entity.Id).HasMaxLength(64);
+        models.Property(entity => entity.Name).HasMaxLength(128);
+        models.Property(entity => entity.Endpoint).HasMaxLength(512);
+        models.Property(entity => entity.ModelName).HasMaxLength(128);
+        models.Property(entity => entity.ApiVersion).HasMaxLength(32);
+        models.HasIndex(entity => entity.Name).IsUnique();
+
+        var routingRules = modelBuilder.Entity<RoutingRuleEntity>();
+        routingRules.ToTable("RoutingRules");
+        routingRules.HasKey(entity => entity.Id);
+        routingRules.Property(entity => entity.Id).ValueGeneratedOnAdd();
+        routingRules.Property(entity => entity.Name).HasMaxLength(128);
+        routingRules.Property(entity => entity.Description).HasMaxLength(512);
+        routingRules.Property(entity => entity.ConditionValue).HasMaxLength(512);
+        routingRules.Property(entity => entity.TargetModel).HasMaxLength(128);
+        routingRules.HasIndex(entity => entity.Priority);
 
         var rules = modelBuilder.Entity<RoutingRuleSettingsEntity>();
         rules.ToTable("RoutingRuleSettings");

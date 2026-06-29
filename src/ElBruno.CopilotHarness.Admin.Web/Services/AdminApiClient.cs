@@ -8,42 +8,106 @@ public sealed class AdminApiClient(HttpClient httpClient)
 
     public async Task<SetupWizardResponse> GetSetupStateAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<SetupWizardResponse>("/admin/setup/state", cancellationToken)
-        ?? new SetupWizardResponse(false, "small", null);
+        ?? new SetupWizardResponse(false, string.Empty, null);
 
     public async Task<SetupWizardResponse> SaveSetupAsync(SetupWizardRequest request, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsJsonAsync("/admin/setup/wizard", request, cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<SetupWizardResponse>(cancellationToken)
-            ?? new SetupWizardResponse(false, "small", null);
+            ?? new SetupWizardResponse(false, string.Empty, null);
     }
 
-    public async Task GenerateFirstRulesAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await _httpClient.PostAsync("/admin/setup/generate-first-rules", null, cancellationToken);
-        response.EnsureSuccessStatusCode();
-    }
+    // ── Model registry (multi-provider connections) ──────────────────────────
 
-    public async Task<IReadOnlyList<ModelProfileDto>> GetModelsAsync(CancellationToken cancellationToken = default) =>
-        await _httpClient.GetFromJsonAsync<IReadOnlyList<ModelProfileDto>>("/admin/models", cancellationToken)
+    public async Task<IReadOnlyList<ModelConnectionDto>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+        await _httpClient.GetFromJsonAsync<IReadOnlyList<ModelConnectionDto>>("/admin/models", cancellationToken)
         ?? [];
 
-    public async Task UpdateModelAsync(ModelProfileDto model, CancellationToken cancellationToken = default)
+    public async Task<ModelConnectionDto> CreateModelAsync(ModelConnectionUpsertRequest request, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PutAsJsonAsync($"/admin/models/{model.Name}", model, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/admin/models", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ModelConnectionDto>(cancellationToken)
+            ?? throw new InvalidOperationException("Model response was empty.");
+    }
+
+    public async Task<ModelConnectionDto> UpdateModelAsync(string id, ModelConnectionUpsertRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PutAsJsonAsync($"/admin/models/{Uri.EscapeDataString(id)}", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ModelConnectionDto>(cancellationToken)
+            ?? throw new InvalidOperationException("Model response was empty.");
+    }
+
+    public async Task DeleteModelAsync(string id, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync($"/admin/models/{Uri.EscapeDataString(id)}", cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task<BasicRulesDto> GetBasicRulesAsync(CancellationToken cancellationToken = default) =>
-        await _httpClient.GetFromJsonAsync<BasicRulesDto>("/admin/rules/basic", cancellationToken)
-        ?? throw new InvalidOperationException("Rules response was empty.");
-
-    public async Task<BasicRulesDto> UpdateBasicRulesAsync(BasicRulesUpdateRequest rules, CancellationToken cancellationToken = default)
+    public async Task<ModelConnectionTestResponse> TestModelAsync(string id, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PutAsJsonAsync("/admin/rules/basic", rules, cancellationToken);
+        var response = await _httpClient.PostAsync($"/admin/models/{Uri.EscapeDataString(id)}/test", null, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<BasicRulesDto>(cancellationToken)
-            ?? throw new InvalidOperationException("Rules response was empty.");
+        return await response.Content.ReadFromJsonAsync<ModelConnectionTestResponse>(cancellationToken)
+            ?? new ModelConnectionTestResponse(false, "No response.", 0);
+    }
+
+    // ── Condition-based routing rules ─────────────────────────────────────────
+
+    public async Task<IReadOnlyList<RoutingRuleDto>> GetRulesAsync(CancellationToken cancellationToken = default) =>
+        await _httpClient.GetFromJsonAsync<IReadOnlyList<RoutingRuleDto>>("/admin/rules", cancellationToken)
+        ?? [];
+
+    public async Task<RoutingRuleDto> CreateRuleAsync(RoutingRuleUpsertRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/admin/rules", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<RoutingRuleDto>(cancellationToken)
+            ?? throw new InvalidOperationException("Rule response was empty.");
+    }
+
+    public async Task<RoutingRuleDto> UpdateRuleAsync(int id, RoutingRuleUpsertRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PutAsJsonAsync($"/admin/rules/{id}", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<RoutingRuleDto>(cancellationToken)
+            ?? throw new InvalidOperationException("Rule response was empty.");
+    }
+
+    public async Task DeleteRuleAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync($"/admin/rules/{id}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<IReadOnlyList<RoutingRuleDto>> GenerateStarterRulesAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsync("/admin/rules/wizard", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<RoutingRuleDto>>(cancellationToken)
+            ?? [];
+    }
+
+    public async Task<RuleTestResponse> TestRuleAsync(RuleTestRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/admin/rules/test", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<RuleTestResponse>(cancellationToken)
+            ?? throw new InvalidOperationException("Rule test response was empty.");
+    }
+
+    public async Task<DefaultModelDto> GetDefaultModelAsync(CancellationToken cancellationToken = default) =>
+        await _httpClient.GetFromJsonAsync<DefaultModelDto>("/admin/rules/default", cancellationToken)
+        ?? new DefaultModelDto(string.Empty, DateTimeOffset.UtcNow);
+
+    public async Task<DefaultModelDto> SetDefaultModelAsync(string modelName, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PutAsJsonAsync("/admin/rules/default", new SetDefaultModelRequest(modelName), cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DefaultModelDto>(cancellationToken)
+            ?? new DefaultModelDto(modelName, DateTimeOffset.UtcNow);
     }
 
     public async Task<PlaygroundResponse> EvaluatePlaygroundAsync(PlaygroundRequest request, CancellationToken cancellationToken = default)
@@ -61,6 +125,19 @@ public sealed class AdminApiClient(HttpClient httpClient)
     public async Task<DashboardSnapshotResponse> GetDashboardSnapshotAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<DashboardSnapshotResponse>("/admin/dashboard/snapshot", cancellationToken)
         ?? new DashboardSnapshotResponse([], [], DateTimeOffset.UtcNow);
+
+    public async Task<RoutingFeedResponse> GetRoutingFeedAsync(int limit = 50, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<RoutingFeedResponse>($"/admin/telemetry/feed?limit={limit}", cancellationToken)
+                ?? new RoutingFeedResponse(DateTimeOffset.UtcNow, false, []);
+        }
+        catch
+        {
+            return new RoutingFeedResponse(DateTimeOffset.UtcNow, false, []);
+        }
+    }
 
     public async Task<OperationsStatusResponse> GetOperationsStatusAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<OperationsStatusResponse>("/admin/operations/status", cancellationToken)

@@ -16,6 +16,7 @@
     "onCommand:harness.explainRouting",
     "onCommand:harness.openDashboard",
     "onCommand:harness.openTrace",
+    "onCommand:harness.showLiveRouting",
     "onChatParticipant:harness",
     "onLanguageModelTool:harness.explainRouting",
     "onLanguageModelTool:harness.openDashboard",
@@ -39,6 +40,10 @@
       {
         "command": "harness.openTrace",
         "title": "Harness: Open Trace"
+      },
+      {
+        "command": "harness.showLiveRouting",
+        "title": "Harness: Show Live Routing"
       }
     ],
     "configuration": {
@@ -46,13 +51,18 @@
       "properties": {
         "harness.routerBaseUrl": {
           "type": "string",
-          "default": "http://localhost:5080",
+          "default": "http://localhost:5117",
           "description": "Base URL for the Router API."
         },
         "harness.adminBaseUrl": {
           "type": "string",
-          "default": "http://localhost:5080",
+          "default": "http://localhost:5117",
           "description": "Base URL for the Admin endpoints."
+        },
+        "harness.adminApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Admin API key (Bearer token) for the router's /admin endpoints. Required when the router is started with Backend:Auth:AdminApiKey set (the local Aspire AppHost sets it). Leave empty if the router has no admin key."
         }
       }
     },

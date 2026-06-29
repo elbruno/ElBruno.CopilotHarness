@@ -1,0 +1,144 @@
+@page "/live"
+@using ElBruno.CopilotHarness.Admin.Web.Services
+@inject AdminApiClient Api
+@implements IAsyncDisposable
+
+<PageTitle>Live Routing</PageTitle>
+
+<h1>Live Routing</h1>
+<p>Every incoming prompt, the model it was routed to, the rule that matched, and why.</p>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <p class="error">@_error</p>
+}
+
+@if (_feed is null)
+{
+    <p>Loading routing feed...</p>
+}
+else
+{
+    @if (!_feed.PromptCaptureEnabled)
+    {
+        <article class="card">
+            <strong>Prompt text capture is disabled.</strong>
+            <p>
+                Models, rules, and explanations are shown below. To also display a redacted preview
+                of each prompt, set <code>Telemetry__CapturePromptText=true</code> on the router
+                (already enabled by default in the local Aspire AppHost).
+            </p>
+        </article>
+    }
+
+    @if (_feed.Requests.Count > 0)
+    {
+        <div class="cards">
+            @foreach (var group in _feed.Requests.GroupBy(r => r.SelectedModel).OrderByDescending(g => g.Count()))
+            {
+                <article class="card">
+                    <h3>@group.Key</h3>
+                    <p>@group.Count() request(s) · @((100.0 * group.Count() / _feed.Requests.Count).ToString("0")) %</p>
+                </article>
+            }
+        </div>
+    }
+
+    <h2>Recent requests (@_feed.Requests.Count)</h2>
+    @if (_feed.Requests.Count == 0)
+    {
+        <p>No routed requests yet. Send a prompt from VS Code Copilot (BYOK) to see it here.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Prompt</th>
+                    <th>Model</th>
+                    <th>Rule</th>
+                    <th>Explanation</th>
+                    <th>Client</th>
+                    <th>Trace</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var request in _feed.Requests)
+                {
+                    <tr>
+                        <td>@request.CreatedAtUtc.ToLocalTime().ToString("HH:mm:ss")</td>
+                        <td class="prompt-cell" title="@request.PromptPreview">
+                            @(string.IsNullOrWhiteSpace(request.PromptPreview)
+                                ? $"({request.PromptCharacters} chars)"
+                                : Truncate(request.PromptPreview!, 80))
+                        </td>
+                        <td><strong>@request.SelectedModel</strong><br /><span class="muted">@request.Deployment</span></td>
+                        <td>@(request.MatchedRuleName ?? "-")</td>
+                        <td class="explain-cell">@request.Explanation</td>
+                        <td>@request.ClientDisplayName</td>
+                        <td class="muted">@request.TraceId</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <p class="muted">Snapshot: @_feed.GeneratedAtUtc.ToLocalTime().ToString("u")</p>
+}
+
+@code {
+    private readonly CancellationTokenSource _loopCancellation = new();
+    private Task? _loopTask;
+    private RoutingFeedResponse? _feed;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _loopTask = RunLoopAsync(_loopCancellation.Token);
+    }
+
+    private async Task RunLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await RefreshAsync(cancellationToken);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _feed = await Api.GetRoutingFeedAsync(50, cancellationToken);
+            _error = null;
+        }
+        catch (Exception exception)
+        {
+            _error = $"Could not refresh routing feed: {exception.Message}";
+        }
+    }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max] + "…";
+
+    public async ValueTask DisposeAsync()
+    {
+        _loopCancellation.Cancel();
+        if (_loopTask is not null)
+        {
+            try
+            {
+                await _loopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        _loopCancellation.Dispose();
+    }
+}

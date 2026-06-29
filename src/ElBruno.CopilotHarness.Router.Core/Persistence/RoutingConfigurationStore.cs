@@ -5,65 +5,83 @@ namespace ElBruno.CopilotHarness.Router.Core.Persistence;
 
 public sealed class RoutingConfigurationStore(
     HarnessDbContext dbContext,
+    IApiKeyProtector apiKeyProtector,
     IOptions<RoutingOptions> bootstrapOptions) : IRoutingConfigurationStore
 {
     private readonly RoutingOptions _bootstrapOptions = bootstrapOptions.Value;
 
     public async Task<RoutingOptions> GetRoutingOptionsAsync(CancellationToken cancellationToken)
     {
-        var profiles = await dbContext.ModelProfiles
+        var models = await dbContext.Models
             .AsNoTracking()
-            .OrderBy(profile => profile.ProfileName)
+            .OrderBy(model => model.Name)
             .ToListAsync(cancellationToken);
 
-        var rules = await dbContext.RoutingRuleSettings
-            .AsNoTracking()
-            .SingleOrDefaultAsync(entity => entity.Id == 1, cancellationToken);
-
-        if (profiles.Count == 0 || rules is null)
+        if (models.Count == 0)
         {
             return _bootstrapOptions;
         }
 
-        var mappedProfiles = profiles.ToDictionary(
-            profile => profile.ProfileName,
-            profile => new ModelProfileOptions
+        var ruleEntities = await dbContext.RoutingRules
+            .AsNoTracking()
+            .OrderBy(rule => rule.Priority)
+            .ToListAsync(cancellationToken);
+
+        var settings = await dbContext.RoutingRuleSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(entity => entity.Id == 1, cancellationToken);
+
+        var profiles = models.ToDictionary(
+            model => model.Name,
+            model => new ModelProfileOptions
             {
-                Deployment = profile.Deployment,
-                ApiVersion = profile.ApiVersion,
-                Enabled = profile.Enabled
+                Type = (ModelProviderType)model.ProviderType,
+                Endpoint = model.Endpoint,
+                Deployment = model.ModelName,
+                ApiVersion = model.ApiVersion,
+                ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
+                Enabled = model.Enabled
             },
             StringComparer.OrdinalIgnoreCase);
 
-        var defaultProfile = mappedProfiles.ContainsKey(rules.DefaultProfile)
-            ? rules.DefaultProfile
-            : _bootstrapOptions.DefaultProfile;
+        var defaultModel = settings?.DefaultProfile ?? string.Empty;
+        if (!profiles.ContainsKey(defaultModel))
+        {
+            defaultModel = models.FirstOrDefault(model => model.Enabled)?.Name
+                ?? models[0].Name;
+        }
+
+        var ruleSet = ruleEntities
+            .Select(rule => new RoutingRuleDefinition(
+                rule.Id,
+                rule.Name,
+                rule.Description,
+                (RoutingRuleConditionType)rule.ConditionType,
+                rule.ConditionValue,
+                rule.TargetModel,
+                rule.Priority,
+                rule.Enabled))
+            .ToList();
 
         return new RoutingOptions
         {
-            DefaultProfile = defaultProfile,
-            Profiles = mappedProfiles,
-            Rules = new BasicRulesOptions
-            {
-                BigPromptCharacterThreshold = rules.BigPromptCharacterThreshold,
-                BigProfile = rules.BigProfile,
-                StreamingProfile = rules.StreamingProfile,
-                PreferBigWhenSystemMessageExists = rules.PreferBigWhenSystemMessageExists,
-                PreferStreamingProfileWhenStreaming = rules.PreferStreamingProfileWhenStreaming
-            }
+            DefaultProfile = defaultModel,
+            Profiles = profiles,
+            RuleSet = ruleSet,
+            Rules = settings is null
+                ? _bootstrapOptions.Rules
+                : new BasicRulesOptions
+                {
+                    BigPromptCharacterThreshold = settings.BigPromptCharacterThreshold,
+                    BigProfile = settings.BigProfile,
+                    StreamingProfile = settings.StreamingProfile,
+                    PreferBigWhenSystemMessageExists = settings.PreferBigWhenSystemMessageExists,
+                    PreferStreamingProfileWhenStreaming = settings.PreferStreamingProfileWhenStreaming
+                }
         };
     }
 
-    public async Task<IReadOnlyList<ModelRegistryEntry>> GetModelRegistryAsync(CancellationToken cancellationToken)
-    {
-        var profiles = await dbContext.ModelProfiles
-            .AsNoTracking()
-            .OrderBy(profile => profile.ProfileName)
-            .Select(profile => ToModelRegistryEntry(profile))
-            .ToListAsync(cancellationToken);
-
-        return profiles;
-    }
+    // ── Setup wizard ─────────────────────────────────────────────────────────
 
     public async Task<SetupWizardState> GetSetupWizardStateAsync(CancellationToken cancellationToken)
     {
@@ -78,23 +96,9 @@ public sealed class RoutingConfigurationStore(
 
     public async Task<SetupWizardState> CompleteSetupWizardAsync(CompleteSetupWizardRequest request, CancellationToken cancellationToken)
     {
-        var deploymentByProfile = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["local"] = request.LocalDeployment,
-            ["small"] = request.SmallDeployment,
-            ["big"] = request.BigDeployment
-        };
-
-        var profiles = await dbContext.ModelProfiles.ToListAsync(cancellationToken);
-        foreach (var profile in profiles)
-        {
-            if (deploymentByProfile.TryGetValue(profile.ProfileName, out var deployment) &&
-                !string.IsNullOrWhiteSpace(deployment))
-            {
-                profile.Deployment = deployment.Trim();
-                profile.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            }
-        }
+        var defaultModel = string.IsNullOrWhiteSpace(request.DefaultModel)
+            ? _bootstrapOptions.DefaultProfile
+            : request.DefaultModel.Trim();
 
         var setupState = await dbContext.SetupState
             .SingleOrDefaultAsync(entity => entity.Id == SetupStateEntity.DefaultId, cancellationToken);
@@ -104,65 +108,262 @@ public sealed class RoutingConfigurationStore(
             dbContext.SetupState.Add(setupState);
         }
 
-        var normalizedDefaultProfile = string.IsNullOrWhiteSpace(request.DefaultProfile)
-            ? _bootstrapOptions.DefaultProfile
-            : request.DefaultProfile.Trim();
-
         setupState.IsCompleted = true;
-        setupState.SelectedDefaultProfile = normalizedDefaultProfile;
+        setupState.SelectedDefaultProfile = defaultModel;
         setupState.CompletedAtUtc = DateTimeOffset.UtcNow;
 
-        var rules = await dbContext.RoutingRuleSettings
-            .SingleOrDefaultAsync(entity => entity.Id == 1, cancellationToken);
-        if (rules is not null)
-        {
-            rules.DefaultProfile = normalizedDefaultProfile;
-            rules.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await EnsureSettingsAsync(defaultModel, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
-            if (request.GenerateFirstRules)
-            {
-                rules.BigProfile = "big";
-                rules.StreamingProfile = "small";
-                rules.PreferBigWhenSystemMessageExists = true;
-                rules.PreferStreamingProfileWhenStreaming = true;
-                rules.BigPromptCharacterThreshold = _bootstrapOptions.Rules.BigPromptCharacterThreshold;
-            }
+        if (request.GenerateFirstRules)
+        {
+            await GenerateStarterRulesAsync(cancellationToken);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
         return new SetupWizardState(setupState.IsCompleted, setupState.SelectedDefaultProfile, setupState.CompletedAtUtc);
     }
 
-    public async Task<ModelRegistryEntry> UpsertModelRegistryEntryAsync(
-        string profileName,
-        UpsertModelRegistryEntryRequest request,
-        CancellationToken cancellationToken)
-    {
-        var normalizedProfileName = profileName.Trim();
-        var now = DateTimeOffset.UtcNow;
+    // ── Model registry ───────────────────────────────────────────────────────
 
-        var entity = await dbContext.ModelProfiles
-            .SingleOrDefaultAsync(profile => profile.ProfileName == normalizedProfileName, cancellationToken);
+    public async Task<IReadOnlyList<ModelConnectionRecord>> GetModelsAsync(CancellationToken cancellationToken)
+    {
+        var models = await dbContext.Models
+            .AsNoTracking()
+            .OrderBy(model => model.Name)
+            .ToListAsync(cancellationToken);
+
+        return models.Select(ToRecord).ToList();
+    }
+
+    public async Task<ModelConnectionRecord?> GetModelAsync(string id, CancellationToken cancellationToken)
+    {
+        var model = await dbContext.Models
+            .AsNoTracking()
+            .SingleOrDefaultAsync(entity => entity.Id == id, cancellationToken);
+
+        return model is null ? null : ToRecord(model);
+    }
+
+    public async Task<ModelProfileOptions?> ResolveModelConnectionAsync(string id, CancellationToken cancellationToken)
+    {
+        var model = await dbContext.Models
+            .AsNoTracking()
+            .SingleOrDefaultAsync(entity => entity.Id == id, cancellationToken);
+
+        if (model is null)
+        {
+            return null;
+        }
+
+        return new ModelProfileOptions
+        {
+            Type = (ModelProviderType)model.ProviderType,
+            Endpoint = model.Endpoint,
+            Deployment = model.ModelName,
+            ApiVersion = model.ApiVersion,
+            ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
+            Enabled = model.Enabled
+        };
+    }
+
+    public async Task<ModelConnectionRecord> UpsertModelAsync(string? id, UpsertModelConnectionRequest request, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        ModelConnectionEntity? entity = null;
+
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            entity = await dbContext.Models.SingleOrDefaultAsync(model => model.Id == id, cancellationToken);
+        }
 
         if (entity is null)
         {
-            entity = new ModelProfileEntity
+            entity = new ModelConnectionEntity
             {
-                ProfileName = normalizedProfileName,
+                Id = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString("N") : id!,
                 CreatedAtUtc = now
             };
-            dbContext.ModelProfiles.Add(entity);
+            dbContext.Models.Add(entity);
         }
 
-        entity.DisplayName = request.DisplayName.Trim();
-        entity.Deployment = request.Deployment.Trim();
-        entity.ApiVersion = request.ApiVersion.Trim();
+        entity.Name = request.Name.Trim();
+        entity.ProviderType = (int)request.ProviderType;
+        entity.Endpoint = request.Endpoint.Trim();
+        entity.ModelName = request.ModelName.Trim();
+        entity.ApiVersion = string.IsNullOrWhiteSpace(request.ApiVersion) ? "2024-10-21" : request.ApiVersion.Trim();
         entity.Enabled = request.Enabled;
         entity.UpdatedAtUtc = now;
 
+        // null = leave key unchanged; empty = clear; value = replace.
+        if (request.ApiKey is not null)
+        {
+            entity.ApiKeyProtected = string.IsNullOrEmpty(request.ApiKey)
+                ? null
+                : apiKeyProtector.Protect(request.ApiKey);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
-        return ToModelRegistryEntry(entity);
+        return ToRecord(entity);
     }
+
+    public async Task<bool> DeleteModelAsync(string id, CancellationToken cancellationToken)
+    {
+        var entity = await dbContext.Models.SingleOrDefaultAsync(model => model.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        dbContext.Models.Remove(entity);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    // ── Routing rules ─────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<RoutingRuleRecord>> GetRulesAsync(CancellationToken cancellationToken)
+    {
+        var rules = await dbContext.RoutingRules
+            .AsNoTracking()
+            .OrderBy(rule => rule.Priority)
+            .ThenBy(rule => rule.Id)
+            .ToListAsync(cancellationToken);
+
+        return rules.Select(ToRecord).ToList();
+    }
+
+    public async Task<RoutingRuleRecord?> GetRuleAsync(int id, CancellationToken cancellationToken)
+    {
+        var rule = await dbContext.RoutingRules
+            .AsNoTracking()
+            .SingleOrDefaultAsync(entity => entity.Id == id, cancellationToken);
+
+        return rule is null ? null : ToRecord(rule);
+    }
+
+    public async Task<RoutingRuleRecord> CreateRuleAsync(UpsertRoutingRuleRequest request, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var entity = new RoutingRuleEntity { CreatedAtUtc = now };
+        ApplyRule(entity, request);
+        entity.UpdatedAtUtc = now;
+        dbContext.RoutingRules.Add(entity);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ToRecord(entity);
+    }
+
+    public async Task<RoutingRuleRecord?> UpdateRuleAsync(int id, UpsertRoutingRuleRequest request, CancellationToken cancellationToken)
+    {
+        var entity = await dbContext.RoutingRules.SingleOrDefaultAsync(rule => rule.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        ApplyRule(entity, request);
+        entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ToRecord(entity);
+    }
+
+    public async Task<bool> DeleteRuleAsync(int id, CancellationToken cancellationToken)
+    {
+        var entity = await dbContext.RoutingRules.SingleOrDefaultAsync(rule => rule.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        dbContext.RoutingRules.Remove(entity);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<RoutingRuleRecord>> GenerateStarterRulesAsync(CancellationToken cancellationToken)
+    {
+        var existing = await dbContext.RoutingRules.AnyAsync(cancellationToken);
+        if (existing)
+        {
+            return await GetRulesAsync(cancellationToken);
+        }
+
+        var models = await dbContext.Models
+            .AsNoTracking()
+            .Where(model => model.Enabled)
+            .OrderBy(model => model.Name)
+            .ToListAsync(cancellationToken);
+
+        if (models.Count == 0)
+        {
+            return [];
+        }
+
+        var smallModel = PickModel(models, "mini", "small", "llama", "3.2") ?? models[0];
+        var largeModel = PickModel(models, "5.5", "large", "big", "gpt-5") ?? models[^1];
+        var now = DateTimeOffset.UtcNow;
+
+        dbContext.RoutingRules.AddRange(
+            new RoutingRuleEntity
+            {
+                Name = "Large prompts",
+                Description = "Route prompts over 2500 characters to the larger model.",
+                ConditionType = (int)RoutingRuleConditionType.PromptSizeAtLeast,
+                ConditionValue = "2500",
+                TargetModel = largeModel.Name,
+                Priority = 10,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "System-guided prompts",
+                Description = "Route requests that include a system message to the larger model.",
+                ConditionType = (int)RoutingRuleConditionType.HasSystemMessage,
+                ConditionValue = string.Empty,
+                TargetModel = largeModel.Name,
+                Priority = 20,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Streaming requests",
+                Description = "Route streaming requests to the faster model.",
+                ConditionType = (int)RoutingRuleConditionType.IsStreaming,
+                ConditionValue = string.Empty,
+                TargetModel = smallModel.Name,
+                Priority = 30,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+
+        await EnsureSettingsAsync(smallModel.Name, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRulesAsync(cancellationToken);
+    }
+
+    public async Task<RoutingDefaultModel> GetDefaultModelAsync(CancellationToken cancellationToken)
+    {
+        var settings = await dbContext.RoutingRuleSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(entity => entity.Id == 1, cancellationToken);
+
+        return settings is null
+            ? new RoutingDefaultModel(_bootstrapOptions.DefaultProfile, DateTimeOffset.MinValue)
+            : new RoutingDefaultModel(settings.DefaultProfile, settings.UpdatedAtUtc);
+    }
+
+    public async Task<RoutingDefaultModel> SetDefaultModelAsync(string modelName, CancellationToken cancellationToken)
+    {
+        var settings = await EnsureSettingsAsync(modelName.Trim(), cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new RoutingDefaultModel(settings.DefaultProfile, settings.UpdatedAtUtc);
+    }
+
+    // ── Legacy basic rules (Phase 8 + advisor back-compat) ────────────────────
 
     public async Task<BasicRulesConfiguration> GetBasicRulesAsync(CancellationToken cancellationToken)
     {
@@ -177,7 +378,6 @@ public sealed class RoutingConfigurationStore(
 
     public async Task<BasicRulesConfiguration> UpdateBasicRulesAsync(UpdateBasicRulesRequest request, CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
         var rules = await dbContext.RoutingRuleSettings
             .SingleOrDefaultAsync(entity => entity.Id == 1, cancellationToken);
 
@@ -193,7 +393,7 @@ public sealed class RoutingConfigurationStore(
         rules.StreamingProfile = request.StreamingProfile.Trim();
         rules.PreferBigWhenSystemMessageExists = request.PreferBigWhenSystemMessageExists;
         rules.PreferStreamingProfileWhenStreaming = request.PreferStreamingProfileWhenStreaming;
-        rules.UpdatedAtUtc = now;
+        rules.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToBasicRulesConfiguration(rules);
@@ -204,65 +404,118 @@ public sealed class RoutingConfigurationStore(
         var errors = new List<string>();
         var warnings = new List<string>();
 
-        var profiles = await dbContext.ModelProfiles
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-        var rules = await GetBasicRulesAsync(cancellationToken);
+        var models = await dbContext.Models.AsNoTracking().ToListAsync(cancellationToken);
+        var rules = await dbContext.RoutingRules.AsNoTracking().ToListAsync(cancellationToken);
         var setupState = await GetSetupWizardStateAsync(cancellationToken);
+        var defaultModel = await GetDefaultModelAsync(cancellationToken);
 
         if (!setupState.IsCompleted)
         {
             warnings.Add("Setup wizard has not been completed yet.");
         }
 
-        foreach (var requiredProfile in new[] { "local", "small", "big" })
+        if (models.Count == 0)
         {
-            if (!profiles.Any(profile => string.Equals(profile.ProfileName, requiredProfile, StringComparison.OrdinalIgnoreCase)))
+            errors.Add("At least one model connection must be configured.");
+        }
+
+        if (models.Count > 0 && models.All(model => !model.Enabled))
+        {
+            errors.Add("At least one model connection must be enabled.");
+        }
+
+        var modelNames = models.Select(model => model.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (models.Count > 0 && !modelNames.Contains(defaultModel.ModelName))
+        {
+            errors.Add($"Default model '{defaultModel.ModelName}' does not exist in the model registry.");
+        }
+
+        foreach (var model in models.Where(model => (ModelProviderType)model.ProviderType == ModelProviderType.AzureOpenAI))
+        {
+            if (string.IsNullOrWhiteSpace(model.ModelName))
             {
-                errors.Add($"Missing required model profile '{requiredProfile}'.");
+                errors.Add($"Azure model '{model.Name}' is missing a deployment name.");
             }
         }
 
-        if (profiles.Count(profile => profile.Enabled) == 0)
+        foreach (var rule in rules.Where(rule => rule.Enabled))
         {
-            errors.Add("At least one enabled model profile is required.");
+            if (!modelNames.Contains(rule.TargetModel))
+            {
+                errors.Add($"Rule '{rule.Name}' targets unknown model '{rule.TargetModel}'.");
+            }
         }
 
-        var profileNames = profiles
-            .Select(profile => profile.ProfileName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        if (!profileNames.Contains(rules.DefaultProfile))
+        if (rules.Count == 0)
         {
-            errors.Add($"Default profile '{rules.DefaultProfile}' does not exist in the model registry.");
-        }
-
-        if (!profileNames.Contains(rules.BigProfile))
-        {
-            errors.Add($"Big prompt profile '{rules.BigProfile}' does not exist in the model registry.");
-        }
-
-        if (!profileNames.Contains(rules.StreamingProfile))
-        {
-            errors.Add($"Streaming profile '{rules.StreamingProfile}' does not exist in the model registry.");
-        }
-
-        if (rules.BigPromptCharacterThreshold <= 0)
-        {
-            warnings.Add("Big prompt character threshold should be greater than zero.");
+            warnings.Add("No routing rules are configured. Requests will fall back to the default model.");
         }
 
         return new SystemValidationResult(errors.Count == 0, errors, warnings);
     }
 
-    private static ModelRegistryEntry ToModelRegistryEntry(ModelProfileEntity profile) =>
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private async Task<RoutingRuleSettingsEntity> EnsureSettingsAsync(string defaultModel, CancellationToken cancellationToken)
+    {
+        var settings = await dbContext.RoutingRuleSettings
+            .SingleOrDefaultAsync(entity => entity.Id == 1, cancellationToken);
+
+        if (settings is null)
+        {
+            settings = new RoutingRuleSettingsEntity { Id = 1 };
+            dbContext.RoutingRuleSettings.Add(settings);
+        }
+
+        if (!string.IsNullOrWhiteSpace(defaultModel))
+        {
+            settings.DefaultProfile = defaultModel;
+        }
+
+        settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        return settings;
+    }
+
+    private static ModelConnectionEntity? PickModel(IEnumerable<ModelConnectionEntity> models, params string[] keywords) =>
+        models.FirstOrDefault(model => keywords.Any(keyword =>
+            model.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+            model.ModelName.Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+
+    private static void ApplyRule(RoutingRuleEntity entity, UpsertRoutingRuleRequest request)
+    {
+        entity.Name = request.Name.Trim();
+        entity.Description = request.Description.Trim();
+        entity.ConditionType = (int)request.ConditionType;
+        entity.ConditionValue = request.ConditionValue.Trim();
+        entity.TargetModel = request.TargetModel.Trim();
+        entity.Priority = request.Priority;
+        entity.Enabled = request.Enabled;
+    }
+
+    private static ModelConnectionRecord ToRecord(ModelConnectionEntity model) =>
         new(
-            profile.ProfileName,
-            profile.DisplayName,
-            profile.Deployment,
-            profile.ApiVersion,
-            profile.Enabled,
-            profile.UpdatedAtUtc);
+            model.Id,
+            model.Name,
+            (ModelProviderType)model.ProviderType,
+            model.Endpoint,
+            model.ModelName,
+            model.ApiVersion,
+            !string.IsNullOrEmpty(model.ApiKeyProtected),
+            model.Enabled,
+            model.UpdatedAtUtc);
+
+    private static RoutingRuleRecord ToRecord(RoutingRuleEntity rule) =>
+        new(
+            rule.Id,
+            rule.Name,
+            rule.Description,
+            (RoutingRuleConditionType)rule.ConditionType,
+            rule.ConditionValue,
+            rule.TargetModel,
+            rule.Priority,
+            rule.Enabled,
+            rule.UpdatedAtUtc);
 
     private static BasicRulesConfiguration ToBasicRulesConfiguration(RoutingRuleSettingsEntity rules) =>
         new(

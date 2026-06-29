@@ -3,16 +3,80 @@ using System.Text.Json.Nodes;
 namespace ElBruno.CopilotHarness.Router.Api.Admin;
 
 public sealed record SetupWizardRequest(
-    string LocalDeployment,
-    string SmallDeployment,
-    string BigDeployment,
-    string DefaultProfile,
+    string DefaultModel,
     bool GenerateFirstRules);
 
 public sealed record SetupWizardResponse(
     bool IsCompleted,
     string DefaultProfile,
     DateTimeOffset? CompletedAtUtc);
+
+// ── Model registry (multi-provider connections) ──────────────────────────────
+
+public sealed record ModelConnectionDto(
+    string Id,
+    string Name,
+    string Type,
+    string Endpoint,
+    string ModelName,
+    string ApiVersion,
+    bool HasApiKey,
+    bool Enabled,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record ModelConnectionUpsertRequest(
+    string Name,
+    string Type,
+    string Endpoint,
+    string ModelName,
+    string ApiVersion,
+    string? ApiKey,
+    bool Enabled);
+
+public sealed record ModelConnectionTestResponse(
+    bool Success,
+    string Message,
+    double LatencyMs);
+
+// ── Condition-based routing rules ────────────────────────────────────────────
+
+public sealed record RoutingRuleDto(
+    int Id,
+    string Name,
+    string Description,
+    string ConditionType,
+    string ConditionValue,
+    string TargetModel,
+    int Priority,
+    bool Enabled,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record RoutingRuleUpsertRequest(
+    string Name,
+    string Description,
+    string ConditionType,
+    string ConditionValue,
+    string TargetModel,
+    int Priority,
+    bool Enabled);
+
+public sealed record RuleTestRequest(
+    string Prompt,
+    string? SystemMessage,
+    bool Stream,
+    string? RequestedModel);
+
+public sealed record RuleTestResponse(
+    string? MatchedRuleName,
+    string SelectedModel,
+    string Reason,
+    int PromptCharacters);
+
+public sealed record DefaultModelDto(
+    string ModelName,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record SetDefaultModelRequest(string ModelName);
 
 public sealed record ModelProfileDto(
     string Name,
@@ -67,6 +131,33 @@ public sealed record PlaygroundResponse(
     string Reason,
     int PromptCharacters,
     JsonObject RoutedRequest);
+
+/// <summary>
+/// Single live-routing row: prompt → model → rule → explanation. Shared shape consumed by both
+/// the Admin.Web "Live Routing" page and the VS Code extension.
+/// </summary>
+public sealed record RoutedRequestView(
+    string TraceId,
+    DateTimeOffset CreatedAtUtc,
+    string ClientId,
+    string ClientDisplayName,
+    string Endpoint,
+    bool Stream,
+    string? RequestedModel,
+    string SelectedModel,
+    string Deployment,
+    string? MatchedRuleName,
+    string Reason,
+    string Explanation,
+    string? PromptPreview,
+    int PromptCharacters,
+    string ClassificationIntent,
+    string ClassificationComplexity);
+
+public sealed record RoutingFeedResponse(
+    DateTimeOffset GeneratedAtUtc,
+    bool PromptCaptureEnabled,
+    IReadOnlyList<RoutedRequestView> Requests);
 
 public sealed record ValidationCheck(
     string Name,

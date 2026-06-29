@@ -1,79 +1,284 @@
 @page "/models"
-@inject ElBruno.CopilotHarness.Admin.Web.Services.AdminApiClient Api
+@using ElBruno.CopilotHarness.Admin.Web.Services
+@inject AdminApiClient Api
 
 <PageTitle>Model Registry</PageTitle>
 
 <h1>Model Registry</h1>
+<p class="muted">
+    A registry of real LLM connections. Each model has its own provider type, endpoint, model/deployment name,
+    and (for Azure OpenAI / Foundry) an API key that is encrypted at rest. Routing rules reference these models by name.
+</p>
 
-@if (_models.Count == 0)
+@if (_loading)
 {
-    <p>Loading models...</p>
+    <p>Loading models…</p>
 }
 else
 {
-    <table>
-        <thead>
-            <tr>
-                <th>Profile</th>
-                <th>Category</th>
-                <th>Deployment</th>
-                <th>Enabled</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
+    <div class="dashboard-actions">
+        <button @onclick="StartCreate">➕ Add model</button>
+        <span class="muted">Default model:</span>
+        <select value="@_defaultModel" @onchange="OnDefaultChanged">
             @foreach (var model in _models)
             {
-                <tr>
-                    <td>@model.Name</td>
-                    <td>@model.Category</td>
-                    <td><InputText @bind-Value="model.Deployment" /></td>
-                    <td><InputCheckbox @bind-Value="model.Enabled" /></td>
-                    <td><button @onclick="() => SaveAsync(model)">Save</button></td>
-                </tr>
+                <option value="@model.Name">@model.Name</option>
             }
-        </tbody>
-    </table>
+        </select>
+    </div>
+
+    @if (_models.Count == 0)
+    {
+        <p class="muted">No models configured yet. Add your first connection.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Endpoint</th>
+                    <th>Model / Deployment</th>
+                    <th>API key</th>
+                    <th>Enabled</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var model in _models)
+                {
+                    <tr>
+                        <td><strong>@model.Name</strong>@(model.Name == _defaultModel ? " ⭐" : "")</td>
+                        <td>@FriendlyType(model.Type)</td>
+                        <td class="muted">@(string.IsNullOrWhiteSpace(model.Endpoint) ? "(shared Foundry)" : model.Endpoint)</td>
+                        <td>@model.ModelName</td>
+                        <td>
+                            @if (model.Type == "ollama")
+                            {
+                                <span class="muted">n/a</span>
+                            }
+                            else
+                            {
+                                <span class="status-pill @(model.HasApiKey ? "status-good" : "status-warn")">
+                                    @(model.HasApiKey ? "set" : "none")
+                                </span>
+                            }
+                        </td>
+                        <td>
+                            <span class="status-pill @(model.Enabled ? "status-good" : "status-neutral")">
+                                @(model.Enabled ? "enabled" : "disabled")
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn-approve" @onclick="() => StartEdit(model)">Edit</button>
+                            <button @onclick="() => TestAsync(model)">Test</button>
+                            <button class="btn-reject" @onclick="() => DeleteAsync(model)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@if (_editor is not null)
+{
+    <div class="card">
+        <h2>@(_isNew ? "Add model" : $"Edit '{_editorName}'")</h2>
+        <EditForm Model="_editor" OnValidSubmit="SaveAsync">
+            <div class="form-grid">
+                <label>
+                    Display name
+                    <InputText @bind-Value="_editor.Name" placeholder="e.g. foundry gpt-5.5" />
+                </label>
+                <label>
+                    Provider type
+                    <InputSelect @bind-Value="_editor.Type">
+                        <option value="azure-openai">Azure OpenAI / Foundry</option>
+                        <option value="ollama">Ollama</option>
+                    </InputSelect>
+                </label>
+                <label>
+                    Endpoint
+                    <InputText @bind-Value="_editor.Endpoint"
+                               placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
+                </label>
+                <label>
+                    @(_editor.Type == "ollama" ? "Model name" : "Deployment name")
+                    <InputText @bind-Value="_editor.ModelName"
+                               placeholder="@(_editor.Type == "ollama" ? "llama3.2" : "gpt-5-mini")" />
+                </label>
+                @if (_editor.Type != "ollama")
+                {
+                    <label>
+                        API version
+                        <InputText @bind-Value="_editor.ApiVersion" placeholder="2024-10-21" />
+                    </label>
+                    <label>
+                        API key
+                        <InputText type="password" @bind-Value="_editor.ApiKey"
+                                   placeholder="@(_isNew ? "paste key" : "leave blank to keep, type to replace")" />
+                    </label>
+                }
+                <label class="checkbox">
+                    <InputCheckbox @bind-Value="_editor.Enabled" /> Enabled
+                </label>
+            </div>
+            <button type="submit">@(_isNew ? "Create" : "Save")</button>
+            <button type="button" class="btn-reject" @onclick="CancelEdit">Cancel</button>
+        </EditForm>
+    </div>
 }
 
 @if (!string.IsNullOrWhiteSpace(_status))
 {
-    <p>@_status</p>
+    <p class="@(_statusOk ? "status-good-text" : "status-bad-text")">@_status</p>
 }
 
 @code {
-    private List<MutableModelProfile> _models = [];
+    private List<ModelConnectionDto> _models = [];
+    private string _defaultModel = string.Empty;
+    private bool _loading = true;
     private string? _status;
+    private bool _statusOk = true;
 
-    protected override async Task OnInitializedAsync()
+    private ModelEditor? _editor;
+    private bool _isNew;
+    private string? _editorId;
+    private string _editorName = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
     {
-        var models = await Api.GetModelsAsync();
-        _models = models
-            .Select(model => new MutableModelProfile(model))
-            .ToList();
+        _loading = true;
+        _models = (await Api.GetModelsAsync()).ToList();
+        _defaultModel = (await Api.GetDefaultModelAsync()).ModelName;
+        _loading = false;
     }
 
-    private async Task SaveAsync(MutableModelProfile model)
+    private void StartCreate()
     {
-        await Api.UpdateModelAsync(new(model.Name, model.Category, model.Deployment, model.ApiVersion, model.Enabled));
-        _status = $"Saved profile {model.Name}.";
+        _isNew = true;
+        _editorId = null;
+        _editorName = string.Empty;
+        _editor = new ModelEditor { Type = "azure-openai", ApiVersion = "2024-10-21", Enabled = true };
     }
 
-    private sealed class MutableModelProfile
+    private void StartEdit(ModelConnectionDto model)
     {
-        public MutableModelProfile(ElBruno.CopilotHarness.Admin.Web.Services.ModelProfileDto dto)
+        _isNew = false;
+        _editorId = model.Id;
+        _editorName = model.Name;
+        _editor = new ModelEditor
         {
-            Name = dto.Name;
-            Category = dto.Category;
-            Deployment = dto.Deployment;
-            ApiVersion = dto.ApiVersion;
-            Enabled = dto.Enabled;
+            Name = model.Name,
+            Type = model.Type,
+            Endpoint = model.Endpoint,
+            ModelName = model.ModelName,
+            ApiVersion = string.IsNullOrWhiteSpace(model.ApiVersion) ? "2024-10-21" : model.ApiVersion,
+            ApiKey = null,
+            Enabled = model.Enabled
+        };
+    }
+
+    private void CancelEdit() => _editor = null;
+
+    private async Task SaveAsync()
+    {
+        if (_editor is null)
+        {
+            return;
         }
 
-        public string Name { get; }
-        public string Category { get; set; }
-        public string Deployment { get; set; }
-        public string ApiVersion { get; set; }
-        public bool Enabled { get; set; }
+        try
+        {
+            var request = new ModelConnectionUpsertRequest(
+                _editor.Name,
+                _editor.Type,
+                _editor.Endpoint ?? string.Empty,
+                _editor.ModelName ?? string.Empty,
+                _editor.ApiVersion ?? string.Empty,
+                _editor.ApiKey,
+                _editor.Enabled);
+
+            if (_isNew)
+            {
+                await Api.CreateModelAsync(request);
+                SetStatus($"Created model '{_editor.Name}'.", true);
+            }
+            else
+            {
+                await Api.UpdateModelAsync(_editorId!, request);
+                SetStatus($"Saved model '{_editor.Name}'.", true);
+            }
+
+            _editor = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Save failed: {ex.Message}", false);
+        }
+    }
+
+    private async Task DeleteAsync(ModelConnectionDto model)
+    {
+        try
+        {
+            await Api.DeleteModelAsync(model.Id);
+            SetStatus($"Deleted model '{model.Name}'.", true);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Delete failed: {ex.Message}", false);
+        }
+    }
+
+    private async Task TestAsync(ModelConnectionDto model)
+    {
+        SetStatus($"Testing '{model.Name}'…", true);
+        var result = await Api.TestModelAsync(model.Id);
+        SetStatus($"{model.Name}: {result.Message} ({result.LatencyMs:F0} ms)", result.Success);
+    }
+
+    private async Task OnDefaultChanged(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        await Api.SetDefaultModelAsync(name);
+        _defaultModel = name;
+        SetStatus($"Default model set to '{name}'.", true);
+    }
+
+    private void SetStatus(string message, bool ok)
+    {
+        _status = message;
+        _statusOk = ok;
+    }
+
+    private static string FriendlyType(string type) =>
+        type switch
+        {
+            "ollama" => "Ollama",
+            "azure-openai" => "Azure OpenAI / Foundry",
+            _ => type
+        };
+
+    private sealed class ModelEditor
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = "azure-openai";
+        public string? Endpoint { get; set; }
+        public string? ModelName { get; set; }
+        public string? ApiVersion { get; set; } = "2024-10-21";
+        public string? ApiKey { get; set; }
+        public bool Enabled { get; set; } = true;
     }
 }

@@ -6,10 +6,7 @@ public sealed record SetupWizardState(
     DateTimeOffset? CompletedAtUtc);
 
 public sealed record CompleteSetupWizardRequest(
-    string LocalDeployment,
-    string SmallDeployment,
-    string BigDeployment,
-    string DefaultProfile,
+    string DefaultModel,
     bool GenerateFirstRules);
 
 public sealed record ModelRegistryEntry(
@@ -47,3 +44,59 @@ public sealed record SystemValidationResult(
     bool IsValid,
     IReadOnlyList<string> Errors,
     IReadOnlyList<string> Warnings);
+
+// ── Model registry (multi-provider) ──────────────────────────────────────────
+
+public sealed record ModelConnectionRecord(
+    string Id,
+    string Name,
+    ModelProviderType ProviderType,
+    string Endpoint,
+    string ModelName,
+    string ApiVersion,
+    bool HasApiKey,
+    bool Enabled,
+    DateTimeOffset UpdatedAtUtc);
+
+/// <summary>
+/// Create/update request for a model connection. On update, a null <see cref="ApiKey"/> leaves the
+/// stored key unchanged; an empty string clears it; a non-empty value replaces it.
+/// </summary>
+public sealed record UpsertModelConnectionRequest(
+    string Name,
+    ModelProviderType ProviderType,
+    string Endpoint,
+    string ModelName,
+    string ApiVersion,
+    string? ApiKey,
+    bool Enabled);
+
+public sealed record ModelConnectionTestResult(
+    bool Success,
+    string Message,
+    double LatencyMs);
+
+// ── Condition-based routing rules ────────────────────────────────────────────
+
+public sealed record RoutingRuleRecord(
+    int Id,
+    string Name,
+    string Description,
+    RoutingRuleConditionType ConditionType,
+    string ConditionValue,
+    string TargetModel,
+    int Priority,
+    bool Enabled,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record UpsertRoutingRuleRequest(
+    string Name,
+    string Description,
+    RoutingRuleConditionType ConditionType,
+    string ConditionValue,
+    string TargetModel,
+    int Priority,
+    bool Enabled);
+
+public sealed record RoutingDefaultModel(string ModelName, DateTimeOffset UpdatedAtUtc);
+

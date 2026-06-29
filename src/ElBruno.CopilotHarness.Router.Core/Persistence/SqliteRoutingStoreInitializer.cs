@@ -9,6 +9,29 @@ public sealed class SqliteRoutingStoreInitializer(
 {
     private readonly RoutingOptions _bootstrapOptions = bootstrapOptions.Value;
 
+    private const string SeedDefaultModel = "foundry gpt-5-mini";
+
+    private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled)> SeedModels()
+    {
+        yield return (
+            "seed-ollama-llama32",
+            "ollama llama3.2",
+            (int)ModelProviderType.Ollama,
+            "http://localhost:11434",
+            "llama3.2",
+            "2024-10-21",
+            true);
+
+        yield return (
+            "seed-foundry-gpt5mini",
+            SeedDefaultModel,
+            (int)ModelProviderType.AzureOpenAI,
+            string.Empty,
+            "gpt-5-mini",
+            "2024-10-21",
+            true);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await dbContext.Database.MigrateAsync(cancellationToken);
@@ -30,24 +53,61 @@ public sealed class SqliteRoutingStoreInitializer(
             "CREATE INDEX IF NOT EXISTS IX_RoutingExecutionTraces_CreatedAtUtc ON RoutingExecutionTraces (CreatedAtUtc);",
             cancellationToken);
 
-        foreach (var profile in _bootstrapOptions.Profiles)
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS Models (
+                Id TEXT NOT NULL CONSTRAINT PK_Models PRIMARY KEY,
+                Name TEXT NOT NULL,
+                ProviderType INTEGER NOT NULL DEFAULT 0,
+                Endpoint TEXT NOT NULL DEFAULT '',
+                ModelName TEXT NOT NULL DEFAULT '',
+                ApiVersion TEXT NOT NULL DEFAULT '2024-10-21',
+                ApiKeyProtected TEXT NULL,
+                Enabled INTEGER NOT NULL DEFAULT 1,
+                CreatedAtUtc TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL
+            );
+            """,
+            cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_Models_Name ON Models (Name);",
+            cancellationToken);
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS RoutingRules (
+                Id INTEGER NOT NULL CONSTRAINT PK_RoutingRules PRIMARY KEY AUTOINCREMENT,
+                Name TEXT NOT NULL,
+                Description TEXT NOT NULL DEFAULT '',
+                ConditionType INTEGER NOT NULL DEFAULT 0,
+                ConditionValue TEXT NOT NULL DEFAULT '',
+                TargetModel TEXT NOT NULL DEFAULT '',
+                Priority INTEGER NOT NULL DEFAULT 0,
+                Enabled INTEGER NOT NULL DEFAULT 1,
+                CreatedAtUtc TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL
+            );
+            """,
+            cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS IX_RoutingRules_Priority ON RoutingRules (Priority);",
+            cancellationToken);
+
+        foreach (var model in SeedModels())
         {
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
                 $"""
-                 INSERT OR IGNORE INTO ModelProfiles (
-                     ProfileName,
-                     DisplayName,
-                     Deployment,
-                     ApiVersion,
-                     Enabled,
-                     CreatedAtUtc,
-                     UpdatedAtUtc
+                 INSERT OR IGNORE INTO Models (
+                     Id, Name, ProviderType, Endpoint, ModelName, ApiVersion, ApiKeyProtected, Enabled, CreatedAtUtc, UpdatedAtUtc
                  ) VALUES (
-                     {profile.Key},
-                     {profile.Key},
-                     {profile.Value.Deployment},
-                     {profile.Value.ApiVersion},
-                     {profile.Value.Enabled},
+                     {model.Id},
+                     {model.Name},
+                     {model.ProviderType},
+                     {model.Endpoint},
+                     {model.ModelName},
+                     {model.ApiVersion},
+                     {(string?)null},
+                     {model.Enabled},
                      {DateTimeOffset.UtcNow},
                      {DateTimeOffset.UtcNow}
                  );
@@ -68,7 +128,7 @@ public sealed class SqliteRoutingStoreInitializer(
                  UpdatedAtUtc
              ) VALUES (
                  {1},
-                 {_bootstrapOptions.DefaultProfile},
+                 {SeedDefaultModel},
                  {_bootstrapOptions.Rules.BigPromptCharacterThreshold},
                  {_bootstrapOptions.Rules.BigProfile},
                  {_bootstrapOptions.Rules.StreamingProfile},
@@ -88,7 +148,7 @@ public sealed class SqliteRoutingStoreInitializer(
              ) VALUES (
                  {SetupStateEntity.DefaultId},
                  {false},
-                 {_bootstrapOptions.DefaultProfile}
+                 {SeedDefaultModel}
              );
              """,
             cancellationToken);

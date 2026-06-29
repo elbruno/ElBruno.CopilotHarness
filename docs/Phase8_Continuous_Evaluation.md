@@ -8,6 +8,12 @@ Phase 8 adds continuous evaluation capabilities to the Copilot Harness Admin UI 
 
 Shadow routing silently replicates production traffic to secondary model profiles, accumulates rule confidence scores, and feeds the continuous benchmark scheduler. Recommendations are reviewed by operators through the approval workflow UI before any routing change takes effect.
 
+> **Terminology note.** Phase 8 predates the [Model Registry](Model_Registry.md) redesign.
+> Where this document says "profile", it now refers to a **registry model name** (e.g.
+> `foundry gpt-5-mini`) rather than a fixed `small`/`big`/`local` role. The endpoint and
+> store names (`/admin/rules/confidence`, rule-confidence keys) are unchanged for
+> back-compatibility but are keyed by model/rule identifiers.
+
 ## Backend services
 
 ### Shadow Routing (`Router.Api`)

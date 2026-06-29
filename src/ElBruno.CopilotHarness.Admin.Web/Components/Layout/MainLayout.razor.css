@@ -1,39 +1,50 @@
 .layout-shell {
     display: grid;
-    grid-template-columns: 230px 1fr;
+    grid-template-columns: 260px 1fr;
     min-height: 100vh;
+    background: #f8fafc;
 }
 
 .sidebar {
-    background-color: #111827;
-    color: #f9fafb;
-    padding: 1.25rem;
+    background-color: #0f172a;
+    color: #f8fafc;
+    padding: 1.25rem 1rem;
+    border-right: 1px solid #1e293b;
 }
 
 .sidebar h2 {
     margin: 0 0 1rem;
-    font-size: 1.15rem;
+    font-size: 1.7rem;
+    font-weight: 700;
 }
 
-.sidebar nav {
+.nav-menu {
     display: grid;
-    gap: 0.5rem;
+    gap: 0.35rem;
 }
 
-.sidebar a {
+.sidebar ::deep .nav-link {
     color: #cbd5e1;
     text-decoration: none;
-    padding: 0.4rem 0.55rem;
+    padding: 0.45rem 0.65rem;
     border-radius: 0.35rem;
+    font-weight: 500;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.sidebar a.active {
+.sidebar ::deep .nav-link:hover {
+    color: #ffffff;
+    background-color: #1e293b;
+}
+
+.sidebar ::deep .nav-link.active {
     color: #fff;
-    background-color: #1d4ed8;
+    background-color: #2563eb;
 }
 
-main {
-    padding: 1.5rem;
+.content {
+    padding: 2rem;
+    max-width: 1200px;
 }
 
 #blazor-error-ui {
@@ -55,4 +66,15 @@ main {
     position: absolute;
     right: 0.75rem;
     top: 0.5rem;
+}
+
+@media (max-width: 900px) {
+    .layout-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        border-right: none;
+        border-bottom: 1px solid #1e293b;
+    }
 }

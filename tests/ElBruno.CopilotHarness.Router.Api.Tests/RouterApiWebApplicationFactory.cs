@@ -38,6 +38,15 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting(WebHostDefaults.ApplicationKey, Guid.NewGuid().ToString("N"));
+
+        // These defaults MUST be set as host settings (UseSetting), not only via
+        // ConfigureAppConfiguration: Program.cs reads Persistence:DatabasePath eagerly at
+        // build time, which only sees host configuration. Setting them here guarantees each
+        // test run uses an isolated database and never writes to the live admin database.
+        builder.UseSetting("Foundry:Endpoint", "https://unit.test");
+        builder.UseSetting("Foundry:ApiKey", "test-key");
+        builder.UseSetting("Persistence:DatabasePath", _dbPath);
+
         foreach (var overrideEntry in _configurationOverrides)
         {
             builder.UseSetting(overrideEntry.Key, overrideEntry.Value);
@@ -68,6 +77,10 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
 
             services
                 .AddHttpClient<FoundryChatCompletionsClient>()
+                .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(CreateResponse));
+
+            services
+                .AddHttpClient("model-provider")
                 .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(CreateResponse));
         });
     }

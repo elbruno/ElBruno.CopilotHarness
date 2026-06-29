@@ -3,20 +3,21 @@
 <div class="layout-shell">
     <aside class="sidebar">
         <h2>Copilot Harness</h2>
-        <nav>
-            <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
-            <NavLink href="/setup">Setup Wizard</NavLink>
-            <NavLink href="/models">Model Registry</NavLink>
-            <NavLink href="/rules">Rules Editor</NavLink>
-            <NavLink href="/playground">Playground</NavLink>
-            <NavLink href="/validation">System Validation</NavLink>
-            <NavLink href="/operations">Operations</NavLink>
-            <NavLink href="/approvals">Approvals</NavLink>
-            <NavLink href="/profiles">Profiles</NavLink>
-            <NavLink href="/benchmarks">Benchmarks</NavLink>
+        <nav class="nav-menu">
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+            <NavLink class="nav-link" href="/live">Live Routing</NavLink>
+            <NavLink class="nav-link" href="/setup">Setup Wizard</NavLink>
+            <NavLink class="nav-link" href="/models">Model Registry</NavLink>
+            <NavLink class="nav-link" href="/rules">Rules Editor</NavLink>
+            <NavLink class="nav-link" href="/playground">Playground</NavLink>
+            <NavLink class="nav-link" href="/validation">System Validation</NavLink>
+            <NavLink class="nav-link" href="/operations">Operations</NavLink>
+            <NavLink class="nav-link" href="/approvals">Approvals</NavLink>
+            <NavLink class="nav-link" href="/profiles">Profiles</NavLink>
+            <NavLink class="nav-link" href="/benchmarks">Benchmarks</NavLink>
         </nav>
     </aside>
-    <main>
+    <main class="content">
         @Body
     </main>
 </div>

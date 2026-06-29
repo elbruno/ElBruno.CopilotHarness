@@ -33,7 +33,7 @@ public sealed class RouterApiEndpointsTests : IClassFixture<RouterApiWebApplicat
         Assert.Equal("list", payload.GetProperty("object").GetString());
         Assert.True(payload.TryGetProperty("data", out var data));
         Assert.Equal(JsonValueKind.Array, data.ValueKind);
-        Assert.True(data.GetArrayLength() >= 3);
+        Assert.True(data.GetArrayLength() >= 2);
 
         var firstModel = data.EnumerateArray().First();
         Assert.Equal("model", firstModel.GetProperty("object").GetString());
@@ -119,9 +119,8 @@ public sealed class RouterApiEndpointsTests : IClassFixture<RouterApiWebApplicat
             .OfType<string>()
             .ToList();
 
-        Assert.Contains("local", modelIds);
-        Assert.Contains("small", modelIds);
-        Assert.Contains("big", modelIds);
+        Assert.Contains("ollama llama3.2", modelIds);
+        Assert.Contains("foundry gpt-5-mini", modelIds);
     }
 
     [Fact]
@@ -221,10 +220,7 @@ public sealed class RouterApiEndpointsTests : IClassFixture<RouterApiWebApplicat
     {
         var setupResponse = await _client.PostAsJsonAsync("/admin/setup/wizard", new
         {
-            localDeployment = "gpt-local",
-            smallDeployment = "gpt-small",
-            bigDeployment = "gpt-big",
-            defaultProfile = "small",
+            defaultModel = "foundry gpt-5-mini",
             generateFirstRules = true
         });
 
@@ -235,7 +231,7 @@ public sealed class RouterApiEndpointsTests : IClassFixture<RouterApiWebApplicat
         var validation = await _client.GetFromJsonAsync<JsonElement>("/admin/system/validation");
 
         Assert.Equal(JsonValueKind.Array, models.ValueKind);
-        Assert.True(models.GetArrayLength() >= 3);
+        Assert.True(models.GetArrayLength() >= 2);
         Assert.Equal(JsonValueKind.Object, rules.ValueKind);
         Assert.True(rules.TryGetProperty("defaultProfile", out _));
         Assert.True(validation.TryGetProperty("checks", out var checks));
@@ -255,14 +251,14 @@ public sealed class RouterApiEndpointsTests : IClassFixture<RouterApiWebApplicat
             prompt = "route me",
             systemMessage = "you are a specialist",
             stream = false,
-            requestedProfile = "big"
+            requestedProfile = "foundry gpt-5-mini"
         });
 
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         Assert.True(payload.TryGetProperty("profile", out var profile));
-        Assert.Equal("big", profile.GetString());
+        Assert.Equal("foundry gpt-5-mini", profile.GetString());
         Assert.True(payload.TryGetProperty("deployment", out var deployment));
         Assert.False(string.IsNullOrWhiteSpace(deployment.GetString()));
         Assert.True(payload.TryGetProperty("reason", out var reason));
@@ -286,7 +282,7 @@ public sealed class RouterApiEndpointsTests : IClassFixture<RouterApiWebApplicat
 
         Assert.Equal(traceId, payload.GetProperty("traceId").GetString());
         Assert.Equal("microsoft-agent-framework-workflow", payload.GetProperty("workflowEngine").GetString());
-        Assert.Equal("big", payload.GetProperty("decision").GetProperty("profile").GetString());
+        Assert.Equal("foundry gpt-5-mini", payload.GetProperty("decision").GetProperty("profile").GetString());
         var stepNames = payload.GetProperty("steps").EnumerateArray()
             .Select(step => step.GetProperty("name").GetString())
             .OfType<string>()

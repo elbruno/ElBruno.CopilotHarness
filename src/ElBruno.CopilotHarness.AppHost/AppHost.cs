@@ -15,6 +15,7 @@ const string sharedSqlitePath = @"App_Data\copilotharness-admin.db";
 var routerApi = builder.AddProject<Projects.ElBruno_CopilotHarness_Router_Api>("router-api")
     .WithEnvironment("Foundry__Endpoint", foundryEndpoint)
     .WithEnvironment("Foundry__ApiKey", foundryApiKey)
+    .WithEnvironment("Telemetry__CapturePromptText", "true")
     .WithEnvironment("Backend__Auth__AdminApiKey", adminApiKey);
 
 var evaluationWorker = builder.AddProject<Projects.ElBruno_CopilotHarness_Evaluation_Worker>("evaluation-worker")

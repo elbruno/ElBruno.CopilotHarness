@@ -36,18 +36,6 @@ builder.Services
     .AddOptions<RoutingOptions>()
     .Bind(builder.Configuration.GetSection(RoutingOptions.SectionName))
     .ValidateDataAnnotations()
-    .Validate(
-        options => options.Profiles.Count >= 3,
-        "Routing must define at least three model profiles.")
-    .Validate(
-        options => options.Profiles.ContainsKey(options.DefaultProfile),
-        "Routing default profile must reference a configured model profile.")
-    .Validate(
-        options => options.Profiles.Values.All(profile => !string.IsNullOrWhiteSpace(profile.Deployment)),
-        "Each routing profile must include a deployment name.")
-    .Validate(
-        options => options.Profiles.Values.Any(profile => profile.Enabled),
-        "At least one routing profile must be enabled.")
     .ValidateOnStart();
 
 builder.Services
@@ -55,6 +43,10 @@ builder.Services
     .Bind(builder.Configuration.GetSection(PersistenceOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+
+builder.Services
+    .AddOptions<TelemetryOptions>()
+    .Bind(builder.Configuration.GetSection(TelemetryOptions.SectionName));
 
 var persistenceOptions = builder.Configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>() ?? new PersistenceOptions();
 var redisConnectionString = builder.Configuration.GetConnectionString("redis");
@@ -138,6 +130,8 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddScoped<IRoutingConfigurationStore, RoutingConfigurationStore>();
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<IApiKeyProtector, DataProtectionApiKeyProtector>();
 builder.Services.AddScoped<SqliteRoutingStoreInitializer>();
 builder.Services.AddScoped<IExecutionTraceStore, PersistentExecutionTraceStore>();
 builder.Services.AddScoped<IRequestContextProvider, RequestedModelContextProvider>();
@@ -173,6 +167,15 @@ builder.Services.AddHttpClient<FoundryChatCompletionsClient>((serviceProvider, c
     client.BaseAddress = FoundryOptions.GetNormalizedEndpoint(options.Endpoint);
     client.Timeout = TimeSpan.FromMinutes(5);
 });
+
+builder.Services.AddHttpClient("model-provider", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(5);
+});
+
+builder.Services.AddSingleton<IChatCompletionsProvider, AzureFoundryChatCompletionsProvider>();
+builder.Services.AddSingleton<IChatCompletionsProvider, OllamaChatCompletionsProvider>();
+builder.Services.AddSingleton<IChatCompletionsProviderFactory, ChatCompletionsProviderFactory>();
 
 builder.Services.AddHttpClient("foundry-health", (_, client) =>
 {
@@ -229,7 +232,7 @@ app.MapGet("/v1/models", async (
 
 app.MapPost("/v1/responses", async (
     HttpContext context,
-    FoundryChatCompletionsClient client,
+    IChatCompletionsProviderFactory providerFactory,
     IRequestRoutingService routingService,
     IClientRequestActivityStore requestActivityStore,
     ILogger<Program> logger,
@@ -271,11 +274,13 @@ app.MapPost("/v1/responses", async (
             routingDecision.Profile.Deployment,
             routingDecision.Reason);
 
-        using var upstreamResponse = await client.SendChatCompletionsAsync(
-            chatPayload,
-            routingDecision.Profile,
-            stream: false,
-            cancellationToken);
+        using var upstreamResponse = await providerFactory
+            .GetProvider(routingDecision.Profile)
+            .SendChatCompletionsAsync(
+                chatPayload,
+                routingDecision.Profile,
+                stream: false,
+                cancellationToken);
 
         context.Response.StatusCode = (int)upstreamResponse.StatusCode;
         OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
@@ -300,7 +305,7 @@ app.MapPost("/v1/responses", async (
 
 app.MapPost("/v1/chat/completions", async (
     HttpContext context,
-    FoundryChatCompletionsClient client,
+    IChatCompletionsProviderFactory providerFactory,
     IRequestRoutingService routingService,
     IClientRequestActivityStore requestActivityStore,
     IShadowRoutingService shadowRoutingService,
@@ -337,11 +342,13 @@ app.MapPost("/v1/chat/completions", async (
             routingDecision.Reason);
 
         var startedAt = DateTimeOffset.UtcNow;
-        using var upstreamResponse = await client.SendChatCompletionsAsync(
-            requestPayload,
-            routingDecision.Profile,
-            stream,
-            cancellationToken);
+        using var upstreamResponse = await providerFactory
+            .GetProvider(routingDecision.Profile)
+            .SendChatCompletionsAsync(
+                requestPayload,
+                routingDecision.Profile,
+                stream,
+                cancellationToken);
         var elapsedMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
 
         logger.LogInformation(
@@ -380,6 +387,7 @@ app.MapPost("/v1/chat/completions", async (
 app.MapDefaultEndpoints();
 
 app.MapExtensionEndpoints();
+app.MapVsCodeConnectEndpoints();
 app.MapAdminEndpoints(adminAuthEnabled);
 app.MapPhase8Endpoints(adminAuthEnabled);
 
