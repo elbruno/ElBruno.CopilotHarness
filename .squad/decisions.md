@@ -32,6 +32,21 @@
 **Summary:** Fixed misleading Live-view intent pill. Matched rule is now the dominant signal (blue highlight, labeled "Matched rule"). Processor stage shows decision source ("🧠 Decided by local model" or "⚙️ Keyword/heuristic fallback"). Intent rendered as muted secondary hint with "(guess)" qualifier when model-decided. Top summary cards clarified to show "By classifier intent (heuristic)". Broadened default "GitHub actions" starter rule to cover read-only repo/issue/PR questions. Documented all starter rules + intent-vs-rule explainer in docs/Rules_Engine.md.
 **References:** src/ElBruno.CopilotHarness.Admin.Web/Components/Pages/LiveRouting.razor, LiveRouting.razor.css, Rules.razor, docs/Rules_Engine.md, AdminContracts.cs
 
+### 2026-06-29T20-57-06: Post-call upstream/tool facts patched onto stored routing trace
+**By:** Neo
+**Summary:** Post-call upstream/tool facts are patched onto the stored routing trace via a new IExecutionTraceStore.AppendFacts(traceId, facts). Implemented in both InMemoryExecutionTraceStore and PersistentExecutionTraceStore. Tool-capability guard prefers enabled AzureOpenAI tool-capable models; fallback returns 502/504 OpenAI-style errors.
+**References:** src/ElBruno.CopilotHarness.Router.Api/Intelligence/RoutingWorkflow.cs, AdminEndpoints.cs, OpenAiApiUtilities.cs, PersistentExecutionTraceStore.cs
+
+### 2026-06-29T20-57-07: Tool-calling capability + upstream-outcome observability in Admin.Web
+**By:** Trinity
+**Summary:** Frontend mirrored tool-calling observability. Live Routing cards show upstream-outcome row (success/fail badge, latency, tools chip, override callout). Models page gained SupportsToolCalling toggle and 🛠 capability chip. Errors-only filter in Live view. Docs updated: Troubleshooting, Live_Routing, Model_Registry, Logging (new), Docs_Index.
+**References:** src/ElBruno.CopilotHarness.Admin.Web/Components/Pages/{LiveRouting.razor,Models.razor}, AdminContracts.cs, docs/
+
+### 2026-06-29T20-57-08: Tests for SupportsToolCalling guard + upstream outcome capture
+**By:** Link (Tester)
+**Summary:** Added 20 unit and endpoint tests covering SupportsToolCalling flag, tool-calling guard, upstream outcome capture, and feed DTO fields. Tests added to ToolCallingRoutingTests.cs and ToolGuardAndUpstreamOutcomeEndpointTests.cs. No production code modified. All 152 tests passing.
+**References:** tests/ElBruno.CopilotHarness.Router.Api.Tests/ToolCallingRoutingTests.cs, ToolGuardAndUpstreamOutcomeEndpointTests.cs, RouterApiWebApplicationFactory.cs
+
 ## Governance
 
 - All meaningful changes require team consensus
