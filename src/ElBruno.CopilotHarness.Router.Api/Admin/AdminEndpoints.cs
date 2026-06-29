@@ -491,9 +491,9 @@ public static class AdminEndpoints
                     "Add a request budget and expose counters from the gateway."),
                 new OperationalSignalDto(
                     "Retry / backoff",
-                    "Partial",
-                    "Shared HttpClient resilience is enabled, but app-specific backoff is not tuned.",
-                    "Refine the retry policy when production traffic rules are available."),
+                    "Tuned",
+                    "HTTP resilience is tuned for LLM calls: 5-minute attempt timeout, 10-minute total, retries disabled to avoid duplicating expensive model requests.",
+                    "Revisit per-endpoint policies if non-model traffic needs different budgets."),
                 new OperationalSignalDto(
                     "Background jobs",
                     "Not configured",

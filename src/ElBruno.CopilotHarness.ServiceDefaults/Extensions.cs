@@ -7,6 +7,7 @@ using Microsoft.Extensions.ServiceDiscovery;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+using Polly;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -28,8 +29,18 @@ public static class Extensions
 
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
-            // Turn on resilience by default
-            http.AddStandardResilienceHandler();
+            // Turn on resilience by default, tuned for an LLM proxy. The standard defaults
+            // (30s total / 10s per attempt, with retries) kill long model calls — reasoning
+            // models and streaming responses routinely run much longer. Allow long single
+            // attempts and disable retries so an expensive model call is never cut off early
+            // or silently duplicated (which would double-bill and double-stream).
+            http.AddStandardResilienceHandler(options =>
+            {
+                options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(10);
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
+                options.Retry.ShouldHandle = static _ => PredicateResult.False();
+            });
 
             // Turn on service discovery by default
             http.AddServiceDiscovery();

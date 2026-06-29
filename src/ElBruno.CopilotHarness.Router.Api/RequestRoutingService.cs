@@ -103,16 +103,66 @@ public static class OpenAiApiUtilities
 
     public static void AddRoutingHeaders(HttpResponse response, RoutingSelectionResult routingSelection)
     {
-        response.Headers["x-harness-model-profile"] = routingSelection.Decision.ProfileName;
-        response.Headers["x-harness-model-deployment"] = routingSelection.Decision.Profile.Deployment;
-        response.Headers["x-harness-routing-reason"] = routingSelection.Decision.Reason;
-        response.Headers["x-harness-trace-id"] = routingSelection.TraceId;
-        response.Headers["x-harness-client-id"] = routingSelection.Client.Id;
-        response.Headers["x-harness-client-source"] = routingSelection.Client.Source;
+        response.Headers["x-harness-model-profile"] = SanitizeHeaderValue(routingSelection.Decision.ProfileName);
+        response.Headers["x-harness-model-deployment"] = SanitizeHeaderValue(routingSelection.Decision.Profile.Deployment);
+        response.Headers["x-harness-routing-reason"] = SanitizeHeaderValue(routingSelection.Decision.Reason);
+        response.Headers["x-harness-trace-id"] = SanitizeHeaderValue(routingSelection.TraceId);
+        response.Headers["x-harness-client-id"] = SanitizeHeaderValue(routingSelection.Client.Id);
+        response.Headers["x-harness-client-source"] = SanitizeHeaderValue(routingSelection.Client.Source);
         if (!string.IsNullOrWhiteSpace(routingSelection.Client.Version))
         {
-            response.Headers["x-harness-client-version"] = routingSelection.Client.Version;
+            response.Headers["x-harness-client-version"] = SanitizeHeaderValue(routingSelection.Client.Version);
         }
+    }
+
+    /// <summary>
+    /// HTTP header values must be ASCII with no control characters. Routing reasons can contain
+    /// arrows (→) and LLM-generated text with arbitrary Unicode, so map common symbols to ASCII and
+    /// drop anything else outside the printable range to avoid Kestrel rejecting the response.
+    /// </summary>
+    public static string SanitizeHeaderValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            switch (ch)
+            {
+                case '\u2192': // →
+                case '\u2794':
+                case '\u27A1':
+                    builder.Append("->");
+                    break;
+                case '\u2018':
+                case '\u2019': // ' '
+                    builder.Append('\'');
+                    break;
+                case '\u201C':
+                case '\u201D': // " "
+                    builder.Append('"');
+                    break;
+                case '\u2013':
+                case '\u2014': // – —
+                    builder.Append('-');
+                    break;
+                case '\u2026': // …
+                    builder.Append("...");
+                    break;
+                default:
+                    // Keep printable ASCII (space through tilde); drop everything else.
+                    if (ch >= 0x20 && ch <= 0x7E)
+                    {
+                        builder.Append(ch);
+                    }
+                    break;
+            }
+        }
+
+        return builder.ToString();
     }
 
     public static RoutingRequestMetadata BuildRequestMetadata(HttpRequest request, JsonObject? requestBody, string? requestId = null)

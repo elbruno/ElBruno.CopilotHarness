@@ -112,3 +112,37 @@ affected model API keys on the Models page.
 ## Database file not found
 
 The default admin database is created under `App_Data\copilotharness-admin.db` after first run. If needed, override `Persistence__DatabasePath`.
+
+## Request times out after ~30s on a reasoning model {#upstream-timeout}
+
+**Symptom.** A request that routes to a cloud reasoning model (e.g. `foundry gpt-5-mini`)
+fails after roughly 30 seconds with a `500` and an inner
+`Polly.Timeout.TimeoutRejectedException: The operation didn't complete within the allowed
+timeout of '00:00:30'`. Simple prompts to the same model succeed; only large/complex prompts
+fail.
+
+**Cause.** The shared HTTP resilience handler (`AddStandardResilienceHandler` in
+`ServiceDefaults`) applied its default **30-second total / 10-second per-attempt** timeout to
+every HTTP client, including the model-provider clients. Reasoning models routinely take far
+longer than 30s on heavy prompts, so the call was cancelled before the model responded.
+
+**Fix.** The resilience handler is now tuned for an LLM proxy: a **5-minute attempt timeout**,
+a **10-minute total timeout**, and **retries disabled** (retrying an expensive or streaming
+chat completion would duplicate the generation and double-bill). Complex prompts now run to
+completion. See `ServiceDefaults/Extensions.cs`.
+
+## Chat request returns 500 with "Invalid non-ASCII or control character in header" {#header-500}
+
+**Symptom.** A routed chat request fails with `500` and
+`System.InvalidOperationException: Invalid non-ASCII or control character in header: 0x2192`.
+
+**Cause.** The router echoes the routing decision into the `x-harness-routing-reason` response
+header. Semantic-rule reasons contain an arrow (`→`, `0x2192`) and the processor model's
+free-text explanation can include arbitrary Unicode. HTTP header values must be ASCII, so
+Kestrel rejected the response.
+
+**Fix.** Header values are now ASCII-sanitized before they are written
+(`OpenAiApiUtilities.SanitizeHeaderValue`): common symbols (`→`, smart quotes, en/em dashes,
+ellipsis) are mapped to ASCII and any other non-printable/non-ASCII character is dropped. The
+full, unmodified reason is still available in the routing trace and on the
+[Live Routing](Live_Routing.md) page.
