@@ -25,7 +25,11 @@ public sealed record RequestOutcome(
     string? Error,
     bool HadTools,
     bool ToolOverrideApplied,
-    string? OverrideReason)
+    string? OverrideReason,
+    long? TokensIn = null,
+    long? TokensOut = null,
+    long? TokensTotal = null,
+    string? ResponseModel = null)
 {
     public static RequestOutcome None { get; } = new(null, null, true, null, false, false, null);
 

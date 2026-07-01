@@ -189,7 +189,11 @@ public sealed record RoutedRequestView(
     string? UpstreamError = null,
     bool RequestHadTools = false,
     bool ToolCapabilityOverrideApplied = false,
-    string? OverrideReason = null);
+    string? OverrideReason = null,
+    long? TokensIn = null,
+    long? TokensOut = null,
+    long? TokensTotal = null,
+    string? ResponseModel = null);
 
 public sealed record RoutingFeedResponse(
     DateTimeOffset GeneratedAtUtc,

@@ -236,6 +236,12 @@ else
                         {
                             <span class="tools-chip" title="This request asked the model to call tools (agentic request)">🛠 tools</span>
                         }
+                        @if (request.TokensIn is not null || request.TokensOut is not null)
+                        {
+                            <span class="tokens-chip" title="GenAI token usage captured from the upstream response (tokens in → out)">
+                                🔢 @(request.TokensIn?.ToString() ?? "—") in · @(request.TokensOut?.ToString() ?? "—") out@(request.TokensTotal is not null ? $" · {request.TokensTotal} total" : string.Empty)
+                            </span>
+                        }
                     </div>
                     @if (request.ToolCapabilityOverrideApplied)
                     {

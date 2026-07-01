@@ -368,6 +368,19 @@
     padding: 0.1rem 0.5rem;
 }
 
+.tokens-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #0f5132;
+    background: #e7f6ec;
+    border: 1px solid #a6dcb8;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+}
+
 .override-callout {
     display: flex;
     align-items: flex-start;

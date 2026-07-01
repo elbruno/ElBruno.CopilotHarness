@@ -110,6 +110,10 @@ public static partial class AdminEndpoints
                     var requestHadTools = string.Equals(GetContextValue(trace, "request.hadTools"), "true", StringComparison.OrdinalIgnoreCase);
                     var toolOverrideApplied = string.Equals(GetContextValue(trace, "routing.toolOverride"), "true", StringComparison.OrdinalIgnoreCase);
                     var overrideReason = GetContextValue(trace, "routing.toolOverrideReason");
+                    long? tokensIn = long.TryParse(GetContextValue(trace, "gen_ai.usage.input_tokens"), out var tin) ? tin : null;
+                    long? tokensOut = long.TryParse(GetContextValue(trace, "gen_ai.usage.output_tokens"), out var tout) ? tout : null;
+                    long? tokensTotal = long.TryParse(GetContextValue(trace, "gen_ai.usage.total_tokens"), out var ttot) ? ttot : null;
+                    var responseModel = GetContextValue(trace, "gen_ai.response.model");
                     return new RoutedRequestView(
                         TraceId: trace.TraceId,
                         CreatedAtUtc: trace.CreatedAtUtc,
@@ -140,7 +144,11 @@ public static partial class AdminEndpoints
                         UpstreamError: upstreamError,
                         RequestHadTools: requestHadTools,
                         ToolCapabilityOverrideApplied: toolOverrideApplied,
-                        OverrideReason: overrideReason);
+                        OverrideReason: overrideReason,
+                        TokensIn: tokensIn,
+                        TokensOut: tokensOut,
+                        TokensTotal: tokensTotal,
+                        ResponseModel: responseModel);
                 })
                 .ToList();
 

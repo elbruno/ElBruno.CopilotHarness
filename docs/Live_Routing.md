@@ -59,6 +59,10 @@ per-model share summary (how many requests went to each model).
 | `requestHadTools` | `true` when the incoming request asked the model to call tools (agentic request) — drives the 🛠 **tools** chip |
 | `toolCapabilityOverrideApplied` | `true` when the router re-routed the request to a tool-capable model because the originally-selected model can't do tool-calling |
 | `overrideReason` | Plain-language reason for the tool-capability override, rendered in the highlighted override note |
+| `tokensIn` | GenAI **input** (prompt) tokens reported by the upstream model, when available |
+| `tokensOut` | GenAI **output** (completion) tokens reported by the upstream model, when available |
+| `tokensTotal` | Total tokens (`tokensIn + tokensOut`) |
+| `responseModel` | The model name the upstream response reported (`model` field), which may differ from the requested deployment |
 
 ### Upstream outcome, tools, and override (per card)
 
@@ -69,6 +73,8 @@ Each pipeline card now shows an **upstream-outcome** row beneath the "why this r
   Latency renders as seconds (`1.3s`) for calls ≥ 1s and milliseconds (`850ms`) otherwise.
 - **Tools chip.** A 🛠 **tools** chip appears when `requestHadTools` is `true`, so you can
   immediately tell an agentic/tool-calling request apart from a plain chat turn.
+- **Tokens chip.** A 🔢 `<in> in · <out> out · <total> total` chip appears when the upstream
+  reported token usage, so you can see how many tokens each turn consumed at a glance.
 - **Upstream error panel.** When `upstreamError` is present, a collapsible **Upstream error**
   panel shows the raw provider message.
 - **Override note.** When `toolCapabilityOverrideApplied` is `true`, a prominent warning-style
@@ -148,9 +154,56 @@ Every `/v1/chat/completions` (and `/v1/responses`) response includes
 `x-harness-routing-reason`). A client such as the VS Code extension can use this to
 deep-link the exact trace for the chat turn it just sent.
 
+## GenAI OpenTelemetry (Aspire dashboard)
+
+Every upstream chat-completion call emits a **GenAI OpenTelemetry client span** so the full
+request flow — inbound `POST /v1/chat/completions` → routing → upstream model call — shows up
+as a connected trace in the **Aspire dashboard** (and any OTLP backend). The span follows the
+[OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/):
+
+| Attribute | Example | Meaning |
+| --- | --- | --- |
+| span name | `chat gpt-5-mini` | `chat {request.model}` |
+| `gen_ai.operation.name` | `chat` | The GenAI operation |
+| `gen_ai.system` | `ollama` / `azure.ai.openai` | The upstream provider |
+| `gen_ai.request.model` | `llama3.1:8b` | Deployment/model sent upstream |
+| `gen_ai.response.model` | `gpt-5-mini` | Model the response reported |
+| `gen_ai.usage.input_tokens` | `11` | Prompt tokens |
+| `gen_ai.usage.output_tokens` | `7` | Completion tokens |
+| `harness.routing.profile` / `harness.trace_id` / `harness.stream` / `harness.had_tools` / `harness.tool_override` | — | Harness routing context, to correlate the span with the Live Routing trace |
+
+A **`gen_ai.client.token.usage`** histogram metric is also recorded (dimensioned by
+`gen_ai.token.type` = `input`/`output` and `gen_ai.response.model`), so token consumption is
+visible on the Aspire dashboard **Metrics** tab. The source and meter are both named
+`ElBruno.CopilotHarness.GenAI` and are registered on the tracer/meter providers in
+`Program.cs`; export happens automatically when Aspire sets `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+### Token capture
+
+Token usage is parsed from the upstream response body (best-effort — it never alters the
+bytes forwarded to the client and never breaks the proxy):
+
+- **Non-streaming** responses are buffered and the top-level `usage` object is read.
+- **Streaming** responses are teed: bytes flow to the client immediately while a bounded tail
+  is scanned for the final SSE `usage` chunk. To make the upstream emit that chunk, the router
+  injects `stream_options.include_usage=true` on streaming requests. This is a spec-compliant
+  extra final chunk (empty `choices` + `usage`) that standard OpenAI stream clients — including
+  VS Code Copilot — ignore.
+
+Captured tokens are written to the trace as `gen_ai.usage.input_tokens` /
+`output_tokens` / `total_tokens` / `gen_ai.response.model` facts, which the Live Routing feed
+surfaces as `tokensIn` / `tokensOut` / `tokensTotal` / `responseModel` and the page renders as
+the 🔢 tokens chip.
+
+Capture is controlled by `TelemetryOptions`:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `Telemetry:CaptureTokenUsage` | `true` | Capture token usage and inject `stream_options.include_usage` on streaming requests. Set `false` if a client misbehaves with the final usage chunk. |
+
 ## Future enhancements
 
 - Server-sent events (`/admin/telemetry/stream`) for push updates instead of polling.
-- Token/latency/cost columns and per-rule hit counts.
+- Per-rule hit counts and cost columns.
 - Filtering/search by model, rule, or client, and trace export.
 - A dedicated activity-bar tree view in the VS Code extension.

@@ -19,6 +19,14 @@ public sealed class TelemetryOptions
 
     /// <summary>When true, obvious secrets (emails, API keys, bearer tokens) are masked in the preview.</summary>
     public bool RedactSecrets { get; set; } = true;
+
+    /// <summary>
+    /// When true, GenAI token usage (tokens in/out) is captured from the upstream response and surfaced
+    /// on the routing trace, the Live Routing page and the GenAI OpenTelemetry span/metrics. For streaming
+    /// requests this injects <c>stream_options.include_usage=true</c> so the upstream emits a final usage
+    /// chunk (a spec-compliant extra chunk that standard OpenAI stream clients ignore).
+    /// </summary>
+    public bool CaptureTokenUsage { get; set; } = true;
 }
 
 public static partial class PromptPrivacy

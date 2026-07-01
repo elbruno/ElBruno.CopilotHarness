@@ -10,16 +10,26 @@ using ElBruno.CopilotHarness.Router.Core.Persistence;
 using ElBruno.CopilotHarness.Router.Api.Infrastructure;
 using ElBruno.CopilotHarness.Router.Api.RateLimiting;
 using ElBruno.CopilotHarness.Router.Api.Security;
+using ElBruno.CopilotHarness.Router.Api.Telemetry;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+// GenAI OpenTelemetry: surface upstream chat-completion spans + token-usage metrics in the Aspire dashboard.
+builder.Services.ConfigureOpenTelemetryTracerProvider(tracing =>
+    tracing.AddSource(GenAiTelemetry.ActivitySourceName));
+builder.Services.ConfigureOpenTelemetryMeterProvider(metrics =>
+    metrics.AddMeter(GenAiTelemetry.MeterName));
+
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddOptions<BackendOptions>()
@@ -242,6 +252,7 @@ app.MapPost("/v1/responses", async (
     IRequestRoutingService routingService,
     IClientRequestActivityStore requestActivityStore,
     IExecutionTraceStore traceStore,
+    IOptions<TelemetryOptions> telemetryOptions,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -286,6 +297,14 @@ app.MapPost("/v1/responses", async (
             routingDecision.Reason);
 
         var startedAt = DateTimeOffset.UtcNow;
+        var genAiSystem = GenAiTelemetry.SystemFor(routingDecision.Profile.Type);
+        using var chatActivity = GenAiTelemetry.StartChatSpan(
+            routingDecision.Profile,
+            routingDecision.ProfileName,
+            traceId,
+            stream: false,
+            requestHadTools,
+            toolOverrideApplied: false);
         HttpResponseMessage upstreamResponse;
         try
         {
@@ -300,6 +319,7 @@ app.MapPost("/v1/responses", async (
         catch (Exception upstreamException) when (
             upstreamException is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            GenAiTelemetry.RecordError(chatActivity, upstreamException);
             var failedAtMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
             var isTimeout = upstreamException is OperationCanceledException;
             var statusCode = isTimeout ? StatusCodes.Status504GatewayTimeout : StatusCodes.Status502BadGateway;
@@ -341,6 +361,23 @@ app.MapPost("/v1/responses", async (
         using (upstreamResponse)
         {
             var elapsedMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
+
+            context.Response.StatusCode = (int)upstreamResponse.StatusCode;
+            OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
+            OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
+
+            var upstreamBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
+
+            TokenUsage? usage = null;
+            if (telemetryOptions.Value.CaptureTokenUsage && upstreamResponse.IsSuccessStatusCode)
+            {
+                usage = UpstreamResponseForwarder.ExtractNonStreamingUsage(upstreamBody);
+                if (usage is not null)
+                {
+                    GenAiTelemetry.RecordUsage(chatActivity, usage, genAiSystem, routingDecision.Profile.Deployment);
+                }
+            }
+
             capturedOutcome = new RequestOutcome(
                 (int)upstreamResponse.StatusCode,
                 elapsedMs,
@@ -348,14 +385,13 @@ app.MapPost("/v1/responses", async (
                 Error: null,
                 HadTools: requestHadTools,
                 ToolOverrideApplied: false,
-                OverrideReason: null);
+                OverrideReason: null,
+                TokensIn: usage?.InputTokens,
+                TokensOut: usage?.OutputTokens,
+                TokensTotal: usage?.TotalTokens,
+                ResponseModel: usage?.ResponseModel);
             traceStore.AppendFacts(traceId, OpenAiApiUtilities.BuildUpstreamFacts(capturedOutcome));
 
-            context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-            OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
-            OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
-
-            var upstreamBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
             if (!upstreamResponse.IsSuccessStatusCode)
             {
                 await context.Response.WriteAsync(upstreamBody, cancellationToken);
@@ -382,6 +418,7 @@ app.MapPost("/v1/chat/completions", async (
     IClientRequestActivityStore requestActivityStore,
     IShadowRoutingService shadowRoutingService,
     IExecutionTraceStore traceStore,
+    IOptions<TelemetryOptions> telemetryOptions,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -438,6 +475,21 @@ app.MapPost("/v1/chat/completions", async (
         var toolOverrideApplied = guardResult.OverrideApplied;
         var overrideReason = guardResult.OverrideReason;
 
+        var captureUsage = telemetryOptions.Value.CaptureTokenUsage;
+        if (captureUsage && stream)
+        {
+            OpenAiApiUtilities.EnsureStreamUsageRequested(requestPayload);
+        }
+
+        var genAiSystem = GenAiTelemetry.SystemFor(selectedProfile.Type);
+        using var chatActivity = GenAiTelemetry.StartChatSpan(
+            selectedProfile,
+            selectedProfileName,
+            traceId,
+            stream,
+            requestHadTools,
+            toolOverrideApplied);
+
         var startedAt = DateTimeOffset.UtcNow;
         try
         {
@@ -452,6 +504,7 @@ app.MapPost("/v1/chat/completions", async (
         catch (Exception upstreamException) when (
             upstreamException is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            GenAiTelemetry.RecordError(chatActivity, upstreamException);
             var failedAtMs = (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
             var isTimeout = upstreamException is OperationCanceledException;
             var statusCode = isTimeout ? StatusCodes.Status504GatewayTimeout : StatusCodes.Status502BadGateway;
@@ -514,7 +567,6 @@ app.MapPost("/v1/chat/completions", async (
             HadTools: requestHadTools,
             ToolOverrideApplied: toolOverrideApplied,
             OverrideReason: overrideReason);
-        traceStore.AppendFacts(traceId, OpenAiApiUtilities.BuildUpstreamFacts(capturedOutcome));
 
         // Phase 8: fire shadow routing comparison in background (non-streaming only)
         if (!stream)
@@ -531,9 +583,27 @@ app.MapPost("/v1/chat/completions", async (
         OpenAiApiUtilities.CopyHeaders(upstreamResponse, context.Response);
         OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
 
-        await using var responseStream = await upstreamResponse.Content.ReadAsStreamAsync(cancellationToken);
-        await responseStream.CopyToAsync(context.Response.Body, cancellationToken);
-        await context.Response.Body.FlushAsync(cancellationToken);
+        // Forward the body to the client, capturing GenAI token usage on the way through (best-effort).
+        var usage = await UpstreamResponseForwarder.ForwardAsync(
+            upstreamResponse,
+            context.Response,
+            stream,
+            captureUsage && upstreamSucceeded,
+            cancellationToken);
+
+        if (usage is not null)
+        {
+            GenAiTelemetry.RecordUsage(chatActivity, usage, genAiSystem, selectedProfile.Deployment);
+            capturedOutcome = capturedOutcome with
+            {
+                TokensIn = usage.InputTokens,
+                TokensOut = usage.OutputTokens,
+                TokensTotal = usage.TotalTokens,
+                ResponseModel = usage.ResponseModel
+            };
+        }
+
+        traceStore.AppendFacts(traceId, OpenAiApiUtilities.BuildUpstreamFacts(capturedOutcome));
 
         return Results.Empty;
     }

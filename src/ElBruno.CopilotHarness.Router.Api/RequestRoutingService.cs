@@ -229,6 +229,31 @@ public static class OpenAiApiUtilities
         requestBody?["tools"] is JsonArray tools && tools.Count > 0;
 
     /// <summary>
+    /// Ensures a streaming request asks the upstream to emit token usage by setting
+    /// <c>stream_options.include_usage=true</c>. OpenAI, Azure OpenAI and Ollama all honor this and
+    /// append a spec-compliant final chunk (empty <c>choices</c> + <c>usage</c>) that standard stream
+    /// clients ignore. Returns <c>true</c> when the payload was changed.
+    /// </summary>
+    public static bool EnsureStreamUsageRequested(JsonObject requestBody)
+    {
+        ArgumentNullException.ThrowIfNull(requestBody);
+
+        if (requestBody["stream_options"] is JsonObject existing)
+        {
+            if (existing["include_usage"]?.GetValue<bool>() == true)
+            {
+                return false;
+            }
+
+            existing["include_usage"] = true;
+            return true;
+        }
+
+        requestBody["stream_options"] = new JsonObject { ["include_usage"] = true };
+        return true;
+    }
+
+    /// <summary>
     /// Caps the output-token limit of a forwarded payload at <paramref name="cap"/> tokens. Sets
     /// <c>max_tokens</c> when it is absent or larger than the cap; leaves an existing smaller limit alone.
     /// Used as a safety net for local (Ollama) routes so a small model cannot produce a runaway response.
@@ -312,6 +337,26 @@ public static class OpenAiApiUtilities
         if (!string.IsNullOrWhiteSpace(outcome.OverrideReason))
         {
             facts.Add(new RoutingContextFact("routing.toolOverrideReason", outcome.OverrideReason));
+        }
+
+        if (outcome.TokensIn is long tokensIn)
+        {
+            facts.Add(new RoutingContextFact("gen_ai.usage.input_tokens", tokensIn.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (outcome.TokensOut is long tokensOut)
+        {
+            facts.Add(new RoutingContextFact("gen_ai.usage.output_tokens", tokensOut.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (outcome.TokensTotal is long tokensTotal)
+        {
+            facts.Add(new RoutingContextFact("gen_ai.usage.total_tokens", tokensTotal.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(outcome.ResponseModel))
+        {
+            facts.Add(new RoutingContextFact("gen_ai.response.model", outcome.ResponseModel));
         }
 
         return facts;

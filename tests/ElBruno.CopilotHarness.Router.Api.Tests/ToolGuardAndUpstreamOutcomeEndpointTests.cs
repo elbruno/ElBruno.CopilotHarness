@@ -318,6 +318,29 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         Assert.True(entry.ToolCapabilityOverrideApplied);
     }
 
+    // ── G. GenAI token usage capture ──────────────────────────────────────────
+
+    [Fact]
+    public async Task ChatCompletions_CapturesTokenUsage_OnFeed()
+    {
+        using var factory = RouterApiWebApplicationFactory.Create();
+        var client = factory.CreateClient();
+
+        var payload = new
+        {
+            messages = new[] { new { role = "user", content = "hello there" } }
+        };
+
+        var response = await client.PostAsJsonAsync("/v1/chat/completions", payload);
+        response.EnsureSuccessStatusCode();
+
+        var entry = await GetSingleFeedEntryAsync(client);
+        // The stub upstream returns usage prompt_tokens:4, completion_tokens:3, total_tokens:7.
+        Assert.Equal(4, entry.TokensIn);
+        Assert.Equal(3, entry.TokensOut);
+        Assert.Equal(7, entry.TokensTotal);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static async Task<string> CreateNonToolModelAsync(HttpClient client)
@@ -375,7 +398,11 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         string? UpstreamError,
         bool RequestHadTools,
         bool ToolCapabilityOverrideApplied,
-        string? OverrideReason);
+        string? OverrideReason,
+        long? TokensIn = null,
+        long? TokensOut = null,
+        long? TokensTotal = null,
+        string? ResponseModel = null);
 
     private sealed record OpenAiErrorEnvelope(OpenAiError Error);
 
