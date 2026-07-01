@@ -20,6 +20,7 @@
 | Oracle | GitHub Copilot Integrations Engineer | `.squad/agents/oracle/charter.md` | ✅ Active |
 | Dozer | Aspire Platform Engineer | `.squad/agents/dozer/charter.md` | ✅ Active |
 | Switch | Developer Experience Engineer | `.squad/agents/switch/charter.md` | ✅ Active |
+| Seraph | DevRel & Storytelling Engineer | `.squad/agents/seraph/charter.md` | ✅ Active |
 | @copilot | Coding Agent | — | 🤖 Coding Agent |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | 📋 Silent |
 | Ralph | Work Monitor | `.squad/agents/ralph/charter.md` | 🔄 Monitor |

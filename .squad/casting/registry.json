@@ -55,6 +55,13 @@
       "created_at": "2026-06-27T13:10:34.516-04:00",
       "legacy_named": false,
       "status": "active"
+    },
+    "seraph": {
+      "persistent_name": "Seraph",
+      "universe": "The Matrix",
+      "created_at": "2026-07-01T11:41:11.250-04:00",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }

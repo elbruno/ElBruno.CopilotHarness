@@ -4,11 +4,34 @@
 [![Aspire](https://img.shields.io/badge/Aspire-13.4-blueviolet?logo=microsoft)](https://aspire.dev)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-189%20passing-brightgreen)]()
 
 > **Intelligent BYOK harness for GitHub Copilot** — built with .NET 10, .NET Aspire, and Microsoft Agent Framework.
 
 Route every GitHub Copilot request through your own infrastructure. Choose which model handles each request, inspect every decision, benchmark quality over time, and enforce rules — all without touching your IDE.
+
+![Admin — Live Routing (prompt → model → rule → explanation)](docs/images/admin-live-routing.png)
+
+📸 More screenshots: [docs/screenshots.md](docs/screenshots.md)
+
+---
+
+## How it works
+
+The harness sits between Copilot and the upstream model — a vertical stack where each layer feeds into the next.
+
+```mermaid
+flowchart TB
+    A["🤖 Copilot\n(VS Code · Copilot App · CLI)"]
+    B["🔑 BYOK Configuration\nfor ElBruno.CopilotHarness"]
+    C["🔀 ElBruno.CopilotHarness Router\n(launched with .NET Aspire)"]
+    D["🧠 ElBruno.CopilotHarness Model Selector\n(rules engine + AI classifier)"]
+    E["⚡ Local LLM or Azure OpenAI\n(Ollama · Azure AI Foundry)"]
+
+    A --> B --> C --> D --> E
+```
+
+▶️ Animated walkthrough: [docs/presentation/harness-layers.html](docs/presentation/harness-layers.html)
 
 ---
 
@@ -26,32 +49,6 @@ Route every GitHub Copilot request through your own infrastructure. Choose which
 | **OpenTelemetry** | Full distributed tracing across all services via the Aspire dashboard |
 
 ---
-
-## Screenshots
-
-### Aspire Dashboard — all services healthy
-
-![Aspire Dashboard](docs/images/aspire-dashboard.png)
-
-### Admin — Routing Dashboard
-
-![Admin Dashboard](docs/images/admin-dashboard.png)
-
-### Admin — Live Routing (prompt → model → rule → explanation)
-
-![Admin Live Routing](docs/images/admin-live-routing.png)
-
-### Admin — Rules Editor
-
-![Admin Rules](docs/images/admin-rules.png)
-
-### Admin — Model Registry
-
-![Admin Models](docs/images/admin-models.png)
-
-### Judge — Benchmark Results
-
-![Judge Benchmarks](docs/images/judge-benchmarks.png)
 
 ---
 
@@ -100,8 +97,6 @@ aspire run
 >
 > Both produce the exact `chatLanguageModels.json` shown below, with the chat URL already filled in. Then jump to step 5.
 
-![Setup Wizard — Connect to VS Code (BYOK) panel](docs/images/admin-setup-connect.png)
-
 1. Start the harness with `aspire run` and copy the **Router.Api** URL from the Aspire dashboard (for example `http://localhost:5117`).
 2. In VS Code, open **Copilot Chat** and then open the model picker at the bottom of chat.
 3. Select **Manage Models** (or run **Chat: Manage Language Models** from the Command Palette).
@@ -144,8 +139,6 @@ If VS Code opens `chatLanguageModels.json`, this working example matches the har
   }
 ]
 ```
-
-![VS Code Custom Endpoint JSON example](docs/images/byok-chatLanguageModels-json.png)
 
 ---
 

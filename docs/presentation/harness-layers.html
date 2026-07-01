@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ElBruno.CopilotHarness — The 5 Layers</title>
+<style>
+  /* ── Reset & base ────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --muted:     #8b949e;
+    --accent1:   #58a6ff;   /* Copilot blue */
+    --accent2:   #a5d6ff;
+    --l1:        #58a6ff;   /* Layer 1 – Copilot */
+    --l2:        #bc8cff;   /* Layer 2 – BYOK */
+    --l3:        #3fb950;   /* Layer 3 – Router */
+    --l4:        #f78166;   /* Layer 4 – Selector */
+    --l5:        #ffa657;   /* Layer 5 – Models */
+    --arrow:     #484f58;
+    --radius:    12px;
+    --slide-w:   900px;
+    --slide-h:   580px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    user-select: none;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Slide container ─────────────────────────────────────── */
+  .deck {
+    position: relative;
+    width: min(var(--slide-w), 96vw);
+    aspect-ratio: 900 / 580;
+    max-height: 92vh;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 56px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.45s ease;
+    background: linear-gradient(160deg, #161b22 0%, #0d1117 100%);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ── Typography helpers ──────────────────────────────────── */
+  .kicker {
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  h1 {
+    font-size: clamp(1.8em, 3.2vw, 2.6em);
+    font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
+    background: linear-gradient(135deg, var(--accent1), #bc8cff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  h2 {
+    font-size: clamp(1.3em, 2vw, 1.7em);
+    font-weight: 600;
+    text-align: center;
+    color: var(--text);
+  }
+
+  .subtitle {
+    font-size: clamp(0.9em, 1.4vw, 1.1em);
+    color: var(--muted);
+    text-align: center;
+    margin-top: 18px;
+    max-width: 680px;
+    line-height: 1.6;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.78em;
+    font-weight: 600;
+    border: 1px solid;
+    margin: 3px 4px;
+  }
+
+  /* ── Layer diagram ───────────────────────────────────────── */
+  .diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 0;
+  }
+
+  .layer-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    opacity: 0;
+    transform: translateY(-12px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+  }
+
+  .layer-row.revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .layer-box {
+    width: min(580px, 90%);
+    border-radius: 10px;
+    padding: 13px 22px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: 1.5px solid;
+    background: rgba(255,255,255,0.03);
+    transition: background 0.4s ease, box-shadow 0.4s ease, border-color 0.3s ease;
+    cursor: default;
+  }
+
+  .layer-box.highlight {
+    background: rgba(255,255,255,0.07);
+    box-shadow: 0 0 0 2px currentColor, 0 4px 24px rgba(0,0,0,0.5);
+  }
+
+  .layer-icon {
+    font-size: 1.5em;
+    flex-shrink: 0;
+    width: 36px;
+    text-align: center;
+  }
+
+  .layer-content { flex: 1; }
+
+  .layer-name {
+    font-weight: 700;
+    font-size: 0.97em;
+    letter-spacing: 0.01em;
+  }
+
+  .layer-sub {
+    font-size: 0.78em;
+    color: var(--muted);
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+
+  .layer-arrow {
+    font-size: 1.1em;
+    color: var(--arrow);
+    margin: 2px 0;
+    transition: color 0.4s ease;
+  }
+
+  .layer-arrow.lit { color: #58a6ff; }
+
+  /* Layer colour tokens */
+  .l1 { border-color: var(--l1); color: var(--l1); }
+  .l2 { border-color: var(--l2); color: var(--l2); }
+  .l3 { border-color: var(--l3); color: var(--l3); }
+  .l4 { border-color: var(--l4); color: var(--l4); }
+  .l5 { border-color: var(--l5); color: var(--l5); }
+
+  /* ── Caption panel ───────────────────────────────────────── */
+  .caption-area {
+    margin-top: 16px;
+    width: min(580px, 90%);
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .caption {
+    display: none;
+    text-align: center;
+    font-size: 0.84em;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 18px;
+    line-height: 1.55;
+    animation: fadeUp 0.4s ease both;
+    max-width: 560px;
+  }
+
+  .caption.show { display: block; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Closing slide extras ────────────────────────────────── */
+  .cta-link {
+    display: inline-block;
+    margin-top: 24px;
+    padding: 11px 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent1), #bc8cff);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.95em;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: opacity 0.2s;
+  }
+
+  .cta-link:hover { opacity: 0.88; }
+
+  .one-liner {
+    font-size: clamp(1em, 1.6vw, 1.25em);
+    font-weight: 600;
+    text-align: center;
+    color: var(--text);
+    max-width: 640px;
+    line-height: 1.5;
+    margin-top: 16px;
+  }
+
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 20px;
+  }
+
+  /* ── Nav chrome ──────────────────────────────────────────── */
+  .nav-bar {
+    position: fixed;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(22,27,34,0.88);
+    border: 1px solid var(--border);
+    border-radius: 40px;
+    padding: 9px 18px;
+    backdrop-filter: blur(8px);
+    z-index: 100;
+  }
+
+  .nav-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.85em;
+    font-weight: 600;
+    transition: background 0.2s, border-color 0.2s;
+    white-space: nowrap;
+  }
+
+  .nav-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--accent1); }
+  .nav-btn:disabled { opacity: 0.35; cursor: default; }
+
+  .slide-counter {
+    font-size: 0.82em;
+    color: var(--muted);
+    min-width: 56px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hint {
+    position: fixed;
+    bottom: 74px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.72em;
+    color: var(--muted);
+    opacity: 0.6;
+    white-space: nowrap;
+    pointer-events: none;
+    transition: opacity 0.6s;
+  }
+
+  .hint.hidden { opacity: 0; }
+
+  /* ── Progress bar ────────────────────────────────────────── */
+  .progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent1), #bc8cff);
+    transition: width 0.4s ease;
+    border-radius: 0 3px 3px 0;
+    z-index: 200;
+  }
+
+  /* ── No-JS fallback ──────────────────────────────────────── */
+  noscript .no-js-deck {
+    padding: 40px;
+    max-width: 700px;
+    margin: auto;
+  }
+
+  noscript .no-js-deck .layer-box { opacity: 1; transform: none; }
+
+  /* make all slides visible without JS */
+  @media print {
+    .slide { position: relative; opacity: 1; pointer-events: auto; page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="hint" id="hint">Press → to advance</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDES
+     ══════════════════════════════════════════════════════════ -->
+<div class="deck" id="deck" role="main" aria-label="Slide deck">
+
+  <!-- Slide 0 — Title -->
+  <div class="slide active" id="slide-0" role="region" aria-label="Title slide">
+    <div class="kicker">GitHub Copilot · BYOK · Routing</div>
+    <h1>ElBruno.CopilotHarness</h1>
+    <p class="subtitle">
+      Route every GitHub Copilot request through your own infrastructure.<br>
+      Local LLM for fast tasks. Cloud for complex ones.<br>
+      Full explainability. Zero client-side changes.
+    </p>
+    <div class="badges" style="margin-top:28px;">
+      <span class="tag" style="border-color:#58a6ff;color:#58a6ff;">.NET 10</span>
+      <span class="tag" style="border-color:#bc8cff;color:#bc8cff;">.NET Aspire</span>
+      <span class="tag" style="border-color:#3fb950;color:#3fb950;">OpenAI-compatible</span>
+      <span class="tag" style="border-color:#f78166;color:#f78166;">BYOK</span>
+      <span class="tag" style="border-color:#ffa657;color:#ffa657;">Policy Routing</span>
+    </div>
+  </div>
+
+  <!-- Slide 1 — Layer diagram (builds step by step) -->
+  <div class="slide" id="slide-1" role="region" aria-label="The 5 layers">
+    <div class="kicker" style="margin-bottom:10px;">The 5 Layers of the Harness</div>
+
+    <div class="diagram" id="diagram">
+
+      <!-- Layer 1 -->
+      <div class="layer-row" id="row-1" aria-label="Layer 1: Copilot">
+        <div class="layer-box l1" id="box-1">
+          <span class="layer-icon">🤖</span>
+          <div class="layer-content">
+            <div class="layer-name">1 — Copilot</div>
+            <div class="layer-sub">VS Code · Copilot App · Copilot CLI</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-row" id="arrow-1-2" aria-hidden="true">
+        <div class="layer-arrow" id="arrowEl-1">▼</div>
+      </div>
+
+      <!-- Layer 2 -->
+      <div class="layer-row" id="row-2" aria-label="Layer 2: BYOK Configuration">
+        <div class="layer-box l2" id="box-2">
+          <span class="layer-icon">🔑</span>
+          <div class="layer-content">
+            <div class="layer-name">2 — BYOK Configuration</div>
+            <div class="layer-sub">Custom endpoint → harness router URL, no IDE changes needed</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-row" id="arrow-2-3" aria-hidden="true">
+        <div class="layer-arrow" id="arrowEl-2">▼</div>
+      </div>
+
+      <!-- Layer 3 -->
+      <div class="layer-row" id="row-3" aria-label="Layer 3: Router (Aspire)">
+        <div class="layer-box l3" id="box-3">
+          <span class="layer-icon">🔀</span>
+          <div class="layer-content">
+            <div class="layer-name">3 — ElBruno.CopilotHarness Router</div>
+            <div class="layer-sub">OpenAI-compatible proxy · launched with .NET Aspire · Router.Api + Admin.Web</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-row" id="arrow-3-4" aria-hidden="true">
+        <div class="layer-arrow" id="arrowEl-3">▼</div>
+      </div>
+
+      <!-- Layer 4 -->
+      <div class="layer-row" id="row-4" aria-label="Layer 4: Model Selector">
+        <div class="layer-box l4" id="box-4">
+          <span class="layer-icon">🧠</span>
+          <div class="layer-content">
+            <div class="layer-name">4 — Model Selector</div>
+            <div class="layer-sub">Rules engine + AI classifier · size-aware · explainable decisions</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-row" id="arrow-4-5" aria-hidden="true">
+        <div class="layer-arrow" id="arrowEl-4">▼</div>
+      </div>
+
+      <!-- Layer 5 -->
+      <div class="layer-row" id="row-5" aria-label="Layer 5: Models">
+        <div class="layer-box l5" id="box-5">
+          <span class="layer-icon">⚡</span>
+          <div class="layer-content">
+            <div class="layer-name">5 — Local LLM or Azure OpenAI</div>
+            <div class="layer-sub">Ollama llama3.1:8b (local) · Azure AI Foundry / gpt-5-mini (cloud)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Caption panel -->
+    <div class="caption-area">
+      <div class="caption" id="caption-0" data-layer="0">
+        Click or press <strong>→</strong> to reveal each layer of the harness.
+      </div>
+      <div class="caption l1" id="caption-1" data-layer="1">
+        <strong>Copilot</strong> — your everyday AI assistant in VS Code, the Copilot App, or CLI.
+        It sends requests that look like standard OpenAI API calls.
+      </div>
+      <div class="caption l2" id="caption-2" data-layer="2">
+        <strong>BYOK Configuration</strong> — in VS Code's <em>Manage Language Models</em>, point the
+        custom endpoint at your harness URL. Copilot routes through your infrastructure, not GitHub's.
+      </div>
+      <div class="caption l3" id="caption-3" data-layer="3">
+        <strong>Router (Aspire)</strong> — <code>aspire run</code> spins up Router.Api (the OpenAI-compatible
+        proxy), Admin.Web (the operator dashboard), and the Aspire telemetry dashboard as a single unit.
+      </div>
+      <div class="caption l4" id="caption-4" data-layer="4">
+        <strong>Model Selector</strong> — the Rules Engine evaluates conditions (keyword, regex, prompt size,
+        intent, streaming) against an ordered rule list. An AI processor classifies intent; every decision
+        is logged with a human-readable explanation.
+      </div>
+      <div class="caption l5" id="caption-5" data-layer="5">
+        <strong>Models</strong> — small fast prompts stay local (Ollama llama3.1:8b, private, free).
+        Large or agentic requests go to Azure OpenAI / gpt-5-mini. You control which model handles what.
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 2 — Why it matters -->
+  <div class="slide" id="slide-2" role="region" aria-label="Why it matters">
+    <div class="kicker">Why it matters</div>
+    <h2>Your Copilot, Your Rules</h2>
+    <p class="subtitle">
+      GitHub Copilot is powerful — but every prompt goes to a single cloud model
+      you don't control.<br>
+      The harness puts <em>you</em> back in charge.
+    </p>
+    <div class="badges" style="margin-top:28px;">
+      <span class="tag" style="border-color:#3fb950;color:#3fb950;">🔒 Privacy — local LLM for sensitive code</span>
+      <span class="tag" style="border-color:#ffa657;color:#ffa657;">💰 Cost — free local inference where it fits</span>
+      <span class="tag" style="border-color:#58a6ff;color:#58a6ff;">🔎 Explainability — see every routing decision live</span>
+      <span class="tag" style="border-color:#bc8cff;color:#bc8cff;">⚖️ Control — condition-based rules you write</span>
+      <span class="tag" style="border-color:#f78166;color:#f78166;">📊 Evaluation — AI Judge benchmarks model quality</span>
+    </div>
+  </div>
+
+  <!-- Slide 3 — How to get started -->
+  <div class="slide" id="slide-3" role="region" aria-label="Get started">
+    <div class="kicker">Getting Started</div>
+    <h2>Three commands, then you're routing</h2>
+    <div style="margin-top:24px; text-align:left; max-width:560px; width:100%;">
+      <div style="margin-bottom:16px;">
+        <span style="color:var(--muted);font-size:0.8em;letter-spacing:0.1em;text-transform:uppercase;">1 — Set secrets (once)</span>
+        <div style="font-family:monospace;font-size:0.88em;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:6px;color:#58a6ff;">
+          aspire secret set FoundryEndpoint "https://…"<br>
+          aspire secret set FoundryApiKey "&lt;key&gt;"
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <span style="color:var(--muted);font-size:0.8em;letter-spacing:0.1em;text-transform:uppercase;">2 — Launch</span>
+        <div style="font-family:monospace;font-size:0.88em;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:6px;color:#3fb950;">
+          aspire run
+        </div>
+      </div>
+      <div>
+        <span style="color:var(--muted);font-size:0.8em;letter-spacing:0.1em;text-transform:uppercase;">3 — Connect Copilot (BYOK)</span>
+        <div style="font-family:monospace;font-size:0.88em;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:6px;color:#bc8cff;">
+          VS Code → Manage Models → Custom Endpoint<br>
+          URL: http://localhost:5117/v1/chat/completions
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 4 — Closing / CTA -->
+  <div class="slide" id="slide-4" role="region" aria-label="Call to action">
+    <div class="kicker">Open Source · MIT License</div>
+    <h1>Start Routing Today</h1>
+    <p class="one-liner">
+      Route every GitHub Copilot request through your own rules —
+      local for speed and privacy, cloud for power —
+      with full explainability and zero client-side changes.
+    </p>
+    <a class="cta-link"
+       href="https://github.com/elbruno/ElBruno.CopilotHarness"
+       target="_blank" rel="noopener">
+      github.com/elbruno/ElBruno.CopilotHarness →
+    </a>
+    <p style="margin-top:20px;font-size:0.8em;color:var(--muted);">
+      Built with .NET 10 · .NET Aspire · Microsoft Agent Framework · Microsoft.Extensions.AI
+    </p>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- Navigation bar -->
+<nav class="nav-bar" aria-label="Slide navigation">
+  <button class="nav-btn" id="btnPrev" onclick="navigate(-1)" disabled>← Prev</button>
+  <span class="slide-counter" id="counter" aria-live="polite">1 / 5</span>
+  <button class="nav-btn" id="btnNext" onclick="navigate(1)">Next →</button>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════
+     No-JS fallback (only shown when JS disabled)
+     ══════════════════════════════════════════════════════════ -->
+<noscript>
+  <div class="no-js-deck" style="position:fixed;inset:0;overflow-y:auto;background:var(--bg);padding:48px;display:flex;flex-direction:column;align-items:center;gap:32px;">
+    <h1 style="background:linear-gradient(135deg,#58a6ff,#bc8cff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:2em;">ElBruno.CopilotHarness — The 5 Layers</h1>
+    <div class="diagram" style="display:flex;flex-direction:column;align-items:center;gap:0;width:100%;max-width:580px;">
+      <div class="layer-box l1" style="opacity:1;transform:none;width:100%;border-radius:10px;padding:13px 22px;display:flex;align-items:center;gap:14px;border:1.5px solid #58a6ff;background:rgba(255,255,255,0.05);">
+        <span class="layer-icon">🤖</span><div><div style="font-weight:700;color:#58a6ff;">1 — Copilot</div><div style="font-size:0.8em;color:#8b949e;">VS Code · Copilot App · Copilot CLI</div></div>
+      </div>
+      <div style="color:#484f58;text-align:center;padding:4px 0;">▼</div>
+      <div class="layer-box l2" style="opacity:1;transform:none;width:100%;border-radius:10px;padding:13px 22px;display:flex;align-items:center;gap:14px;border:1.5px solid #bc8cff;background:rgba(255,255,255,0.05);">
+        <span class="layer-icon">🔑</span><div><div style="font-weight:700;color:#bc8cff;">2 — BYOK Configuration</div><div style="font-size:0.8em;color:#8b949e;">Custom endpoint → harness router URL</div></div>
+      </div>
+      <div style="color:#484f58;text-align:center;padding:4px 0;">▼</div>
+      <div class="layer-box l3" style="opacity:1;transform:none;width:100%;border-radius:10px;padding:13px 22px;display:flex;align-items:center;gap:14px;border:1.5px solid #3fb950;background:rgba(255,255,255,0.05);">
+        <span class="layer-icon">🔀</span><div><div style="font-weight:700;color:#3fb950;">3 — ElBruno.CopilotHarness Router (Aspire)</div><div style="font-size:0.8em;color:#8b949e;">OpenAI-compatible proxy · Router.Api + Admin.Web</div></div>
+      </div>
+      <div style="color:#484f58;text-align:center;padding:4px 0;">▼</div>
+      <div class="layer-box l4" style="opacity:1;transform:none;width:100%;border-radius:10px;padding:13px 22px;display:flex;align-items:center;gap:14px;border:1.5px solid #f78166;background:rgba(255,255,255,0.05);">
+        <span class="layer-icon">🧠</span><div><div style="font-weight:700;color:#f78166;">4 — Model Selector</div><div style="font-size:0.8em;color:#8b949e;">Rules engine + AI classifier · explainable decisions</div></div>
+      </div>
+      <div style="color:#484f58;text-align:center;padding:4px 0;">▼</div>
+      <div class="layer-box l5" style="opacity:1;transform:none;width:100%;border-radius:10px;padding:13px 22px;display:flex;align-items:center;gap:14px;border:1.5px solid #ffa657;background:rgba(255,255,255,0.05);">
+        <span class="layer-icon">⚡</span><div><div style="font-weight:700;color:#ffa657;">5 — Local LLM or Azure OpenAI</div><div style="font-size:0.8em;color:#8b949e;">Ollama llama3.1:8b (local) · Azure AI Foundry / gpt-5-mini (cloud)</div></div>
+      </div>
+    </div>
+    <a href="https://github.com/elbruno/ElBruno.CopilotHarness" style="color:#58a6ff;">github.com/elbruno/ElBruno.CopilotHarness</a>
+  </div>
+</noscript>
+
+<script>
+/* ── State ──────────────────────────────────────────────────── */
+const TOTAL_SLIDES = 5;
+let currentSlide = 0;     // 0-based index into slides[]
+let layerStep = 0;        // for slide-1: how many layers revealed (0 = none, 5 = all)
+const LAYER_COUNT = 5;
+
+/* ── DOM refs ───────────────────────────────────────────────── */
+const slides       = Array.from(document.querySelectorAll('.slide'));
+const btnPrev      = document.getElementById('btnPrev');
+const btnNext      = document.getElementById('btnNext');
+const counter      = document.getElementById('counter');
+const progressBar  = document.getElementById('progressBar');
+const hintEl       = document.getElementById('hint');
+
+/* ── Init ───────────────────────────────────────────────────── */
+function init() {
+  // Show hint caption on diagram slide
+  showCaption(0);
+  updateNav();
+  updateProgress();
+  // Hide hint after 4 s
+  setTimeout(() => hintEl.classList.add('hidden'), 4000);
+}
+
+/* ── Navigation ─────────────────────────────────────────────── */
+function navigate(dir) {
+  if (dir === 1) {
+    if (currentSlide === 1 && layerStep < LAYER_COUNT) {
+      revealNextLayer();
+      return;
+    }
+    if (currentSlide < TOTAL_SLIDES - 1) {
+      goToSlide(currentSlide + 1);
+    }
+  } else {
+    if (currentSlide === 1 && layerStep > 0) {
+      // Back through layers
+      hideTopLayer();
+      return;
+    }
+    if (currentSlide > 0) {
+      goToSlide(currentSlide - 1);
+    }
+  }
+}
+
+function goToSlide(idx) {
+  slides[currentSlide].classList.remove('active');
+  currentSlide = idx;
+  slides[currentSlide].classList.add('active');
+  if (currentSlide === 1 && layerStep === 0) {
+    showCaption(0);
+  }
+  updateNav();
+  updateProgress();
+}
+
+/* ── Layer reveal ───────────────────────────────────────────── */
+function revealNextLayer() {
+  layerStep++;
+  const row   = document.getElementById('row-' + layerStep);
+  const box   = document.getElementById('box-' + layerStep);
+  if (row) {
+    row.classList.add('revealed');
+  }
+  // reveal the preceding arrow
+  const arrowRow = document.getElementById('arrow-' + (layerStep - 1) + '-' + layerStep);
+  const arrowEl  = document.getElementById('arrowEl-' + (layerStep - 1));
+  if (arrowRow) arrowRow.classList.add('revealed');
+  if (arrowEl)  arrowEl.classList.add('lit');
+
+  // Highlight current, dim previous
+  for (let i = 1; i <= LAYER_COUNT; i++) {
+    const b = document.getElementById('box-' + i);
+    if (b) b.classList.toggle('highlight', i === layerStep);
+  }
+
+  showCaption(layerStep);
+  updateNav();
+  updateProgress();
+}
+
+function hideTopLayer() {
+  const row   = document.getElementById('row-' + layerStep);
+  const box   = document.getElementById('box-' + layerStep);
+  if (row) row.classList.remove('revealed');
+  if (box) box.classList.remove('highlight');
+
+  const arrowRow = document.getElementById('arrow-' + (layerStep - 1) + '-' + layerStep);
+  const arrowEl  = document.getElementById('arrowEl-' + (layerStep - 1));
+  if (arrowRow) arrowRow.classList.remove('revealed');
+  if (arrowEl)  arrowEl.classList.remove('lit');
+
+  layerStep--;
+
+  // Re-highlight new top
+  for (let i = 1; i <= LAYER_COUNT; i++) {
+    const b = document.getElementById('box-' + i);
+    if (b) b.classList.toggle('highlight', i === layerStep);
+  }
+
+  showCaption(layerStep);
+  updateNav();
+  updateProgress();
+}
+
+/* ── Caption ────────────────────────────────────────────────── */
+function showCaption(layer) {
+  document.querySelectorAll('.caption').forEach(c => c.classList.remove('show'));
+  const el = document.getElementById('caption-' + layer);
+  if (el) el.classList.add('show');
+}
+
+/* ── Nav state ──────────────────────────────────────────────── */
+function updateNav() {
+  const atStart = currentSlide === 0 && (currentSlide !== 1 || layerStep === 0);
+  const atEnd   = currentSlide === TOTAL_SLIDES - 1;
+
+  btnPrev.disabled = (currentSlide === 0);
+  btnNext.disabled = atEnd && (currentSlide !== 1 || layerStep >= LAYER_COUNT);
+  btnNext.disabled = atEnd;
+
+  // Compute a "logical step" for the counter (slide 1 expands over 5 sub-steps)
+  let display, total;
+  if (currentSlide === 0) { display = 1; total = TOTAL_SLIDES; }
+  else if (currentSlide === 1) { display = 2; total = TOTAL_SLIDES; }
+  else { display = currentSlide + 1; total = TOTAL_SLIDES; }
+
+  counter.textContent = display + ' / ' + total;
+
+  if (currentSlide === 1) {
+    btnNext.textContent = layerStep < LAYER_COUNT ? 'Reveal →' : 'Next →';
+    btnPrev.textContent = layerStep > 0 ? '← Back' : '← Prev';
+  } else {
+    btnNext.textContent = 'Next →';
+    btnPrev.textContent = '← Prev';
+  }
+
+  btnPrev.disabled = (currentSlide === 0 && layerStep === 0);
+  btnNext.disabled = (currentSlide === TOTAL_SLIDES - 1);
+}
+
+function updateProgress() {
+  // progress = fraction of total "steps" done
+  // Steps: slide 0 = 1, slide 1 builds over 5 sub-steps, slides 2-4 = 1 each each
+  // Total steps = 1 + 5 + 3 = 9
+  let done;
+  if (currentSlide === 0) done = 0;
+  else if (currentSlide === 1) done = 1 + layerStep;
+  else done = 1 + LAYER_COUNT + (currentSlide - 1);
+  const totalSteps = 1 + LAYER_COUNT + (TOTAL_SLIDES - 2);
+  progressBar.style.width = (done / totalSteps * 100) + '%';
+}
+
+/* ── Keyboard ───────────────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); navigate(1); }
+  if (e.key === 'ArrowLeft')                   { e.preventDefault(); navigate(-1); }
+});
+
+/* ── Click on slide to advance ──────────────────────────────── */
+document.getElementById('deck').addEventListener('click', e => {
+  // Don't advance when clicking a link
+  if (e.target.tagName === 'A') return;
+  navigate(1);
+});
+
+/* ── Go ─────────────────────────────────────────────────────── */
+init();
+</script>
+</body>
+</html>
