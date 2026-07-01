@@ -482,8 +482,10 @@ app.MapPost("/v1/chat/completions", async (
         var overrideReason = guardResult.OverrideReason;
 
         var captureUsage = telemetryOptions.Value.CaptureTokenUsage;
-        // Demo routing footer: opt-in, runtime-toggled, and skipped for tool/agentic calls.
-        var annotate = annotationState.Enabled && !requestHadTools;
+        // Demo routing footer: opt-in, runtime-toggled. Whether it is actually appended is decided by the
+        // *response shape* in the forwarder (only final natural-language answers, never tool-call turns),
+        // so it also shows on the last turn of an agentic/tool-calling conversation.
+        var annotate = annotationState.Enabled;
         if ((captureUsage || annotate) && stream)
         {
             OpenAiApiUtilities.EnsureStreamUsageRequested(requestPayload);
@@ -592,8 +594,9 @@ app.MapPost("/v1/chat/completions", async (
         OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
 
         // Forward the body to the client, capturing GenAI token usage on the way through (best-effort).
-        // When the demo routing footer is enabled for a plain (non-tool) successful response, inject the
-        // rule/model/source/token footer into the assistant message so it shows in the Copilot chat window.
+        // When the demo routing footer is enabled, the forwarder appends the rule/model/source/token footer
+        // to the assistant message — but only for a final natural-language answer (a response with content and
+        // no tool_calls), so tool-calling/agentic turns are never corrupted, even in Copilot Agent mode.
         Func<TokenUsage?, string>? annotationFactory = null;
         if (annotate && upstreamSucceeded)
         {

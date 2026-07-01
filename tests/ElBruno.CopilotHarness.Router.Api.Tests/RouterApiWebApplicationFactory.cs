@@ -124,6 +124,18 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
             throw new HttpRequestException("Simulated upstream connection failure.");
         }
 
+        // Marker used by response-annotation tests to simulate a tool-calling (non-final) turn.
+        if (requestBody.Contains("return-tool-calls", StringComparison.OrdinalIgnoreCase))
+        {
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"id\":\"chatcmpl-tc\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":3,\"total_tokens\":7}}",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        }
+
         var acceptsStream = request.Headers.Accept.Any(static header =>
             string.Equals(header.MediaType, "text/event-stream", StringComparison.OrdinalIgnoreCase));
 

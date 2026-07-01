@@ -217,9 +217,10 @@ It shows the matched **rule**, the **target model** (and deployment), the **requ
 (`vscode` / `copilot-cli` / `copilot-app`), a `tool-override` marker when the tool guard
 rerouted the request, and the **token** count when available.
 
-**On/Off — runtime toggle.** This is a demo feature, so it ships **off** and is toggled
-**live without a restart** from the **Live Routing** page header (the *"🧭 Routing footer in
-Copilot"* switch), or via the API:
+**On/Off — runtime toggle.** This is a demo feature, so the production default is **off**, but the
+local Aspire AppHost turns it **on** (`ResponseAnnotation__Enabled=true`) so it's visible out of the
+box during development. Toggle it **live without a restart** from the **Live Routing** page header
+(the *"🧭 Routing footer in Copilot"* switch), or via the API:
 
 ```bash
 # read current state
@@ -232,18 +233,23 @@ The startup default is seeded from configuration and the runtime toggle resets t
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `ResponseAnnotation:Enabled` | `false` | Initial ON/OFF state of the routing footer at startup. |
+| `ResponseAnnotation:Enabled` | `false` (production) / `true` (local AppHost) | Initial ON/OFF state of the routing footer at startup. |
 
 Behaviour:
 
 - Applies only to `/v1/chat/completions` (the Copilot chat surface), never `/v1/responses`.
-- **Skipped for tool/agentic calls** (payloads with a non-empty `tools` array) so the footer
-  never corrupts Copilot's tool-calling loop.
+- Gated on the **response shape**, not the request: the footer is only appended to a **final
+  natural-language answer** — a response that has message `content` and **no** `tool_calls`.
+  Tool-calling turns (which carry `tool_calls`) are left untouched, so the footer never corrupts
+  Copilot's tool-calling loop. Because the gate is on the response, the footer **does** appear on
+  the final answer of a **Copilot Agent-mode** conversation (where every request offers `tools`),
+  just not on the intermediate tool-execution turns.
 - Only appended to **successful** responses.
 - **Non-streaming:** the footer is appended to `choices[0].message.content` and `Content-Length`
   is corrected before the body is written.
 - **Streaming:** an extra `chat.completion.chunk` carrying the footer text is injected right
-  before the terminating `data: [DONE]`, so it streams in as the final piece of the reply.
+  before the terminating `data: [DONE]` (skipped if any `tool_calls` delta was seen), so it
+  streams in as the final piece of the reply.
 
 ### Request source
 

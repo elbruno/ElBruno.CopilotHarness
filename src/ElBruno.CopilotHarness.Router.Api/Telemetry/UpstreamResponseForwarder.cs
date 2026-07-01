@@ -104,7 +104,8 @@ public static class UpstreamResponseForwarder
                 && root["choices"] is JsonArray choices
                 && choices.Count > 0
                 && choices[0] is JsonObject choice
-                && choice["message"] is JsonObject message)
+                && choice["message"] is JsonObject message
+                && !HasToolCalls(message["tool_calls"]))
             {
                 var existing = message["content"]?.GetValue<string>() ?? string.Empty;
                 message["content"] = existing + annotationFactory(usage);
@@ -136,6 +137,7 @@ public static class UpstreamResponseForwarder
         string? id = null;
         string? model = null;
         var injected = false;
+        var sawToolCall = false;
 
         string? line;
         while ((line = await reader.ReadLineAsync(cancellationToken)) is not null)
@@ -146,7 +148,11 @@ public static class UpstreamResponseForwarder
                 var json = trimmed["data:".Length..].Trim();
                 if (string.Equals(json, "[DONE]", StringComparison.Ordinal))
                 {
-                    injected = await InjectFooterChunkAsync(response, id, model, usage, annotationFactory, injected, cancellationToken);
+                    // Only annotate a final natural-language answer, never a tool-calling turn.
+                    if (!sawToolCall)
+                    {
+                        injected = await InjectFooterChunkAsync(response, id, model, usage, annotationFactory, injected, cancellationToken);
+                    }
                 }
                 else if (json.Length > 0)
                 {
@@ -156,6 +162,11 @@ public static class UpstreamResponseForwarder
                         {
                             id ??= obj["id"]?.GetValue<string>();
                             model ??= obj["model"]?.GetValue<string>();
+                            if (ChunkHasToolCalls(obj))
+                            {
+                                sawToolCall = true;
+                            }
+
                             var chunkUsage = ReadUsage(obj);
                             if (chunkUsage is not null)
                             {
@@ -175,13 +186,36 @@ public static class UpstreamResponseForwarder
         }
 
         // Some providers end the stream without an explicit [DONE]; inject at end if we still can.
-        if (!injected)
+        if (!injected && !sawToolCall)
         {
             await InjectFooterChunkAsync(response, id, model, usage, annotationFactory, injected, cancellationToken);
         }
 
         return usage;
     }
+
+    private static bool ChunkHasToolCalls(JsonObject chunk)
+    {
+        if (chunk["choices"] is not JsonArray choices)
+        {
+            return false;
+        }
+
+        foreach (var choice in choices)
+        {
+            if (choice is JsonObject choiceObj
+                && choiceObj["delta"] is JsonObject delta
+                && HasToolCalls(delta["tool_calls"]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasToolCalls(JsonNode? toolCalls) =>
+        toolCalls is JsonArray array && array.Count > 0;
 
     private static async Task<bool> InjectFooterChunkAsync(
         HttpResponse response,

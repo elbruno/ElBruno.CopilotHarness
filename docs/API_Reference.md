@@ -109,8 +109,9 @@ Condition-based routing rules + default model. See [Rules Engine](Rules_Engine.m
 | `PUT` | `/admin/settings/response-annotation` | Toggle the routing footer at runtime (no restart). Body: `{ enabled }`. |
 
 The routing footer injects the matched rule / target model / request source / token count into
-plain (non-tool) chat replies so routing is visible in the Copilot chat window. It is off by
-default (startup seed `ResponseAnnotation:Enabled`) and skipped for tool/agentic requests.
+final chat replies (a response with content and no `tool_calls`) so routing is visible in the
+Copilot chat window — including the final answer in Copilot Agent mode. Off by default in
+production (startup seed `ResponseAnnotation:Enabled`), on in the local AppHost.
 See [Live Routing](./Live_Routing.md#routing-footer-in-the-copilot-chat-window-demo-toggle).
 
 ### `POST /admin/playground/evaluate`

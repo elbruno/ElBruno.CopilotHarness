@@ -7,8 +7,8 @@ namespace ElBruno.CopilotHarness.Router.Api.Tests;
 
 /// <summary>
 /// Tests for the demo "routing footer" (response annotation) feature: the footer builder, the
-/// runtime ON/OFF toggle endpoint, and end-to-end injection into a plain (non-tool) chat response
-/// while being skipped for tool/agentic requests.
+/// runtime ON/OFF toggle endpoint, and end-to-end injection gated on the response shape — appended to
+/// a final natural-language answer (content, no tool_calls) but skipped for tool-calling turns.
 /// </summary>
 public sealed class ResponseAnnotationTests
 {
@@ -127,7 +127,7 @@ public sealed class ResponseAnnotationTests
     }
 
     [Fact]
-    public async Task ToolRequest_WhenEnabled_DoesNotAppendFooter()
+    public async Task ToolCallResponse_WhenEnabled_DoesNotAppendFooter()
     {
         using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>
         {
@@ -135,9 +135,33 @@ public sealed class ResponseAnnotationTests
         });
         var client = factory.CreateClient();
 
+        // The upstream returns a tool-calling turn (tool_calls + null content). The footer must be skipped so
+        // the tool-calling loop is never corrupted — this is what protects Copilot Agent mode mid-conversation.
         var response = await client.PostAsJsonAsync("/v1/chat/completions", new
         {
-            messages = new[] { new { role = "user", content = "call the tool" } },
+            messages = new[] { new { role = "user", content = "return-tool-calls please" } }
+        });
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("tool_calls", body);
+        Assert.DoesNotContain("Copilot Harness", body);
+    }
+
+    [Fact]
+    public async Task FinalAnswerWithToolsOffered_WhenEnabled_AppendsFooter()
+    {
+        using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>
+        {
+            ["ResponseAnnotation:Enabled"] = "true"
+        });
+        var client = factory.CreateClient();
+
+        // Even when the request offers tools (as Copilot Agent mode always does), a final natural-language
+        // answer (content, no tool_calls) still gets the footer — the gating is on the response shape.
+        var response = await client.PostAsJsonAsync("/v1/chat/completions", new
+        {
+            messages = new[] { new { role = "user", content = "final answer please" } },
             tools = new[]
             {
                 new
@@ -150,7 +174,7 @@ public sealed class ResponseAnnotationTests
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync();
-        // Agentic/tool calls are excluded so the footer never corrupts the tool-calling loop.
-        Assert.DoesNotContain("Copilot Harness", body);
+        Assert.Contains("stubbed assistant reply", body);
+        Assert.Contains("Copilot Harness", body);
     }
 }
