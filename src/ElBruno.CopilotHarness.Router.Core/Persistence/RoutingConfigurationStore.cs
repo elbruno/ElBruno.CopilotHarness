@@ -422,7 +422,7 @@ public sealed class RoutingConfigurationStore(
             new RoutingRuleEntity
             {
                 Name = "Launch App actions",
-                Description = "Captures all actions where the user asks Copilot to launch, run, build or start the application.",
+                Description = "Captures all application-lifecycle actions where the user asks Copilot to launch, run, build, start, stop, restart or kill the application under test in the current workspace. This never refers to the Copilot Harness router itself (its Aspire AppHost / Router.Api are background infrastructure and must not be stopped). If no application is running, 'stop the app' is a no-op.",
                 ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
                 ConditionValue = string.Empty,
                 TargetModel = smallModel.Name,

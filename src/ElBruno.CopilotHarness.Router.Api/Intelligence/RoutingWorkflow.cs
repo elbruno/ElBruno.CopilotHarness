@@ -370,14 +370,14 @@ public sealed class DeterministicClassificationAgent : IClassificationAgent
             { Source = "deterministic" };
         }
 
-        // Launch / run the application intent.
-        if (ContainsAny(preview, "launch the app", "run the app", "start the app", "aspire run", "dotnet run", "start aspire"))
+        // Application lifecycle intent (launch / run / build / start / stop / restart the app).
+        if (ContainsAny(preview, "launch the app", "run the app", "start the app", "stop the app", "restart the app", "kill the app", "aspire run", "aspire stop", "dotnet run", "start aspire"))
         {
             return new ClassificationResult(
                 Intent: ClassifierIntents.LaunchApp,
                 Complexity: "low",
                 Confidence: 0.7,
-                Reasoning: "Prompt asks to launch or run the application.")
+                Reasoning: "Prompt asks to launch, run, or stop the application.")
             { Source = "deterministic" };
         }
 

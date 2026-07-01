@@ -17,6 +17,7 @@ public sealed class ProcessorClassifierTests
         Assert.Equal(ClassifierIntentNames.SimpleChat, Classify("hi", options).Intent);
         Assert.Equal(ClassifierIntentNames.GithubActions, Classify("push to gh now", options).Intent);
         Assert.Equal(ClassifierIntentNames.LaunchApp, Classify("launch the app please", options).Intent);
+        Assert.Equal(ClassifierIntentNames.LaunchApp, Classify("stop the app", options).Intent);
         Assert.Equal(ClassifierIntentNames.CodeTask, Classify("refactor the parser", options).Intent);
         Assert.Equal(ClassifierIntentNames.LongForm, Classify(new string('x', 3000), options).Intent);
 

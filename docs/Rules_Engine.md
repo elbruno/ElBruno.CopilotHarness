@@ -189,7 +189,7 @@ Key properties:
 |---|---|---|
 | Simple chat | Greetings and small talk in any language (`hi`, `hola`, `thanks`) plus lightweight web-search lookups answered with Copilot's search tools. | `ollama llama3.1` (local) |
 | GitHub actions | GitHub *actions* (commit / push / open or merge PRs, branches, tags, releases, labels) **and** read-only GitHub questions (open issues, PR status, repository status). | `ollama llama3.1` (local) |
-| Launch App actions | Run / build / start the application. | `ollama llama3.1` (local) |
+| Launch App actions | Run / build / start / **stop** / restart the workspace application under test — never the harness itself. | `ollama llama3.1` (local) |
 | Others actions *(catch-all)* | Everything else, including complex coding tasks. | `foundry gpt-5-mini` (cloud) |
 
 > The exact paragraphs, priorities, and engines for every seeded rule are documented in
@@ -212,7 +212,7 @@ evaluation order (lowest priority first).
 | 4 | 20 | System-guided prompts | `HasSystemMessage` | — | cloud ☁️ | Requests that carry a system message. |
 | 5 | 30 | Streaming requests | `IsStreaming` | — | cloud ☁️ | Streaming (`stream: true`) requests. |
 | 6 | 100 | GitHub actions | `SemanticMatch` | — | local 🖥️ | Any GitHub request — repo-changing actions **and** read-only repo/issue/PR questions. |
-| 7 | 110 | Launch App actions | `SemanticMatch` | — | local 🖥️ | Launch / run / build / start the application. |
+| 7 | 110 | Launch App actions | `SemanticMatch` | — | local 🖥️ | Launch / run / build / start / **stop** / restart the workspace app under test. |
 | 8 | 120 | Others actions *(catch-all)* | `SemanticMatch` | — | cloud ☁️ | Everything else, including complex coding tasks. |
 
 The semantic rules (rows 1, 6, 7, 8) match by their **Description** paragraph — `conditionValue`
@@ -242,8 +242,11 @@ The **full description paragraph** for each semantic rule (so they can be recrea
 
 **7 · Launch App actions** — *local, priority 110*
 
-> Captures all actions where the user asks Copilot to launch, run, build or start the
-> application.
+> Captures all application-lifecycle actions where the user asks Copilot to launch, run,
+> build, start, **stop**, restart or kill the application **under test in the current
+> workspace**. This never refers to the Copilot Harness router itself — its Aspire AppHost
+> and `Router.Api` are background infrastructure and must not be stopped. If no application
+> is running, *"stop the app"* is a no-op.
 
 **8 · Others actions** *(catch-all)* — *cloud, priority 120*
 

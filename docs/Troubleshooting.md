@@ -144,6 +144,13 @@ connection error with no server trace.
    Treat the harness as infrastructure — never the app under test.
 3. If you ran `aspire start` several times, orphaned MSBuild reuse nodes (`dotnet … MSBuild.dll
    /nodeReuse:true`) can accumulate; clear them with `dotnet build-server shutdown`.
+4. **Workspace guardrail (this repo).** `.github/copilot-instructions.md` now tells Copilot to
+   treat the harness as background infrastructure: it must never run `aspire stop` / kill
+   `Router.Api` for a *"stop the app"* command, *"the app"* always means the workspace
+   application under test (never the harness), and **if no application is running, *"stop the
+   app"* is a no-op** (Copilot replies that there is nothing to stop instead of tearing anything
+   down). This removes the self-inflicted disconnect when you develop and test the harness from
+   its own workspace.
 
 > **Note on local routing for these commands.** Real VS Code agentic requests carry the full
 > agent system prompt + tools (~47–49 KB), which always exceeds
