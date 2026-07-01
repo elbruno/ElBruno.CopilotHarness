@@ -5,12 +5,15 @@
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Tests](https://img.shields.io/badge/tests-189%20passing-brightgreen)]()
+[![Website](https://img.shields.io/badge/website-live-blue?logo=github)](https://elbruno.github.io/ElBruno.CopilotHarness/)
 
 > **Intelligent BYOK harness for GitHub Copilot** — built with .NET 10, .NET Aspire, and Microsoft Agent Framework.
 
 Route every GitHub Copilot request through your own infrastructure. Choose which model handles each request, inspect every decision, benchmark quality over time, and enforce rules — all without touching your IDE.
 
 ![Admin — Live Routing (prompt → model → rule → explanation)](docs/images/admin-live-routing.png)
+
+🌐 **[Live site & animated walkthrough →](https://elbruno.github.io/ElBruno.CopilotHarness/)**
 
 📸 More screenshots: [docs/screenshots.md](docs/screenshots.md)
 
