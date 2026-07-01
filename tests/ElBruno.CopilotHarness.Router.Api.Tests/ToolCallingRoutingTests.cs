@@ -150,7 +150,72 @@ public sealed class ToolCallingRoutingTests
         Assert.Null(result);
     }
 
-    // ── BuildUpstreamFacts (projection consumed by E/F) ───────────────────────
+    [Fact]
+    public void FindToolCapableModel_PreferLocalFalse_PrefersCloudOverLocal()
+    {
+        var options = new RoutingOptions
+        {
+            DefaultProfile = "ollama",
+            Profiles = new Dictionary<string, ModelProfileOptions>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ollama"] = new() { Deployment = "llama3.2", Type = ModelProviderType.Ollama, Enabled = true, SupportsToolCalling = false },
+                ["local-capable"] = new() { Deployment = "llama3.1:8b", Type = ModelProviderType.Ollama, Enabled = true, SupportsToolCalling = true },
+                ["gpt5mini"] = new() { Deployment = "gpt-5-mini", Type = ModelProviderType.AzureOpenAI, Enabled = true, SupportsToolCalling = true }
+            }
+        };
+
+        // A heavy agentic payload asks for cloud preference so the local model isn't overwhelmed.
+        var result = OpenAiApiUtilities.FindToolCapableModel(options, excludeProfileName: "ollama", preferLocal: false);
+
+        Assert.NotNull(result);
+        Assert.Equal("gpt5mini", result!.Value.ProfileName);
+    }
+
+    // ── ClampMaxTokens (local-route safety net) ───────────────────────────────
+
+    [Fact]
+    public void ClampMaxTokens_SetsLimit_WhenAbsent()
+    {
+        var body = System.Text.Json.Nodes.JsonNode.Parse("""{"model":"m"}""")!.AsObject();
+
+        var changed = OpenAiApiUtilities.ClampMaxTokens(body, 4096);
+
+        Assert.True(changed);
+        Assert.Equal(4096, (int)body["max_tokens"]!);
+    }
+
+    [Fact]
+    public void ClampMaxTokens_ReducesLimit_WhenLargerThanCap()
+    {
+        var body = System.Text.Json.Nodes.JsonNode.Parse("""{"max_tokens":100000}""")!.AsObject();
+
+        var changed = OpenAiApiUtilities.ClampMaxTokens(body, 4096);
+
+        Assert.True(changed);
+        Assert.Equal(4096, (int)body["max_tokens"]!);
+    }
+
+    [Fact]
+    public void ClampMaxTokens_LeavesSmallerLimitUntouched()
+    {
+        var body = System.Text.Json.Nodes.JsonNode.Parse("""{"max_tokens":256}""")!.AsObject();
+
+        var changed = OpenAiApiUtilities.ClampMaxTokens(body, 4096);
+
+        Assert.False(changed);
+        Assert.Equal(256, (int)body["max_tokens"]!);
+    }
+
+    [Fact]
+    public void ClampMaxTokens_NoOp_WhenCapIsZeroOrNegative()
+    {
+        var body = System.Text.Json.Nodes.JsonNode.Parse("""{"model":"m"}""")!.AsObject();
+
+        var changed = OpenAiApiUtilities.ClampMaxTokens(body, 0);
+
+        Assert.False(changed);
+        Assert.Null(body["max_tokens"]);
+    }
 
     [Fact]
     public void BuildUpstreamFacts_SuccessOutcome_ProjectsStatusAndLatency()

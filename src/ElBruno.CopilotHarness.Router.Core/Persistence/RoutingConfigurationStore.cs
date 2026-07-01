@@ -79,7 +79,10 @@ public sealed class RoutingConfigurationStore(
                     BigProfile = settings.BigProfile,
                     StreamingProfile = settings.StreamingProfile,
                     PreferBigWhenSystemMessageExists = settings.PreferBigWhenSystemMessageExists,
-                    PreferStreamingProfileWhenStreaming = settings.PreferStreamingProfileWhenStreaming
+                    PreferStreamingProfileWhenStreaming = settings.PreferStreamingProfileWhenStreaming,
+                    // Operational tuning knobs sourced from configuration (not DB-persisted).
+                    LocalToolCallingMaxPromptCharacters = _bootstrapOptions.Rules.LocalToolCallingMaxPromptCharacters,
+                    LocalRouteMaxTokens = _bootstrapOptions.Rules.LocalRouteMaxTokens
                 }
         };
     }

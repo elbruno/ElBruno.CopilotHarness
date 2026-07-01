@@ -113,10 +113,15 @@ proxy returned `HTTP 200`. Each connection therefore carries a `supportsToolCall
 - When `false` the model is treated as **chat-only**. If a request that includes
   `tools`/`functions` would otherwise route to this model, the **tool-capability guard**
   automatically overrides the route and dispatches to a tool-capable model instead. The
-  override prefers a **local (Ollama) tool-capable model** so tool requests stay local, and
-  falls back to a cloud model only when no local tool-caller is enabled. The override and its
-  reason are surfaced on the [Live Routing](Live_Routing.md) page as a 🛠 **tools** chip plus
-  a highlighted override note.
+  override is **size-aware**: small tool requests (total prompt ≤
+  `Routing:Rules:LocalToolCallingMaxPromptCharacters`, default 12000) prefer a **local
+  (Ollama)** tool-caller so they stay local, while **large agentic payloads** (which a small
+  local model can't serve without over-generating) are sent to a **cloud** tool-capable model.
+  Requests routed to a local model are additionally capped at
+  `Routing:Rules:LocalRouteMaxTokens` (default 4096) as a runaway safety net. The override and
+  its reason are surfaced on the [Live Routing](Live_Routing.md) page as a 🛠 **tools** chip
+  plus a highlighted override note. See
+  [Troubleshooting → "Response too long"](Troubleshooting.md#response-too-long).
 
 The seeded models cover both jobs:
 

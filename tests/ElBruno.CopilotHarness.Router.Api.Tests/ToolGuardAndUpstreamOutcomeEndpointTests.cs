@@ -105,6 +105,32 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
     }
 
     [Fact]
+    public async Task LargeToolRequest_OnNonCapableModel_OverridesToCloudModel()
+    {
+        using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>
+        {
+            ["Telemetry:CapturePromptText"] = "true"
+        });
+        var client = factory.CreateClient();
+
+        // Force routing to the non-tool-capable Ollama model via a keyword rule.
+        await CreateKeywordRuleAsync(client, "weather", OllamaModel);
+
+        // A heavy agentic payload (> LocalToolCallingMaxPromptCharacters, default 12000) must be sent to the
+        // cloud tool-capable model instead of the local one, which can't serve it without over-generating.
+        var bigContent = "what is the weather today " + new string('x', 15000);
+        var response = await client.PostAsJsonAsync("/v1/chat/completions", ToolsPayload(bigContent));
+        response.EnsureSuccessStatusCode();
+
+        var entry = await GetSingleFeedEntryAsync(client);
+        Assert.True(entry.RequestHadTools);
+        Assert.True(entry.ToolCapabilityOverrideApplied);
+        // The oversized payload prefers the cloud tool-capable model, not the local one.
+        Assert.Contains(FoundryModel, entry.OverrideReason!);
+        Assert.DoesNotContain(LocalToolModel, entry.OverrideReason!);
+    }
+
+    [Fact]
     public async Task ToolRequest_OnCapableModel_NoOverride()
     {
         using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>

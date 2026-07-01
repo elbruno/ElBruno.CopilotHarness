@@ -84,6 +84,32 @@ On the [Live Routing](Live_Routing.md) page you can now see all of this:
   model can't do tool-calling, and
 - the **Errors only** filter narrows the feed to failed upstream calls.
 
+## "Response too long" on an agentic request {#response-too-long}
+
+**Symptom.** VS Code Copilot fails with **`Reason: Response too long.`** even though the
+router returned `HTTP 200`. On the [Live Routing](Live_Routing.md) page the request carries a
+🛠 **tools** chip, was overridden to a **local** model, and shows a high latency (e.g. 27 s).
+
+**Cause.** The request was a heavy agentic payload (VS Code sends the *whole* working set —
+often 100K+ characters — even for a one-line ask like *"show only open issues"*). A small
+local model can't ingest that much context (Ollama also truncates it via a small default
+`num_ctx`), so it **over-generates** a runaway response that exceeds the client's output cap,
+which VS Code reports as *"Response too long."*
+
+**Fix.** The tool-capability override is now **size-aware**:
+
+- Tool requests whose **total prompt size** is at or below
+  `Routing:Rules:LocalToolCallingMaxPromptCharacters` (default **12000**) are kept on the
+  local tool-caller.
+- Larger agentic payloads are overridden to a **cloud** tool-capable model instead — the
+  Live-view override note shows *"…preferring cloud"* with the measured size.
+
+As a second safety net, requests routed to a **local (Ollama)** model have their output capped
+at `Routing:Rules:LocalRouteMaxTokens` (default **4096**; set `0` to disable), so a local model
+can never run away. Both knobs live under `Routing:Rules` in `appsettings.json`. If large
+agentic requests should still run locally, raise `LocalToolCallingMaxPromptCharacters` (and
+expect them to be slow / memory-heavy).
+
 ## Temperature 400 {#temperature-400}
 
 **Symptom.** A chat request from VS Code Copilot fails with:

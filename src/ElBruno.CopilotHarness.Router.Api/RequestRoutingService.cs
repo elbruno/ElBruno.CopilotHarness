@@ -229,21 +229,51 @@ public static class OpenAiApiUtilities
         requestBody?["tools"] is JsonArray tools && tools.Count > 0;
 
     /// <summary>
+    /// Caps the output-token limit of a forwarded payload at <paramref name="cap"/> tokens. Sets
+    /// <c>max_tokens</c> when it is absent or larger than the cap; leaves an existing smaller limit alone.
+    /// Used as a safety net for local (Ollama) routes so a small model cannot produce a runaway response.
+    /// Returns <c>true</c> when the payload was changed.
+    /// </summary>
+    public static bool ClampMaxTokens(JsonObject requestBody, int cap)
+    {
+        if (cap <= 0)
+        {
+            return false;
+        }
+
+        if (requestBody["max_tokens"] is JsonValue existing &&
+            existing.TryGetValue<int>(out var current) &&
+            current > 0 &&
+            current <= cap)
+        {
+            return false;
+        }
+
+        requestBody["max_tokens"] = cap;
+        return true;
+    }
+
+    /// <summary>
+    /// <summary>
     /// Finds the best enabled, tool-calling-capable model to redirect a tool request to, excluding
-    /// <paramref name="excludeProfileName"/>. Local (Ollama) models are preferred so tool requests stay
-    /// local; cloud/Azure models are used only as a fallback. Ties broken by name for deterministic
-    /// selection. Returns null when no tool-capable model is available.
+    /// <paramref name="excludeProfileName"/>. When <paramref name="preferLocal"/> is <c>true</c> the local
+    /// (Ollama) tool-caller is preferred so small tool requests stay local; when <c>false</c> (e.g. a heavy
+    /// agentic payload a local model can't serve) a cloud model is preferred. Ties broken by name for
+    /// deterministic selection. Returns null when no tool-capable model is available.
     /// </summary>
     public static (string ProfileName, ModelProfileOptions Profile)? FindToolCapableModel(
         RoutingOptions options,
-        string? excludeProfileName)
+        string? excludeProfileName,
+        bool preferLocal = true)
     {
         var best = options.Profiles
             .Where(entry =>
                 entry.Value.Enabled &&
                 entry.Value.SupportsToolCalling &&
                 !string.Equals(entry.Key, excludeProfileName, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(entry => entry.Value.Type == ModelProviderType.Ollama)
+            .OrderByDescending(entry => preferLocal
+                ? entry.Value.Type == ModelProviderType.Ollama
+                : entry.Value.Type != ModelProviderType.Ollama)
             .ThenBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
             .Select(entry => ((string ProfileName, ModelProfileOptions Profile)?)(entry.Key, entry.Value))
             .FirstOrDefault();

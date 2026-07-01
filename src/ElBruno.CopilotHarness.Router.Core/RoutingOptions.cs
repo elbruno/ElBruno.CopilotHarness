@@ -68,6 +68,21 @@ public sealed class BasicRulesOptions
 {
     public int BigPromptCharacterThreshold { get; init; } = 2500;
 
+    /// <summary>
+    /// Maximum total prompt size (in characters) for which a tool-calling request may be overridden to a
+    /// LOCAL (Ollama) tool-capable model. Above this size the payload is treated as a heavy agentic request
+    /// that a small local model cannot serve reliably (it over-generates, tripping the client's
+    /// "Response too long" cap), so the override prefers a cloud tool-capable model instead.
+    /// </summary>
+    public int LocalToolCallingMaxPromptCharacters { get; init; } = 12000;
+
+    /// <summary>
+    /// Safety-net cap on the number of output tokens for requests routed to a LOCAL (Ollama) model. Prevents
+    /// a small local model from running away and producing an oversized response. Applied only when the
+    /// forwarded payload does not already request a smaller limit. Set to 0 to disable the cap.
+    /// </summary>
+    public int LocalRouteMaxTokens { get; init; } = 4096;
+
     [Required]
     public string BigProfile { get; init; } = "big";
 

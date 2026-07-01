@@ -425,15 +425,25 @@ app.MapPost("/v1/chat/completions", async (
         var requestHadTools = OpenAiApiUtilities.RequestHasTools(requestPayload);
         var toolOverrideApplied = false;
         string? overrideReason = null;
+        var routingOptions = await routingService.GetRoutingOptionsAsync(cancellationToken);
 
         if (requestHadTools && !selectedProfile.SupportsToolCalling)
         {
-            var routingOptions = await routingService.GetRoutingOptionsAsync(cancellationToken);
-            var capable = OpenAiApiUtilities.FindToolCapableModel(routingOptions, selectedProfileName);
+            // Size-aware override: small tool requests stay local; heavy agentic payloads (which a small
+            // local model can't serve without over-generating and tripping the client's "Response too long"
+            // cap) are sent to a cloud tool-capable model instead.
+            var totalPromptChars = BasicModelRouter.GetPromptCharacterCount(requestPayload);
+            var localMax = routingOptions.Rules.LocalToolCallingMaxPromptCharacters;
+            var preferLocal = localMax <= 0 || totalPromptChars <= localMax;
+
+            var capable = OpenAiApiUtilities.FindToolCapableModel(routingOptions, selectedProfileName, preferLocal);
             if (capable is { } target)
             {
+                var sizeNote = preferLocal
+                    ? string.Empty
+                    : $" (payload {totalPromptChars} chars exceeds local limit {localMax}, preferring cloud)";
                 overrideReason =
-                    $"Request requires tool-calling; '{selectedProfileName}' does not support it, routed to '{target.ProfileName}'.";
+                    $"Request requires tool-calling; '{selectedProfileName}' does not support it, routed to '{target.ProfileName}'.{sizeNote}";
                 selectedProfileName = target.ProfileName;
                 selectedProfile = target.Profile;
                 requestPayload["model"] = selectedProfile.Deployment;
@@ -452,6 +462,14 @@ app.MapPost("/v1/chat/completions", async (
                     traceId,
                     overrideReason);
             }
+        }
+
+        // Safety net: cap output tokens for LOCAL (Ollama) routes so a small local model cannot run away and
+        // produce an oversized response (which the client rejects as "Response too long").
+        if (selectedProfile.Type == ModelProviderType.Ollama &&
+            routingOptions.Rules.LocalRouteMaxTokens > 0)
+        {
+            OpenAiApiUtilities.ClampMaxTokens(requestPayload, routingOptions.Rules.LocalRouteMaxTokens);
         }
 
         var startedAt = DateTimeOffset.UtcNow;
