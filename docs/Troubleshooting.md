@@ -111,6 +111,48 @@ can never run away. Both knobs live under `Routing:Rules` in `appsettings.json`.
 agentic requests should still run locally, raise `LocalToolCallingMaxPromptCharacters` (and
 expect them to be slow / memory-heavy).
 
+## `ERR_CONNECTION_REFUSED` / BYOK endpoint unreachable {#connection-refused}
+
+**Symptom.** VS Code Copilot fails with a *network* error, not an HTTP error:
+
+```
+Reason: Please check your firewall rules and network connection then try again.
+Error Code: net::ERR_CONNECTION_REFUSED.
+```
+
+There is **no matching trace** on the [Live Routing](Live_Routing.md) page for the failed
+request, and the last recorded trace shows `HTTP 200`.
+
+**Cause.** `ERR_CONNECTION_REFUSED` means the client could not even open a TCP socket to the
+BYOK base URL — the request never reached the router (hence no trace). The router process
+(`Router.Api`, default `http://localhost:5117`) was **not listening** at that moment. The most
+common trigger while testing the **Launch App actions** rule is self-inflicted: you route a
+*"stop the app"* command **through the harness that is serving BYOK**, and the VS Code agent
+then executes that stop against the same Aspire app tree that hosts `Router.Api`. Stopping "the
+app" stops the endpoint VS Code is talking to, so the *next* request has nothing to connect to.
+Confirm with the trace history: the last successful traces will be `launch the app` / `stop the
+app` (intent `launch-app`, rule *Launch App actions*, `HTTP 200`), followed by the client-side
+connection error with no server trace.
+
+**Fix.**
+
+1. **Restart the harness** so the endpoint is listening again: `aspire start` (wait for
+   `Router.Api` to report healthy, then retry in VS Code).
+2. **Don't let launch/stop-app commands target the harness itself.** When validating the
+   *Launch App actions* rule, point the command at a **separate** target application, or run the
+   BYOK harness as an independent, always-on process that your agentic commands never stop.
+   Treat the harness as infrastructure — never the app under test.
+3. If you ran `aspire start` several times, orphaned MSBuild reuse nodes (`dotnet … MSBuild.dll
+   /nodeReuse:true`) can accumulate; clear them with `dotnet build-server shutdown`.
+
+> **Note on local routing for these commands.** Real VS Code agentic requests carry the full
+> agent system prompt + tools (~47–49 KB), which always exceeds
+> `Routing:Rules:LocalToolCallingMaxPromptCharacters` (default **12000**). So even though
+> *Launch App actions* targets the **local** model, the size-aware tool override reroutes it to
+> the **cloud** tool-capable model every time (the trace's `routing.toolOverrideReason` records
+> this). This is expected — see [Agentic / tool-calling](#tool-calling). The local target only
+> takes effect for small, tool-free prompts.
+
 ## Temperature 400 {#temperature-400}
 
 **Symptom.** A chat request from VS Code Copilot fails with:
