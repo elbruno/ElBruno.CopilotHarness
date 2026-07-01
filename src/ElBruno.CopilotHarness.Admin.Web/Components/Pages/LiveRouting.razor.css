@@ -5,6 +5,61 @@
     margin: 1rem 0;
 }
 
+.annotation-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-left: auto;
+}
+
+.annotation-label {
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex: none;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch .slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: var(--border-color, #d0d7de);
+    border-radius: 24px;
+    transition: background 0.15s ease-in-out;
+}
+
+.switch .slider::before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.15s ease-in-out;
+}
+
+.switch input:checked + .slider {
+    background: var(--accent, #1f6feb);
+}
+
+.switch input:checked + .slider::before {
+    transform: translateX(20px);
+}
+
 .summary-card {
     border: 1px solid var(--border-color, #d0d7de);
     border-radius: 8px;

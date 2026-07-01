@@ -101,6 +101,18 @@ Condition-based routing rules + default model. See [Rules Engine](Rules_Engine.m
 | `POST` | `/admin/setup/wizard` | Complete first-run setup. Body: `{ defaultModel, generateFirstRules }`. |
 | `POST` | `/admin/setup/generate-first-rules` | Generate the starter rule set. |
 
+### Settings — `/admin/settings`
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/admin/settings/response-annotation` | Current state of the demo routing footer. Returns `{ enabled }`. |
+| `PUT` | `/admin/settings/response-annotation` | Toggle the routing footer at runtime (no restart). Body: `{ enabled }`. |
+
+The routing footer injects the matched rule / target model / request source / token count into
+plain (non-tool) chat replies so routing is visible in the Copilot chat window. It is off by
+default (startup seed `ResponseAnnotation:Enabled`) and skipped for tool/agentic requests.
+See [Live Routing](./Live_Routing.md#routing-footer-in-the-copilot-chat-window-demo-toggle).
+
 ### `POST /admin/playground/evaluate`
 
 Performs a dry-run routing evaluation and returns the fully routed request body. Useful for testing the full routing pipeline including the processor model.

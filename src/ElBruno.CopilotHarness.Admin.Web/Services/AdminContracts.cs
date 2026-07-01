@@ -11,6 +11,9 @@ public sealed record SetupWizardResponse(
     string DefaultProfile,
     DateTimeOffset? CompletedAtUtc);
 
+/// <summary>State of the demo "routing footer" (response annotation) toggle.</summary>
+public sealed record ResponseAnnotationSettingDto(bool Enabled);
+
 // ── Model registry (multi-provider connections) ──────────────────────────────
 
 public sealed record ModelConnectionDto(

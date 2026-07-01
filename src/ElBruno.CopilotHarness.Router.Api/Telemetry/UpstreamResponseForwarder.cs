@@ -19,15 +19,26 @@ public static class UpstreamResponseForwarder
     /// Copies <paramref name="upstream"/>'s content to <paramref name="response"/>. When
     /// <paramref name="captureUsage"/> is true, returns the parsed <see cref="TokenUsage"/> (or null
     /// when none was present); when false, copies straight through and returns null.
+    /// When <paramref name="annotationFactory"/> is supplied, the response is rewritten to append the
+    /// footer it produces (from the captured usage) to the assistant message — non-streaming bodies are
+    /// buffered and rewritten, streaming responses get an extra content chunk injected before <c>[DONE]</c>.
     /// </summary>
     public static async Task<TokenUsage?> ForwardAsync(
         HttpResponseMessage upstream,
         HttpResponse response,
         bool stream,
         bool captureUsage,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<TokenUsage?, string>? annotationFactory = null)
     {
         await using var source = await upstream.Content.ReadAsStreamAsync(cancellationToken);
+
+        if (annotationFactory is not null)
+        {
+            return stream
+                ? await ForwardStreamingAnnotatedAsync(source, response, annotationFactory, cancellationToken)
+                : await ForwardNonStreamingAnnotatedAsync(source, response, annotationFactory, cancellationToken);
+        }
 
         if (!captureUsage)
         {
@@ -72,6 +83,149 @@ public static class UpstreamResponseForwarder
             return null;
         }
     }
+
+    /// <summary>Buffers a non-streaming body, appends the footer to the assistant message, fixes Content-Length, and writes it.</summary>
+    private static async Task<TokenUsage?> ForwardNonStreamingAnnotatedAsync(
+        Stream source,
+        HttpResponse response,
+        Func<TokenUsage?, string> annotationFactory,
+        CancellationToken cancellationToken)
+    {
+        using var memory = new MemoryStream();
+        await source.CopyToAsync(memory, cancellationToken);
+        var original = memory.ToArray();
+        var text = Encoding.UTF8.GetString(original);
+        var usage = ExtractNonStreamingUsage(text);
+
+        var toWrite = original;
+        try
+        {
+            if (JsonNode.Parse(text) is JsonObject root
+                && root["choices"] is JsonArray choices
+                && choices.Count > 0
+                && choices[0] is JsonObject choice
+                && choice["message"] is JsonObject message)
+            {
+                var existing = message["content"]?.GetValue<string>() ?? string.Empty;
+                message["content"] = existing + annotationFactory(usage);
+                toWrite = Encoding.UTF8.GetBytes(root.ToJsonString());
+            }
+        }
+        catch (JsonException)
+        {
+            // Unexpected shape — forward the original body untouched.
+            toWrite = original;
+        }
+
+        // CopyHeaders already copied the upstream Content-Length; overwrite before the first body write.
+        response.Headers.ContentLength = toWrite.Length;
+        await response.Body.WriteAsync(toWrite, cancellationToken);
+        await response.Body.FlushAsync(cancellationToken);
+        return usage;
+    }
+
+    /// <summary>Streams SSE line-by-line, tracking id/model/usage, and injects a footer content chunk before <c>[DONE]</c>.</summary>
+    private static async Task<TokenUsage?> ForwardStreamingAnnotatedAsync(
+        Stream source,
+        HttpResponse response,
+        Func<TokenUsage?, string> annotationFactory,
+        CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(source, Encoding.UTF8);
+        TokenUsage? usage = null;
+        string? id = null;
+        string? model = null;
+        var injected = false;
+
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken)) is not null)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("data:", StringComparison.Ordinal))
+            {
+                var json = trimmed["data:".Length..].Trim();
+                if (string.Equals(json, "[DONE]", StringComparison.Ordinal))
+                {
+                    injected = await InjectFooterChunkAsync(response, id, model, usage, annotationFactory, injected, cancellationToken);
+                }
+                else if (json.Length > 0)
+                {
+                    try
+                    {
+                        if (JsonNode.Parse(json) is JsonObject obj)
+                        {
+                            id ??= obj["id"]?.GetValue<string>();
+                            model ??= obj["model"]?.GetValue<string>();
+                            var chunkUsage = ReadUsage(obj);
+                            if (chunkUsage is not null)
+                            {
+                                usage = chunkUsage;
+                            }
+                        }
+                    }
+                    catch (JsonException)
+                    {
+                        // Best-effort parse; still forward the line verbatim below.
+                    }
+                }
+            }
+
+            await WriteLineAsync(response, line, cancellationToken);
+            await response.Body.FlushAsync(cancellationToken);
+        }
+
+        // Some providers end the stream without an explicit [DONE]; inject at end if we still can.
+        if (!injected)
+        {
+            await InjectFooterChunkAsync(response, id, model, usage, annotationFactory, injected, cancellationToken);
+        }
+
+        return usage;
+    }
+
+    private static async Task<bool> InjectFooterChunkAsync(
+        HttpResponse response,
+        string? id,
+        string? model,
+        TokenUsage? usage,
+        Func<TokenUsage?, string> annotationFactory,
+        bool alreadyInjected,
+        CancellationToken cancellationToken)
+    {
+        if (alreadyInjected || string.IsNullOrEmpty(id))
+        {
+            return alreadyInjected;
+        }
+
+        var chunk = BuildFooterChunk(id!, model, annotationFactory(usage));
+        await WriteLineAsync(response, "data: " + chunk, cancellationToken);
+        await WriteLineAsync(response, string.Empty, cancellationToken);
+        await response.Body.FlushAsync(cancellationToken);
+        return true;
+    }
+
+    private static string BuildFooterChunk(string id, string? model, string footer)
+    {
+        var chunk = new JsonObject
+        {
+            ["id"] = id,
+            ["object"] = "chat.completion.chunk",
+            ["model"] = model,
+            ["choices"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["index"] = 0,
+                    ["delta"] = new JsonObject { ["content"] = footer },
+                    ["finish_reason"] = null
+                }
+            }
+        };
+        return chunk.ToJsonString();
+    }
+
+    private static Task WriteLineAsync(HttpResponse response, string line, CancellationToken cancellationToken)
+        => response.Body.WriteAsync(Encoding.UTF8.GetBytes(line + "\n"), cancellationToken).AsTask();
 
     /// <summary>Parses usage from a single non-streaming JSON completion body.</summary>
     public static TokenUsage? ExtractNonStreamingUsage(string body)

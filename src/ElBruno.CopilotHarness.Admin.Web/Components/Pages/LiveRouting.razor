@@ -11,6 +11,13 @@
         <p class="muted">Watch the harness pipeline in real time: each prompt is read by the <strong>processor model</strong>,
            classified into an <strong>intent</strong>, matched to a <strong>rule</strong>, and routed to a <strong>target model</strong>.</p>
     </div>
+    <div class="annotation-toggle" title="When ON, plain (non-tool) chat responses get a small footer showing the rule, model, source and tokens — visible directly in the Copilot chat window. Great for demos.">
+        <label class="switch">
+            <input type="checkbox" checked="@_annotationEnabled" @onchange="OnAnnotationToggled" />
+            <span class="slider"></span>
+        </label>
+        <span class="annotation-label">🧭 Routing footer in Copilot: <strong>@(_annotationEnabled ? "ON" : "OFF")</strong></span>
+    </div>
 </div>
 
 @if (!string.IsNullOrWhiteSpace(_error))
@@ -295,6 +302,8 @@ else
     private RoutingFeedResponse? _feed;
     private string? _error;
 
+    private bool _annotationEnabled;
+
     private string _filterText = string.Empty;
     private string _modelFilter = string.Empty;
     private string _ruleFilter = string.Empty;
@@ -340,8 +349,31 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            _annotationEnabled = (await Api.GetResponseAnnotationAsync()).Enabled;
+        }
+        catch
+        {
+            _annotationEnabled = false;
+        }
+
         await RefreshAsync();
         _loopTask = RunLoopAsync(_loopCancellation.Token);
+    }
+
+    private async Task OnAnnotationToggled(ChangeEventArgs args)
+    {
+        var enabled = args.Value is bool b && b;
+        try
+        {
+            _annotationEnabled = (await Api.SetResponseAnnotationAsync(enabled)).Enabled;
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not update the routing footer setting: {ex.Message}";
+        }
     }
 
     private async Task RunLoopAsync(CancellationToken cancellationToken)

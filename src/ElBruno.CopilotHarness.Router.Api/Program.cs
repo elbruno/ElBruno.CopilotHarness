@@ -62,6 +62,11 @@ builder.Services
     .AddOptions<ClassifierOptions>()
     .Bind(builder.Configuration.GetSection(ClassifierOptions.SectionName));
 
+builder.Services
+    .AddOptions<ResponseAnnotationOptions>()
+    .Bind(builder.Configuration.GetSection(ResponseAnnotationOptions.SectionName));
+builder.Services.AddSingleton<IResponseAnnotationState, ResponseAnnotationState>();
+
 var persistenceOptions = builder.Configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>() ?? new PersistenceOptions();
 var redisConnectionString = builder.Configuration.GetConnectionString("redis");
 var postgresConnectionString = builder.Configuration.GetConnectionString("copilotharness");
@@ -419,6 +424,7 @@ app.MapPost("/v1/chat/completions", async (
     IShadowRoutingService shadowRoutingService,
     IExecutionTraceStore traceStore,
     IOptions<TelemetryOptions> telemetryOptions,
+    IResponseAnnotationState annotationState,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -476,7 +482,9 @@ app.MapPost("/v1/chat/completions", async (
         var overrideReason = guardResult.OverrideReason;
 
         var captureUsage = telemetryOptions.Value.CaptureTokenUsage;
-        if (captureUsage && stream)
+        // Demo routing footer: opt-in, runtime-toggled, and skipped for tool/agentic calls.
+        var annotate = annotationState.Enabled && !requestHadTools;
+        if ((captureUsage || annotate) && stream)
         {
             OpenAiApiUtilities.EnsureStreamUsageRequested(requestPayload);
         }
@@ -584,12 +592,27 @@ app.MapPost("/v1/chat/completions", async (
         OpenAiApiUtilities.AddRoutingHeaders(context.Response, routingSelection);
 
         // Forward the body to the client, capturing GenAI token usage on the way through (best-effort).
+        // When the demo routing footer is enabled for a plain (non-tool) successful response, inject the
+        // rule/model/source/token footer into the assistant message so it shows in the Copilot chat window.
+        Func<TokenUsage?, string>? annotationFactory = null;
+        if (annotate && upstreamSucceeded)
+        {
+            annotationFactory = usageForFooter => RoutingAnnotation.BuildFooter(
+                selectedProfileName,
+                selectedProfile.Deployment,
+                routingDecision.Reason,
+                requestMetadata.Id,
+                toolOverrideApplied,
+                usageForFooter);
+        }
+
         var usage = await UpstreamResponseForwarder.ForwardAsync(
             upstreamResponse,
             context.Response,
             stream,
             captureUsage && upstreamSucceeded,
-            cancellationToken);
+            cancellationToken,
+            annotationFactory);
 
         if (usage is not null)
         {

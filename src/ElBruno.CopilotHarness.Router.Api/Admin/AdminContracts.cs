@@ -6,6 +6,9 @@ public sealed record SetupWizardRequest(
     string DefaultModel,
     bool GenerateFirstRules);
 
+/// <summary>State of the demo "routing footer" (response annotation) toggle.</summary>
+public sealed record ResponseAnnotationSettingDto(bool Enabled);
+
 public sealed record SetupWizardResponse(
     bool IsCompleted,
     string DefaultProfile,

@@ -18,6 +18,23 @@ public sealed class AdminApiClient(HttpClient httpClient)
             ?? new SetupWizardResponse(false, string.Empty, null);
     }
 
+    // ── Demo routing footer (response annotation) toggle ─────────────────────
+
+    public async Task<ResponseAnnotationSettingDto> GetResponseAnnotationAsync(CancellationToken cancellationToken = default) =>
+        await _httpClient.GetFromJsonAsync<ResponseAnnotationSettingDto>("/admin/settings/response-annotation", cancellationToken)
+        ?? new ResponseAnnotationSettingDto(false);
+
+    public async Task<ResponseAnnotationSettingDto> SetResponseAnnotationAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PutAsJsonAsync(
+            "/admin/settings/response-annotation",
+            new ResponseAnnotationSettingDto(enabled),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ResponseAnnotationSettingDto>(cancellationToken)
+            ?? new ResponseAnnotationSettingDto(enabled);
+    }
+
     // ── Model registry (multi-provider connections) ──────────────────────────
 
     public async Task<IReadOnlyList<ModelConnectionDto>> GetModelsAsync(CancellationToken cancellationToken = default) =>

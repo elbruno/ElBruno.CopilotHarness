@@ -201,6 +201,57 @@ Capture is controlled by `TelemetryOptions`:
 | --- | --- | --- |
 | `Telemetry:CaptureTokenUsage` | `true` | Capture token usage and inject `stream_options.include_usage` on streaming requests. Set `false` if a client misbehaves with the final usage chunk. |
 
+## Routing footer in the Copilot chat window (demo toggle)
+
+Copilot's chat UI renders only the assistant **message content** — it does not surface the
+`x-harness-*` response headers. To make routing visible **inside the Copilot chat window**
+(great for demos and talks), the harness can inject a small **routing footer** into the
+assistant reply:
+
+```
+---
+🧭 Copilot Harness · rule ‘Simple chat’ → ollama llama3.1 (llama3.1:8b) · src: vscode · 32 tok (11→21)
+```
+
+It shows the matched **rule**, the **target model** (and deployment), the **request source**
+(`vscode` / `copilot-cli` / `copilot-app`), a `tool-override` marker when the tool guard
+rerouted the request, and the **token** count when available.
+
+**On/Off — runtime toggle.** This is a demo feature, so it ships **off** and is toggled
+**live without a restart** from the **Live Routing** page header (the *"🧭 Routing footer in
+Copilot"* switch), or via the API:
+
+```bash
+# read current state
+GET  /admin/settings/response-annotation      ->  { "enabled": false }
+# flip it on / off
+PUT  /admin/settings/response-annotation       {  "enabled": true  }
+```
+
+The startup default is seeded from configuration and the runtime toggle resets to it on restart:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `ResponseAnnotation:Enabled` | `false` | Initial ON/OFF state of the routing footer at startup. |
+
+Behaviour:
+
+- Applies only to `/v1/chat/completions` (the Copilot chat surface), never `/v1/responses`.
+- **Skipped for tool/agentic calls** (payloads with a non-empty `tools` array) so the footer
+  never corrupts Copilot's tool-calling loop.
+- Only appended to **successful** responses.
+- **Non-streaming:** the footer is appended to `choices[0].message.content` and `Content-Length`
+  is corrected before the body is written.
+- **Streaming:** an extra `chat.completion.chunk` carrying the footer text is injected right
+  before the terminating `data: [DONE]`, so it streams in as the final piece of the reply.
+
+### Request source
+
+The client source is detected per request (payload `client` → `x-harness-client-*` header →
+`User-Agent`) and normalised to `vscode`, `copilot-cli`, `copilot-app`, or `unknown`. It is
+shown in the Live Routing **Client** column, echoed on the `x-harness-client-source` response
+header, and included in the routing footer as `src: …`.
+
 ## Future enhancements
 
 - Server-sent events (`/admin/telemetry/stream`) for push updates instead of polling.

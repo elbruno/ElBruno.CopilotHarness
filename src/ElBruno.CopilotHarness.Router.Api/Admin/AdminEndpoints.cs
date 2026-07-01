@@ -19,6 +19,7 @@ public static partial class AdminEndpoints
         }
 
         MapSetupEndpoints(group);
+        MapSettingsEndpoints(group);
         MapModelEndpoints(group);
         MapRuleEndpoints(group);
         MapPlaygroundEndpoints(group);
