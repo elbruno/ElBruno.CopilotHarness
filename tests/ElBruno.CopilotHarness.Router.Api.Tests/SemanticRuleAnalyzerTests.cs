@@ -127,4 +127,49 @@ public sealed class SemanticRuleAnalyzerTests
         Assert.Equal("Others actions", match.RuleName);
         Assert.Equal("gpt5mini", match.TargetModel);
     }
+
+    // ── New local-routing scenarios (Dev env / Build+test / Explain / Translate / Commit) ──
+    // Fixtures mirror the seeded rule descriptions so the keyword fallback reflects real routing.
+    private static readonly IReadOnlyList<RoutingRuleDefinition> LocalScenarioRules =
+    [
+        new(1, "GitHub actions",
+            "Captures all GitHub related actions, e.g. commit all the changes to GitHub, push, open a pull request.",
+            RoutingRuleConditionType.SemanticMatch, "", "ollama", 100, true),
+        new(2, "Launch App actions",
+            "Captures launch, run, build, start, stop, restart or kill the application under test in the current workspace.",
+            RoutingRuleConditionType.SemanticMatch, "", "ollama", 110, true),
+        new(3, "Dev environment actions",
+            "Captures requests to start, stop, restart or check the local development services and containers - the database, Redis, message queues, Docker containers, or docker compose up/down.",
+            RoutingRuleConditionType.SemanticMatch, "", "ollama", 112, true),
+        new(4, "Build and test actions",
+            "Captures requests to build, compile, restore or install packages, run tests or the test suite, run a linter, run a formatter, or check code style.",
+            RoutingRuleConditionType.SemanticMatch, "", "ollama", 114, true),
+        new(5, "Quick explanations",
+            "Captures short factual questions answered briefly without changing code: a quick explanation of a single line, setting, command, error message or concept.",
+            RoutingRuleConditionType.SemanticMatch, "", "ollama", 116, true),
+        new(6, "Short translations",
+            "Captures requests to translate a short piece of text, a phrase, a comment or a message from one human language to another, for example translate this to Spanish.",
+            RoutingRuleConditionType.SemanticMatch, "", "ollama", 118, true),
+        new(7, "Commit messages and summaries",
+            "Captures requests to draft a commit message, write a short changelog entry, or produce a brief summary of a diff or a set of changes.",
+            RoutingRuleConditionType.SemanticMatch, "", "ollama", 119, true),
+        new(8, "Others actions",
+            "Catch-all: captures all actions that do not fit into the other rules, including complex coding tasks.",
+            RoutingRuleConditionType.SemanticMatch, "", "gpt5mini", 120, true),
+    ];
+
+    [Theory]
+    [InlineData("start the database and redis", "Dev environment actions")]
+    [InlineData("stop the docker containers", "Dev environment actions")]
+    [InlineData("run the unit tests", "Build and test actions")]
+    [InlineData("restore the packages and build the solution", "Build and test actions")]
+    [InlineData("translate this comment to Spanish", "Short translations")]
+    [InlineData("write a commit message for these changes", "Commit messages and summaries")]
+    public void KeywordMatch_RoutesNewLocalScenarios_ToLocalModel(string prompt, string expectedRule)
+    {
+        var match = SemanticRuleAnalyzer.KeywordMatch(LocalScenarioRules, prompt, "fallback");
+
+        Assert.Equal(expectedRule, match.RuleName);
+        Assert.Equal("ollama", match.TargetModel);
+    }
 }

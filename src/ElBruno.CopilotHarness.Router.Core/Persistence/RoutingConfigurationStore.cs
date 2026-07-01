@@ -433,6 +433,66 @@ public sealed class RoutingConfigurationStore(
             },
             new RoutingRuleEntity
             {
+                Name = "Dev environment actions",
+                Description = "Captures requests to start, stop, restart or check the local development services and containers the application depends on - the database, Redis, message queues, Docker containers, or 'docker compose up/down'. This is about backing services and infrastructure, not the application under test itself (that is Launch App), and never the Copilot Harness router.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
+                TargetModel = smallModel.Name,
+                Priority = 112,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Build and test actions",
+                Description = "Captures requests to build, compile, restore or install packages, run tests or the test suite, run a linter, run a formatter, or check code style/formatting - developer commands that run existing tooling and produce deterministic output rather than writing new code.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
+                TargetModel = smallModel.Name,
+                Priority = 114,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Quick explanations",
+                Description = "Captures short, self-contained factual questions that can be answered briefly without writing or changing code: a quick explanation of a single line, keyword, setting, command, error message or concept. Longer, multi-step, or code-producing questions do not belong here (they are the catch-all).",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
+                TargetModel = smallModel.Name,
+                Priority = 116,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Short translations",
+                Description = "Captures requests to translate a short piece of text, a phrase, a comment or a message from one human (natural) language to another, for example 'translate this to Spanish' or 'how do you say this in French'.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
+                TargetModel = smallModel.Name,
+                Priority = 118,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Commit messages and summaries",
+                Description = "Captures requests to draft a commit message, write a short changelog or release note entry, or produce a brief summary of a diff, a set of changes or a file - short generated text that summarizes existing work rather than writing new code.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
+                TargetModel = smallModel.Name,
+                Priority = 119,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
                 Name = "Others actions",
                 Description = "Catch-all rule. Captures every request that does not match the other rules, including complex coding tasks.",
                 ConditionType = (int)RoutingRuleConditionType.SemanticMatch,

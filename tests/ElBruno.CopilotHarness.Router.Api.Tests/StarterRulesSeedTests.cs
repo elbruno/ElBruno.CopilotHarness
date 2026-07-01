@@ -37,6 +37,11 @@ public sealed class StarterRulesSeedTests
             ("Streaming requests", 30, "IsStreaming", CloudModel),
             ("GitHub actions", 100, "SemanticMatch", LocalModel),
             ("Launch App actions", 110, "SemanticMatch", LocalModel),
+            ("Dev environment actions", 112, "SemanticMatch", LocalModel),
+            ("Build and test actions", 114, "SemanticMatch", LocalModel),
+            ("Quick explanations", 116, "SemanticMatch", LocalModel),
+            ("Short translations", 118, "SemanticMatch", LocalModel),
+            ("Commit messages and summaries", 119, "SemanticMatch", LocalModel),
             ("Others actions", 120, "SemanticMatch", CloudModel),
         };
 

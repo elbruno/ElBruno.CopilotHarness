@@ -190,6 +190,11 @@ Key properties:
 | Simple chat | Greetings and small talk in any language (`hi`, `hola`, `thanks`) plus lightweight web-search lookups answered with Copilot's search tools. | `ollama llama3.1` (local) |
 | GitHub actions | GitHub *actions* (commit / push / open or merge PRs, branches, tags, releases, labels) **and** read-only GitHub questions (open issues, PR status, repository status). | `ollama llama3.1` (local) |
 | Launch App actions | Run / build / start / **stop** / restart the workspace application under test — never the harness itself. | `ollama llama3.1` (local) |
+| Dev environment actions | Start / stop / restart local backing services & containers (database, Redis, Docker, `docker compose`). | `ollama llama3.1` (local) |
+| Build and test actions | Build / compile / restore, run tests, run a linter or formatter. | `ollama llama3.1` (local) |
+| Quick explanations | Short factual questions — explain a line, setting, command, error or concept — no code changes. | `ollama llama3.1` (local) |
+| Short translations | Translate a short phrase, comment or message between human languages. | `ollama llama3.1` (local) |
+| Commit messages and summaries | Draft a commit message, changelog entry, or a brief diff/change summary. | `ollama llama3.1` (local) |
 | Others actions *(catch-all)* | Everything else, including complex coding tasks. | `foundry gpt-5-mini` (cloud) |
 
 > The exact paragraphs, priorities, and engines for every seeded rule are documented in
@@ -198,7 +203,7 @@ Key properties:
 ## Default starter rules
 
 When no rules exist, the **Rules** page (and the Setup wizard) seeds the starter set below via
-`GenerateStarterRulesAsync`. A fresh install produces exactly **8 rules** — the defaults are
+`GenerateStarterRulesAsync`. A fresh install produces exactly **13 rules** — the defaults are
 good to go without further customisation. Rules are a mix of `SemanticMatch` rules (priorities
 5 and 100–120) and deterministic condition guards (priorities 6–30). "local" = the small Ollama
 model (`ollama llama3.1`, 🖥️); "cloud" = the large model (`foundry gpt-5-mini`, ☁️). Listed in
@@ -213,12 +218,26 @@ evaluation order (lowest priority first).
 | 5 | 30 | Streaming requests | `IsStreaming` | — | cloud ☁️ | Streaming (`stream: true`) requests. |
 | 6 | 100 | GitHub actions | `SemanticMatch` | — | local 🖥️ | Any GitHub request — repo-changing actions **and** read-only repo/issue/PR questions. |
 | 7 | 110 | Launch App actions | `SemanticMatch` | — | local 🖥️ | Launch / run / build / start / **stop** / restart the workspace app under test. |
-| 8 | 120 | Others actions *(catch-all)* | `SemanticMatch` | — | cloud ☁️ | Everything else, including complex coding tasks. |
+| 8 | 112 | Dev environment actions | `SemanticMatch` | — | local 🖥️ | Start / stop / restart local dev services & containers (DB, Redis, Docker). |
+| 9 | 114 | Build and test actions | `SemanticMatch` | — | local 🖥️ | Build / compile / restore, run tests, run a linter or formatter. |
+| 10 | 116 | Quick explanations | `SemanticMatch` | — | local 🖥️ | Short factual questions with no code changes. |
+| 11 | 118 | Short translations | `SemanticMatch` | — | local 🖥️ | Translate a short phrase/comment/message between human languages. |
+| 12 | 119 | Commit messages and summaries | `SemanticMatch` | — | local 🖥️ | Draft a commit message, changelog entry, or brief change summary. |
+| 13 | 120 | Others actions *(catch-all)* | `SemanticMatch` | — | cloud ☁️ | Everything else, including complex coding tasks. |
 
-The semantic rules (rows 1, 6, 7, 8) match by their **Description** paragraph — `conditionValue`
+The semantic rules (rows 1, 6–13) match by their **Description** paragraph — `conditionValue`
 is empty and the processor model picks the best-matching rule from the natural-language
 descriptions. The deterministic rules (rows 2–5) are evaluated first and short-circuit the
 semantic sweep when their condition fires.
+
+> **Why route these to the local model?** Rows 6–12 are *lightweight, low-reasoning* intents —
+> lifecycle/dev commands, running existing tooling, short factual answers, translations, and
+> short generated summaries. A small local model (`ollama llama3.1`) handles them well, so
+> keeping them local **saves cloud tokens**. ⚠️ The saving only fully applies to **tool-free
+> (Ask-mode) turns**: in Copilot **Agent mode** the request carries a large tool payload that
+> exceeds `Routing:Rules:LocalToolCallingMaxPromptCharacters`, so the
+> [tool-routing guard](Troubleshooting.md#tool-calling) reroutes even a local-targeted rule to
+> the cloud tool-capable model. See [Troubleshooting → local routing note](Troubleshooting.md#connection-refused).
 
 The **full description paragraph** for each semantic rule (so they can be recreated from scratch):
 
@@ -248,7 +267,39 @@ The **full description paragraph** for each semantic rule (so they can be recrea
 > and `Router.Api` are background infrastructure and must not be stopped. If no application
 > is running, *"stop the app"* is a no-op.
 
-**8 · Others actions** *(catch-all)* — *cloud, priority 120*
+**8 · Dev environment actions** — *local, priority 112*
+
+> Captures requests to start, stop, restart or check the local development services and
+> containers the application depends on - the database, Redis, message queues, Docker containers,
+> or 'docker compose up/down'. This is about backing services and infrastructure, not the
+> application under test itself (that is Launch App), and never the Copilot Harness router.
+
+**9 · Build and test actions** — *local, priority 114*
+
+> Captures requests to build, compile, restore or install packages, run tests or the test suite,
+> run a linter, run a formatter, or check code style/formatting - developer commands that run
+> existing tooling and produce deterministic output rather than writing new code.
+
+**10 · Quick explanations** — *local, priority 116*
+
+> Captures short, self-contained factual questions that can be answered briefly without writing
+> or changing code: a quick explanation of a single line, keyword, setting, command, error
+> message or concept. Longer, multi-step, or code-producing questions do not belong here (they
+> are the catch-all).
+
+**11 · Short translations** — *local, priority 118*
+
+> Captures requests to translate a short piece of text, a phrase, a comment or a message from one
+> human (natural) language to another, for example 'translate this to Spanish' or 'how do you say
+> this in French'.
+
+**12 · Commit messages and summaries** — *local, priority 119*
+
+> Captures requests to draft a commit message, write a short changelog or release note entry, or
+> produce a brief summary of a diff, a set of changes or a file - short generated text that
+> summarizes existing work rather than writing new code.
+
+**13 · Others actions** *(catch-all)* — *cloud, priority 120*
 
 > Catch-all rule. Captures every request that does not match the other rules, including complex
 > coding tasks.
