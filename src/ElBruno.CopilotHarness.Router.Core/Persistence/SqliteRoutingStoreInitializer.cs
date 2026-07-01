@@ -13,29 +13,19 @@ public sealed class SqliteRoutingStoreInitializer(
 
     private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled, bool IsProcessor, bool SupportsCustomTemperature, bool SupportsToolCalling)> SeedModels()
     {
+        // Single local model: llama3.1:8b serves as the classifier (processor), the local rule target, and the
+        // local tool-caller. It streams structured tool_calls with valid args (run: ollama pull llama3.1:8b).
         yield return (
-            "seed-ollama-llama32",
-            "ollama llama3.2",
-            (int)ModelProviderType.Ollama,
-            "http://localhost:11434",
-            "llama3.2",
-            "2024-10-21",
-            true,
-            true,   // processor model (classifier)
-            true,
-            false); // llama3.2 cannot reliably perform tool/function calling
-
-        yield return (
-            "seed-ollama-llama31-tools",
-            "ollama llama3.1 (tools)",
+            "seed-ollama-llama31",
+            "ollama llama3.1",
             (int)ModelProviderType.Ollama,
             "http://localhost:11434",
             "llama3.1:8b",
             "2024-10-21",
             true,
-            false,
-            true,
-            true);  // local tool-caller: streams structured tool_calls with valid args (run: ollama pull llama3.1:8b)
+            true,   // processor model (classifier)
+            true,   // supports custom temperature
+            true);  // tool-calling capable
 
         yield return (
             "seed-foundry-gpt5mini",
@@ -97,19 +87,10 @@ public sealed class SqliteRoutingStoreInitializer(
         // Idempotent column upgrades for databases created before these columns existed.
         await AddColumnIfMissingAsync("Models", "IsProcessor", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
         await AddColumnIfMissingAsync("Models", "SupportsCustomTemperature", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
-        var supportsToolCallingAdded = await AddColumnIfMissingAsync("Models", "SupportsToolCalling", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
-
-        // Backfill for databases created before the SupportsToolCalling column existed: the ALTER above
-        // defaults every existing row to 1 (true), but Ollama models cannot reliably perform tool/function
-        // calling. Mark them not-tool-capable once, on the upgrade, so the tool-calling guard works without
-        // requiring users to edit each model by hand. Runs only when the column was just added, so it never
-        // clobbers a user's later choice.
-        if (supportsToolCallingAdded)
-        {
-            await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Models SET SupportsToolCalling = 0 WHERE ProviderType = {(int)ModelProviderType.Ollama};",
-                cancellationToken);
-        }
+        // The SupportsToolCalling column defaults to 1 (true) for every row, including Ollama models. The local
+        // default model (llama3.1:8b) is a capable tool-caller, so we no longer force Ollama rows to 0 on
+        // upgrade — the tool-calling size guard reroutes oversized agentic payloads to the cloud regardless.
+        await AddColumnIfMissingAsync("Models", "SupportsToolCalling", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
 
         await dbContext.Database.ExecuteSqlRawAsync(
             """

@@ -22,7 +22,7 @@ public sealed class AdminEndpointsTests : IClassFixture<RouterApiWebApplicationF
         var models = await response.Content.ReadFromJsonAsync<List<ModelConnectionDto>>();
 
         Assert.NotNull(models);
-        Assert.Contains(models, model => model.Name == "ollama llama3.2" && model.Type == "ollama");
+        Assert.Contains(models, model => model.Name == "ollama llama3.1" && model.Type == "ollama");
         Assert.Contains(models, model => model.Name == "foundry gpt-5-mini" && model.Type == "azure-openai");
     }
 

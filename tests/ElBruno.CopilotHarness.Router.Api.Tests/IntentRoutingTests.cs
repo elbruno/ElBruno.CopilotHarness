@@ -48,7 +48,7 @@ public sealed class IntentRoutingTests
             DefaultProfile = "ollama",
             Profiles = new Dictionary<string, ModelProfileOptions>(StringComparer.OrdinalIgnoreCase)
             {
-                ["ollama"] = new() { Deployment = "llama3.2", Enabled = true, IsProcessor = true },
+                ["ollama"] = new() { Deployment = "llama3.1:8b", Enabled = true, IsProcessor = true },
                 ["gpt5mini"] = new() { Deployment = "gpt-5-mini", Enabled = true, SupportsCustomTemperature = false }
             },
             RuleSet =

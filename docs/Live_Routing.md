@@ -24,7 +24,7 @@ left-to-right: *Prompt → Processor classifies intent → Rule matches → Targ
 | Classifier source | Whether the intent came from the **processor model** (real LLM call) or the **deterministic** fallback |
 | Rule | The routing rule that matched (if any) |
 | Model | The selected model + upstream deployment |
-| Why | A pipeline sentence, e.g. *"processor 'ollama llama3.2' classified intent=simple-chat (0.92) → rule 'Simple chat' matched → routed to 'ollama llama3.2'."* |
+| Why | A pipeline sentence, e.g. *"processor 'ollama llama3.1' classified intent=simple-chat (0.92) → rule 'Simple chat' matched → routed to 'ollama llama3.1'."* |
 | Client | VS Code Copilot / Copilot CLI / Copilot App (mapped from the user-agent) |
 | Trace | Trace id (deep-links to the full routing trace) |
 

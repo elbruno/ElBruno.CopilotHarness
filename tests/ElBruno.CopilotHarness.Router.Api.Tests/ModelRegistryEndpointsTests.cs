@@ -19,7 +19,7 @@ public sealed class ModelRegistryEndpointsTests : IClassFixture<RouterApiWebAppl
         var models = await _client.GetFromJsonAsync<List<ModelConnectionDto>>("/admin/models");
 
         Assert.NotNull(models);
-        Assert.Contains(models, m => m.Name == "ollama llama3.2" && m.Type == "ollama");
+        Assert.Contains(models, m => m.Name == "ollama llama3.1" && m.Type == "ollama");
         Assert.Contains(models, m => m.Name == "foundry gpt-5-mini" && m.Type == "azure-openai");
     }
 
@@ -28,7 +28,7 @@ public sealed class ModelRegistryEndpointsTests : IClassFixture<RouterApiWebAppl
     {
         var models = await _client.GetFromJsonAsync<List<ModelConnectionDto>>("/admin/models");
 
-        var ollama = models!.First(m => m.Name == "ollama llama3.2");
+        var ollama = models!.First(m => m.Name == "ollama llama3.1");
         var gpt5 = models.First(m => m.Name == "foundry gpt-5-mini");
 
         // gpt-5-mini rejects custom temperature; ollama accepts it. (The processor

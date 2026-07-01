@@ -5,14 +5,15 @@ using ElBruno.CopilotHarness.Router.Api.Admin;
 namespace ElBruno.CopilotHarness.Router.Api.Tests;
 
 /// <summary>
-/// Endpoint-level tests for the tool-calling capability guard (C), the <c>SupportsToolCalling</c>
-/// persistence round-trip (D), upstream outcome capture (E) and the Live feed projection (F).
+/// Endpoint-level tests for the tool-calling capability guard + size-aware routing (C), the
+/// <c>SupportsToolCalling</c> persistence round-trip (D), upstream outcome capture (E) and the Live feed
+/// projection (F). The single seeded local model (<c>ollama llama3.1</c> = llama3.1:8b) is tool-capable, so
+/// tests that need a non-capable model create one on the fly.
 /// </summary>
 public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
 {
-    private const string OllamaModel = "ollama llama3.2";        // seeded: SupportsToolCalling = false
-    private const string FoundryModel = "foundry gpt-5-mini";    // seeded: SupportsToolCalling = true
-    private const string LocalToolModel = "ollama llama3.1 (tools)"; // seeded: local tool-caller, preferred for overrides
+    private const string LocalModel = "ollama llama3.1";        // seeded: local tool-caller (SupportsToolCalling = true)
+    private const string FoundryModel = "foundry gpt-5-mini";  // seeded: cloud tool-caller (SupportsToolCalling = true)
 
     private static object ToolsPayload(string content) => new
     {
@@ -37,10 +38,11 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
 
         var models = await client.GetFromJsonAsync<List<ModelConnectionDto>>("/admin/models");
 
-        var ollama = models!.First(m => m.Name == OllamaModel);
+        var ollama = models!.First(m => m.Name == LocalModel);
         var gpt5 = models.First(m => m.Name == FoundryModel);
 
-        Assert.False(ollama.SupportsToolCalling);
+        // The consolidated local model (llama3.1:8b) and the cloud model are both tool-capable.
+        Assert.True(ollama.SupportsToolCalling);
         Assert.True(gpt5.SupportsToolCalling);
     }
 
@@ -79,10 +81,10 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         Assert.True(updated!.SupportsToolCalling);
     }
 
-    // ── C. Tool-calling guard (end-to-end) ────────────────────────────────────
+    // ── C. Tool-calling guard + size-aware routing (end-to-end) ───────────────
 
     [Fact]
-    public async Task ToolRequest_OnNonCapableModel_OverridesToToolCapableModel()
+    public async Task ToolRequest_OnNonCapableModel_OverridesToLocalToolCapableModel()
     {
         using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>
         {
@@ -90,8 +92,9 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         });
         var client = factory.CreateClient();
 
-        // Force routing to the non-tool-capable Ollama model via a keyword rule.
-        await CreateKeywordRuleAsync(client, "weather", OllamaModel);
+        // Force routing to a non-tool-capable model via a keyword rule.
+        var nonCapable = await CreateNonToolModelAsync(client);
+        await CreateKeywordRuleAsync(client, "weather", nonCapable);
 
         var response = await client.PostAsJsonAsync("/v1/chat/completions", ToolsPayload("what is the weather today"));
         response.EnsureSuccessStatusCode();
@@ -100,8 +103,8 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         Assert.True(entry.RequestHadTools);
         Assert.True(entry.ToolCapabilityOverrideApplied);
         Assert.False(string.IsNullOrWhiteSpace(entry.OverrideReason));
-        // The override redirected to the local tool-capable model (preferred over cloud).
-        Assert.Contains(LocalToolModel, entry.OverrideReason!);
+        // A small tool request prefers the local tool-capable model.
+        Assert.Contains(LocalModel, entry.OverrideReason!);
     }
 
     [Fact]
@@ -113,11 +116,11 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         });
         var client = factory.CreateClient();
 
-        // Force routing to the non-tool-capable Ollama model via a keyword rule.
-        await CreateKeywordRuleAsync(client, "weather", OllamaModel);
+        var nonCapable = await CreateNonToolModelAsync(client);
+        await CreateKeywordRuleAsync(client, "weather", nonCapable);
 
-        // A heavy agentic payload (> LocalToolCallingMaxPromptCharacters, default 12000) must be sent to the
-        // cloud tool-capable model instead of the local one, which can't serve it without over-generating.
+        // A heavy agentic payload (> LocalToolCallingMaxPromptCharacters, default 12000) must go to the cloud
+        // tool-capable model, not the local one, which can't serve it without over-generating.
         var bigContent = "what is the weather today " + new string('x', 15000);
         var response = await client.PostAsJsonAsync("/v1/chat/completions", ToolsPayload(bigContent));
         response.EnsureSuccessStatusCode();
@@ -127,7 +130,51 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         Assert.True(entry.ToolCapabilityOverrideApplied);
         // The oversized payload prefers the cloud tool-capable model, not the local one.
         Assert.Contains(FoundryModel, entry.OverrideReason!);
-        Assert.DoesNotContain(LocalToolModel, entry.OverrideReason!);
+        Assert.DoesNotContain(LocalModel, entry.OverrideReason!);
+    }
+
+    [Fact]
+    public async Task LargeToolRequest_OnLocalCapableModel_OverridesToCloudModel()
+    {
+        using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>
+        {
+            ["Telemetry:CapturePromptText"] = "true"
+        });
+        var client = factory.CreateClient();
+
+        // Route a tool request straight to the tool-capable LOCAL model, but with an oversized payload.
+        await CreateKeywordRuleAsync(client, "weather", LocalModel);
+
+        var bigContent = "what is the weather today " + new string('x', 15000);
+        var response = await client.PostAsJsonAsync("/v1/chat/completions", ToolsPayload(bigContent));
+        response.EnsureSuccessStatusCode();
+
+        var entry = await GetSingleFeedEntryAsync(client);
+        Assert.True(entry.RequestHadTools);
+        // Even though the local model is tool-capable, an oversized agentic payload is rerouted to the cloud.
+        Assert.True(entry.ToolCapabilityOverrideApplied);
+        Assert.Contains(FoundryModel, entry.OverrideReason!);
+    }
+
+    [Fact]
+    public async Task ToolRequest_OnLocalCapableModel_SmallPayload_StaysLocal()
+    {
+        using var factory = RouterApiWebApplicationFactory.Create(new Dictionary<string, string?>
+        {
+            ["Telemetry:CapturePromptText"] = "true"
+        });
+        var client = factory.CreateClient();
+
+        // A small tool request on the tool-capable local model stays local — no override.
+        await CreateKeywordRuleAsync(client, "weather", LocalModel);
+
+        var response = await client.PostAsJsonAsync("/v1/chat/completions", ToolsPayload("what is the weather today"));
+        response.EnsureSuccessStatusCode();
+
+        var entry = await GetSingleFeedEntryAsync(client);
+        Assert.True(entry.RequestHadTools);
+        Assert.False(entry.ToolCapabilityOverrideApplied);
+        Assert.Equal(LocalModel, entry.SelectedModel);
     }
 
     [Fact]
@@ -157,8 +204,9 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         });
         var client = factory.CreateClient();
 
-        // Force routing to the non-tool-capable Ollama model, but send no tools.
-        await CreateKeywordRuleAsync(client, "weather", OllamaModel);
+        // Force routing to a non-tool-capable model, but send no tools.
+        var nonCapable = await CreateNonToolModelAsync(client);
+        await CreateKeywordRuleAsync(client, "weather", nonCapable);
 
         var response = await client.PostAsJsonAsync("/v1/chat/completions", new
         {
@@ -255,7 +303,8 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
         });
         var client = factory.CreateClient();
 
-        await CreateKeywordRuleAsync(client, "weather", OllamaModel);
+        var nonCapable = await CreateNonToolModelAsync(client);
+        await CreateKeywordRuleAsync(client, "weather", nonCapable);
 
         var response = await client.PostAsJsonAsync("/v1/chat/completions", ToolsPayload("what is the weather today"));
         response.EnsureSuccessStatusCode();
@@ -270,6 +319,26 @@ public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static async Task<string> CreateNonToolModelAsync(HttpClient client)
+    {
+        var name = $"no-tools-{Guid.NewGuid():N}";
+        var create = new ModelConnectionUpsertRequest(
+            Name: name,
+            Type: "ollama",
+            Endpoint: "http://localhost:11434",
+            ModelName: "phi3",
+            ApiVersion: "2024-10-21",
+            ApiKey: null,
+            Enabled: true,
+            IsProcessor: false,
+            SupportsCustomTemperature: true,
+            SupportsToolCalling: false);
+
+        var created = await client.PostAsJsonAsync("/admin/models", create);
+        created.EnsureSuccessStatusCode();
+        return name;
+    }
 
     private static async Task CreateKeywordRuleAsync(HttpClient client, string keyword, string targetModel)
     {

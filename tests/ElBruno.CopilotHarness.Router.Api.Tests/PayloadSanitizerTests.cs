@@ -35,7 +35,7 @@ public sealed class PayloadSanitizerTests
             ["temperature"] = 0.1,
             ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = "hi" })
         };
-        var model = new ModelProfileOptions { Deployment = "llama3.2", SupportsCustomTemperature = true };
+        var model = new ModelProfileOptions { Deployment = "llama3.1:8b", SupportsCustomTemperature = true };
 
         var sanitized = PayloadSanitizer.Sanitize(payload, model);
 

@@ -124,7 +124,7 @@ The Models page is your registry of LLM connections. Add as many as you need:
 
 1. Click **Add model** and choose a **type**:
    - **Ollama** — set the server endpoint (e.g. `http://localhost:11434`) and the model
-     name (e.g. `llama3.2`). No API key needed.
+     name (e.g. `llama3.1:8b`). No API key needed.
    - **Azure OpenAI / Foundry** — set the endpoint, the **deployment name** (e.g.
      `gpt-5-mini`), API version, and the API key.
 2. Save. API keys are encrypted at rest and never shown again — the page only indicates

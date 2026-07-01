@@ -19,7 +19,7 @@ The Phase 2 admin surface is implemented in `src/ElBruno.CopilotHarness.Admin.We
 - Override with environment variable:
   - `Persistence__DatabasePath`
 - Startup applies schema initialization and then seeds:
-  - model registry (example connections: `ollama llama3.2`, `foundry gpt-5-mini`)
+  - model registry (example connections: `ollama llama3.1`, `foundry gpt-5-mini`)
   - condition-based routing rules
   - setup wizard state (default model = `foundry gpt-5-mini`)
 

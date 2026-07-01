@@ -101,7 +101,7 @@ public sealed class ChatCompletionsProviderTests
         {
             Type = ModelProviderType.Ollama,
             Endpoint = "http://localhost:11434",
-            Deployment = "llama3.2"
+            Deployment = "llama3.1:8b"
         };
 
         await provider.SendChatCompletionsAsync(Payload(), model, stream: true, CancellationToken.None);
@@ -114,7 +114,7 @@ public sealed class ChatCompletionsProviderTests
         Assert.False(handler.LastRequest.Headers.Contains("api-key"));
 
         var body = JsonNode.Parse(handler.LastBody!)!.AsObject();
-        Assert.Equal("llama3.2", (string?)body["model"]);
+        Assert.Equal("llama3.1:8b", (string?)body["model"]);
         Assert.True((bool)body["stream"]!);
     }
 

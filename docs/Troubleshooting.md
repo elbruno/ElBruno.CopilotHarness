@@ -30,7 +30,7 @@ model. Common failures:
 
 - **Ollama not reachable** — confirm the Ollama server is running and the endpoint is
   correct (default `http://localhost:11434`). The provider calls
-  `{endpoint}/v1/chat/completions`; ensure the model is pulled (`ollama pull llama3.2`).
+  `{endpoint}/v1/chat/completions`; ensure the model is pulled (`ollama pull llama3.1:8b`).
 - **Azure key/deployment errors** — verify the endpoint, the **deployment name** (not the
   base model name), the API version, and that the API key is set. A `401`/`403` means the
   key is missing or wrong; a `404` usually means the deployment name is incorrect.
@@ -54,26 +54,27 @@ model. Common failures:
 
 **Symptom.** VS Code Copilot shows the request as **failed** even though the router
 returned `HTTP 200`. On the [Live Routing](Live_Routing.md) page the request carries a
-🛠 **tools** chip and was routed to a small local model (e.g. `ollama llama3.2`). The
-upstream-outcome badge may still show `✅ 200`, yet Copilot reports an error in the editor.
+🛠 **tools** chip. The upstream-outcome badge may still show `✅ 200`, yet Copilot reports
+an error in the editor.
 
 **Cause.** The request was **agentic** — it was *streaming* and asked the model to *call
-tools* (function/tool calling). Small local models can't reliably serve tool-calling over a
-stream: they emit empty/malformed `tool_call` arguments, so Copilot rejects the response on
-the client side even though the proxy forwarded a `200`. The router had no idea the request
-needed tools and routed it to a model that can't do the job.
+tools* (function/tool calling). A model can only serve this if it streams well-formed,
+*structured* `tool_call` arguments. Many small local models emit empty/malformed arguments,
+so Copilot rejects the response on the client side even though the proxy forwarded a `200`.
 
-**Fix.** Each model connection now carries a `supportsToolCalling` flag (see
+**Fix.** Each model connection carries a `supportsToolCalling` flag (see
 [Model Registry → Tool-calling capability](Model_Registry.md#tool-calling)). The router
-detects when an incoming request includes `tools`/`functions` and, if the selected model has
-`supportsToolCalling = false`, automatically **overrides the route** to a tool-capable model
-before dispatch. The override **prefers a local (Ollama) tool-capable model** so tool requests
-stay local, falling back to the cloud model only when no local tool-caller is enabled. The
-seeded `ollama llama3.2` ships with `supportsToolCalling = false`; the seeded
-`ollama llama3.1 (tools)` (`llama3.1:8b`) ships with `supportsToolCalling = true` and is the
-default override target — run `ollama pull llama3.1:8b` once so it is available locally.
-`llama3.1:8b` streams *structured* `tool_calls` with valid arguments, which `llama3.2:3b`,
-`qwen2.5-coder`, and `gpt-oss` do not.
+detects when an incoming request includes `tools`/`functions` and ensures it is served by a
+tool-capable model. The seeded local model **`ollama llama3.1` (`llama3.1:8b`) is
+tool-capable** and handles small agentic requests locally; if a request would route to a
+model that *isn't* tool-capable, the router **overrides the route** to a tool-capable one
+(preferring the local tool-caller for small payloads, the cloud for large ones). Run
+`ollama pull llama3.1:8b` once so the local model is available.
+
+`llama3.1:8b` was chosen because it is the only installed model that streams *structured*
+`tool_calls` with valid arguments — `llama3.2:3b` (empty args), `qwen2.5:7b-instruct` (leaks
+preamble + hallucinated args), `qwen2.5-coder` (dumps to `content`), and `gpt-oss:20b` (no
+`tool_calls`) all fail. See [Why `llama3.1:8b`](Model_Registry.md#why-llama31).
 
 On the [Live Routing](Live_Routing.md) page you can now see all of this:
 
@@ -132,7 +133,7 @@ already cleared. See [Model Registry → Temperature capability](Model_Registry.
 ## Intent classification fell back to deterministic
 
 On the **Live Routing** page the *classifier source* shows `deterministic` instead of
-`processor-model`. This means the processor model (default `ollama llama3.2`) could not be
+`processor-model`. This means the processor model (default `ollama llama3.1`) could not be
 used to classify the prompt, so the built-in keyword classifier was used as a fallback.
 Routing still works, but intent quality is lower. Common causes:
 
@@ -141,7 +142,7 @@ Routing still works, but intent quality is lower. Common causes:
 - The processor call timed out (`Classifier:TimeoutMs`, default 4000 ms) or returned an
   unparseable answer.
 
-Start the processor model (`ollama pull llama3.2` + run Ollama), confirm exactly one model
+Start the processor model (`ollama pull llama3.1:8b` + run Ollama), confirm exactly one model
 has the processor flag on the **Models** page, and the source returns to `processor-model`.
 See [Model Registry → Processor model](Model_Registry.md#processor-model).
 

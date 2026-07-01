@@ -117,7 +117,7 @@ request from its first ~200 characters into a fixed intent vocabulary:
 | `long-form` | Large prompts / long-form generation. |
 
 The chosen intent is exposed to the rules via the `IntentEquals` condition, so you can say
-*"route `simple-chat` to ollama llama3.2"* and *"route `code-task` to foundry gpt-5-mini"*
+*"route `simple-chat` to ollama llama3.1"* and *"route `code-task` to foundry gpt-5-mini"*
 explicitly and editably.
 
 **Classifier source.** The classification is a real LLM call to the processor model. If the
@@ -136,9 +136,9 @@ vocabulary above:
 
 | Rule | Condition | Target |
 |---|---|---|
-| Simple chat | `IntentEquals simple-chat` | `ollama llama3.2` |
-| GitHub actions | `IntentEquals github-actions` | `ollama llama3.2` |
-| Launch app | `IntentEquals launch-app` | `ollama llama3.2` |
+| Simple chat | `IntentEquals simple-chat` | `ollama llama3.1` |
+| GitHub actions | `IntentEquals github-actions` | `ollama llama3.1` |
+| Launch app | `IntentEquals launch-app` | `ollama llama3.1` |
 | Code tasks | `IntentEquals code-task` | `foundry gpt-5-mini` |
 | Large prompts | `PromptSizeAtLeast` | `foundry gpt-5-mini` |
 
@@ -191,9 +191,9 @@ Key properties:
 
 | Rule | Paragraph (summary) | Engine |
 |---|---|---|
-| Simple chat | Greetings and small talk in any language (`hi`, `hola`, `thanks`) plus lightweight web-search lookups answered with Copilot's search tools. | `ollama llama3.2` (local) |
-| GitHub actions | GitHub *actions* (commit / push / open or merge PRs, branches, tags, releases, labels) **and** read-only GitHub questions (open issues, PR status, repository status). | `ollama llama3.2` (local) |
-| Launch App actions | Run / build / start the application. | `ollama llama3.2` (local) |
+| Simple chat | Greetings and small talk in any language (`hi`, `hola`, `thanks`) plus lightweight web-search lookups answered with Copilot's search tools. | `ollama llama3.1` (local) |
+| GitHub actions | GitHub *actions* (commit / push / open or merge PRs, branches, tags, releases, labels) **and** read-only GitHub questions (open issues, PR status, repository status). | `ollama llama3.1` (local) |
+| Launch App actions | Run / build / start the application. | `ollama llama3.1` (local) |
 | Others actions *(catch-all)* | Everything else, including complex coding tasks. | `foundry gpt-5-mini` (cloud) |
 
 > The exact paragraphs, priorities, and engines for every seeded rule are documented in

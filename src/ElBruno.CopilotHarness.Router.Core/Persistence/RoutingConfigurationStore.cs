@@ -329,7 +329,7 @@ public sealed class RoutingConfigurationStore(
             return [];
         }
 
-        var smallModel = PickModel(models, "mini", "small", "llama", "3.2") ?? models[0];
+        var smallModel = PickModel(models, "mini", "small", "llama", "3.1") ?? models[0];
         var largeModel = PickModel(models, "5.5", "large", "big", "gpt-5") ?? models[^1];
         var now = DateTimeOffset.UtcNow;
 

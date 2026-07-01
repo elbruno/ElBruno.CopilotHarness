@@ -114,10 +114,10 @@ Returns the **Live Routing** feed — one row per routed request combining promp
       "stream": true,
       "requestedModel": "elbruno.copilotharness",
       "selectedModel": "small",
-      "deployment": "llama3.2",
+      "deployment": "llama3.1:8b",
       "matchedRuleName": "Simple chat",
       "reason": "Matched rule 'Simple chat'.",
-      "explanation": "processor 'ollama llama3.2' classified intent=simple-chat (0.92) → rule 'Simple chat' matched → routed to 'ollama llama3.2'.",
+      "explanation": "processor 'ollama llama3.1' classified intent=simple-chat (0.92) → rule 'Simple chat' matched → routed to 'ollama llama3.1'.",
       "promptPreview": "hi",
       "promptCharacters": 2,
       "totalPromptCharacters": 2480,
@@ -125,7 +125,7 @@ Returns the **Live Routing** feed — one row per routed request combining promp
       "classificationIntent": "simple-chat",
       "classificationComplexity": "low",
       "classifierSource": "processor-model",
-      "processorModel": "ollama llama3.2",
+      "processorModel": "ollama llama3.1",
       "classificationConfidence": 0.92
     }
   ]

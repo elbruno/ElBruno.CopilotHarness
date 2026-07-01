@@ -119,7 +119,7 @@ public sealed class RouterApiEndpointsTests : IClassFixture<RouterApiWebApplicat
             .OfType<string>()
             .ToList();
 
-        Assert.Contains("ollama llama3.2", modelIds);
+        Assert.Contains("ollama llama3.1", modelIds);
         Assert.Contains("foundry gpt-5-mini", modelIds);
     }
 

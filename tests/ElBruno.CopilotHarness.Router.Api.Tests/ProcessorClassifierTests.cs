@@ -95,7 +95,7 @@ public sealed class ProcessorClassifierTests
 
         if (includeProcessor)
         {
-            profiles["ollama"] = new() { Type = ModelProviderType.Ollama, Deployment = "llama3.2", Enabled = true, IsProcessor = true };
+            profiles["ollama"] = new() { Type = ModelProviderType.Ollama, Deployment = "llama3.1:8b", Enabled = true, IsProcessor = true };
         }
 
         return new RoutingOptions

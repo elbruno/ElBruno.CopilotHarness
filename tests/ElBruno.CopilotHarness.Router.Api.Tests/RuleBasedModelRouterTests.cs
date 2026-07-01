@@ -10,7 +10,7 @@ public sealed class RuleBasedModelRouterTests
     public void RuleSet_RequestedModel_OverridesRules()
     {
         var options = CreateOptions(
-            new RoutingRuleDefinition(1, "always-ollama", "", RoutingRuleConditionType.Always, "", "ollama llama3.2", 10, true));
+            new RoutingRuleDefinition(1, "always-ollama", "", RoutingRuleConditionType.Always, "", "ollama llama3.1", 10, true));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
             { "model": "foundry gpt-5-mini", "messages": [ { "role": "user", "content": "hi" } ] }
@@ -38,13 +38,13 @@ public sealed class RuleBasedModelRouterTests
     public void RuleSet_IsStreaming_Matches()
     {
         var options = CreateOptions(
-            new RoutingRuleDefinition(1, "stream-rule", "", RoutingRuleConditionType.IsStreaming, "", "ollama llama3.2", 10, true));
+            new RoutingRuleDefinition(1, "stream-rule", "", RoutingRuleConditionType.IsStreaming, "", "ollama llama3.1", 10, true));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
             { "stream": true, "messages": [ { "role": "user", "content": "hi" } ] }
             """), options);
 
-        Assert.Equal("ollama llama3.2", decision.ProfileName);
+        Assert.Equal("ollama llama3.1", decision.ProfileName);
     }
 
     [Fact]
@@ -64,13 +64,13 @@ public sealed class RuleBasedModelRouterTests
     public void RuleSet_PromptContainsKeyword_Matches()
     {
         var options = CreateOptions(
-            new RoutingRuleDefinition(1, "keyword-rule", "", RoutingRuleConditionType.PromptContainsKeyword, "refactor", "ollama llama3.2", 10, true));
+            new RoutingRuleDefinition(1, "keyword-rule", "", RoutingRuleConditionType.PromptContainsKeyword, "refactor", "ollama llama3.1", 10, true));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
             { "messages": [ { "role": "user", "content": "please REFACTOR this method" } ] }
             """), options);
 
-        Assert.Equal("ollama llama3.2", decision.ProfileName);
+        Assert.Equal("ollama llama3.1", decision.ProfileName);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class RuleBasedModelRouterTests
     public void RuleSet_InvalidRegex_DoesNotMatch_FallsBackToDefault()
     {
         var options = CreateOptions(
-            new RoutingRuleDefinition(1, "bad-regex", "", RoutingRuleConditionType.PromptMatchesRegex, "(", "ollama llama3.2", 10, true));
+            new RoutingRuleDefinition(1, "bad-regex", "", RoutingRuleConditionType.PromptMatchesRegex, "(", "ollama llama3.1", 10, true));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
             { "messages": [ { "role": "user", "content": "anything" } ] }
@@ -103,7 +103,7 @@ public sealed class RuleBasedModelRouterTests
     public void RuleSet_PriorityOrder_FirstMatchWins()
     {
         var options = CreateOptions(
-            new RoutingRuleDefinition(2, "low-priority", "", RoutingRuleConditionType.Always, "", "ollama llama3.2", 20, true),
+            new RoutingRuleDefinition(2, "low-priority", "", RoutingRuleConditionType.Always, "", "ollama llama3.1", 20, true),
             new RoutingRuleDefinition(1, "high-priority", "", RoutingRuleConditionType.Always, "", "foundry gpt-5-mini", 10, true));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
@@ -118,7 +118,7 @@ public sealed class RuleBasedModelRouterTests
     public void RuleSet_DisabledRule_Skipped()
     {
         var options = CreateOptions(
-            new RoutingRuleDefinition(1, "disabled", "", RoutingRuleConditionType.Always, "", "ollama llama3.2", 10, false));
+            new RoutingRuleDefinition(1, "disabled", "", RoutingRuleConditionType.Always, "", "ollama llama3.1", 10, false));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
             { "messages": [ { "role": "user", "content": "hi" } ] }
@@ -132,7 +132,7 @@ public sealed class RuleBasedModelRouterTests
     public void RuleSet_NoMatch_FallsBackToDefault()
     {
         var options = CreateOptions(
-            new RoutingRuleDefinition(1, "streaming-only", "", RoutingRuleConditionType.IsStreaming, "", "ollama llama3.2", 10, true));
+            new RoutingRuleDefinition(1, "streaming-only", "", RoutingRuleConditionType.IsStreaming, "", "ollama llama3.1", 10, true));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
             { "messages": [ { "role": "user", "content": "hi" } ] }
@@ -147,13 +147,13 @@ public sealed class RuleBasedModelRouterTests
     {
         var options = CreateOptions(
             new RoutingRuleDefinition(1, "missing-target", "", RoutingRuleConditionType.Always, "", "does-not-exist", 10, true),
-            new RoutingRuleDefinition(2, "fallback-rule", "", RoutingRuleConditionType.Always, "", "ollama llama3.2", 20, true));
+            new RoutingRuleDefinition(2, "fallback-rule", "", RoutingRuleConditionType.Always, "", "ollama llama3.1", 20, true));
 
         var decision = BasicModelRouter.SelectModel(ParseObject("""
             { "messages": [ { "role": "user", "content": "hi" } ] }
             """), options);
 
-        Assert.Equal("ollama llama3.2", decision.ProfileName);
+        Assert.Equal("ollama llama3.1", decision.ProfileName);
         Assert.Equal("Matched rule 'fallback-rule'.", decision.Reason);
     }
 
@@ -163,7 +163,7 @@ public sealed class RuleBasedModelRouterTests
             DefaultProfile = "foundry gpt-5-mini",
             Profiles = new Dictionary<string, ModelProfileOptions>(StringComparer.OrdinalIgnoreCase)
             {
-                ["ollama llama3.2"] = new() { Type = ModelProviderType.Ollama, Deployment = "llama3.2", Endpoint = "http://localhost:11434", Enabled = true },
+                ["ollama llama3.1"] = new() { Type = ModelProviderType.Ollama, Deployment = "llama3.1:8b", Endpoint = "http://localhost:11434", Enabled = true },
                 ["foundry gpt-5-mini"] = new() { Type = ModelProviderType.AzureOpenAI, Deployment = "gpt-5-mini", Enabled = true }
             },
             RuleSet = rules

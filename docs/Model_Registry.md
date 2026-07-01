@@ -18,7 +18,7 @@ connection is an independent, fully-described endpoint:
 | Field | Description |
 |---|---|
 | `id` | Stable identifier (GUID string). Generated on create. |
-| `name` | Unique, human-friendly name (e.g. `ollama llama3.2`, `foundry gpt-5-mini`). **Rules and the default selector reference models by this name.** |
+| `name` | Unique, human-friendly name (e.g. `ollama llama3.1`, `foundry gpt-5-mini`). **Rules and the default selector reference models by this name.** |
 | `type` | Provider type: `ollama` or `azure-openai`. |
 | `endpoint` | Base URL of the provider. For Ollama, the server URL (e.g. `http://localhost:11434`). For Azure OpenAI, the resource endpoint. When empty for Azure, the shared Foundry endpoint is used. |
 | `modelName` | The upstream model identifier — the Ollama model name **or** the Azure deployment name. |
@@ -41,7 +41,7 @@ the default-model selector simply point at registry entries by `name`.
 - Targets the OpenAI-compatible endpoint Ollama exposes at
   `{endpoint}/v1/chat/completions`.
 - No API key required.
-- `modelName` is the Ollama model tag (e.g. `llama3.2`).
+- `modelName` is the Ollama model tag (e.g. `llama3.1:8b`).
 - Typical `endpoint`: `http://localhost:11434`.
 
 ### Azure OpenAI / Azure AI Foundry (`type: azure-openai`)
@@ -67,8 +67,8 @@ returns a compact intent label (e.g. `simple-chat`, `github-actions`, `launch-ap
 
 - **Single processor invariant.** At most one connection has `isProcessor = true`. Setting
   it on one model automatically clears it on every other model (enforced server-side).
-- **Default.** The seeded `ollama llama3.2` connection is the processor, so classification
-  runs locally and cheaply by default.
+- **Default.** The seeded `ollama llama3.1` (`llama3.1:8b`) connection is the processor, so
+  classification runs locally and cheaply by default.
 - **Real LLM call with deterministic fallback.** The processor is invoked per request via
   its provider. If it is disabled, missing, unreachable, times out, or returns an
   off-vocabulary/unparseable answer, the harness falls back to a fast built-in
@@ -103,36 +103,52 @@ See [Troubleshooting](Troubleshooting.md#temperature-400) for the end-to-end sym
 ## Tool-calling capability {#tool-calling}
 
 Modern Copilot flows are increasingly **agentic**: a request is *streaming* and asks the
-model to *call tools* (function/tool calling). Small local models (e.g. `ollama llama3.2`)
-can't reliably serve these — they emit empty or malformed `tool_call` arguments over a
-stream, so the client (VS Code Copilot) reports the request as **failed** even though the
-proxy returned `HTTP 200`. Each connection therefore carries a `supportsToolCalling` flag:
+model to *call tools* (function/tool calling). To serve these a model must emit well-formed,
+*structured* `tool_call` arguments over a stream — many small local models emit empty or
+malformed arguments, so the client (VS Code Copilot) reports the request as **failed** even
+though the proxy returned `HTTP 200`. Each connection therefore carries a
+`supportsToolCalling` flag:
 
-- When `true` (default) the model is considered able to serve tool-calling requests, so it is
-  used as routed.
+- When `true` (default) the model is considered able to serve tool-calling requests.
 - When `false` the model is treated as **chat-only**. If a request that includes
   `tools`/`functions` would otherwise route to this model, the **tool-capability guard**
-  automatically overrides the route and dispatches to a tool-capable model instead. The
-  override is **size-aware**: small tool requests (total prompt ≤
-  `Routing:Rules:LocalToolCallingMaxPromptCharacters`, default 12000) prefer a **local
-  (Ollama)** tool-caller so they stay local, while **large agentic payloads** (which a small
-  local model can't serve without over-generating) are sent to a **cloud** tool-capable model.
-  Requests routed to a local model are additionally capped at
-  `Routing:Rules:LocalRouteMaxTokens` (default 4096) as a runaway safety net. The override and
-  its reason are surfaced on the [Live Routing](Live_Routing.md) page as a 🛠 **tools** chip
-  plus a highlighted override note. See
-  [Troubleshooting → "Response too long"](Troubleshooting.md#response-too-long).
+  overrides the route to a tool-capable model instead.
 
-The seeded models cover both jobs:
+The guard is also **size-aware**, and applies *even when the routed model is tool-capable*:
 
-- `ollama llama3.2` ships with `supportsToolCalling = false` (and is the **processor** model) —
-  it is great for cheap classification and simple chat, but its 3B size emits empty/malformed
-  `tool_call` arguments over a stream.
-- `ollama llama3.1 (tools)` ships with `supportsToolCalling = true` and is the **local
-  tool-caller**. `llama3.1:8b` reliably streams *structured* `tool_calls` with valid
-  arguments, so agentic/tool requests are overridden here instead of going to the cloud. You
-  must pull the model once: `ollama pull llama3.1:8b`. If it is not installed (or you disable
-  it), tool requests fall back to the cloud tool-capable model.
+- **Small tool requests** (total prompt ≤ `Routing:Rules:LocalToolCallingMaxPromptCharacters`,
+  default 12000) prefer a **local (Ollama)** tool-caller, so they stay local.
+- **Large agentic payloads** are sent to a **cloud** tool-capable model — even a capable local
+  model can't serve a huge working set without over-generating and tripping the client's
+  "Response too long" cap.
+- Requests routed to a local model are additionally capped at `Routing:Rules:LocalRouteMaxTokens`
+  (default 4096) as a runaway safety net.
+
+The override and its reason are surfaced on the [Live Routing](Live_Routing.md) page as a 🛠
+**tools** chip plus a highlighted override note. See
+[Troubleshooting → "Response too long"](Troubleshooting.md#response-too-long).
+
+### Why `llama3.1:8b` is the local model {#why-llama31}
+
+The single seeded local model — `ollama llama3.1` (`llama3.1:8b`) — is the classifier
+(processor), the target of the local routing rules, **and** the local tool-caller. It was
+chosen after benchmarking the installed Ollama models against a streaming
+`/v1/chat/completions` request that included a `tools` array:
+
+| Model | Streaming `tool_calls` behaviour | Verdict |
+|---|---|---|
+| **`llama3.1:8b`** | **Structured `tool_calls`, empty content, valid args** (e.g. `{"query":"is:open"}`) | ✅ **Chosen** — clean and reliable |
+| `llama3.2:3b` | Structured shape but **empty arguments** (`{"query":""}`) | ❌ Copilot's tool loop fails |
+| `qwen2.5:7b-instruct` | Structured `tool_calls` but **leaks preamble** ("Sure,…") and **hallucinates arguments** | ❌ Noisy / wrong arguments |
+| `qwen2.5-coder` | **Dumps the call into `content`** instead of `tool_calls` | ❌ Not machine-parseable |
+| `gpt-oss:20b` | **No `tool_calls` emitted** over the stream | ❌ Doesn't tool-call |
+
+`llama3.1:8b` was the only installed model that streamed *structured* `tool_calls` with valid
+arguments, so it is the local default. A **bigger** local model does *not* fix the
+"Response too long" case — that is driven by payload size, not capability, so oversized
+agentic payloads still go to the cloud regardless of the local model. Pull it once with
+`ollama pull llama3.1:8b`; if it is not installed (or you disable it), tool requests fall back
+to the cloud tool-capable model.
 
 See [Troubleshooting → Agentic / tool-calling request](Troubleshooting.md#tool-calling)
 for the end-to-end symptom + fix.
@@ -199,8 +215,12 @@ A fresh database is seeded with two example connections so routing works out of 
 
 | Name | Type | Endpoint | Model / Deployment | Processor | Custom temp | Tools |
 |---|---|---|---|---|---|---|
-| `ollama llama3.2` | `ollama` | `http://localhost:11434` | `llama3.2` | ✅ | ✅ | ❌ |
+| `ollama llama3.1` | `ollama` | `http://localhost:11434` | `llama3.1:8b` | ✅ | ✅ | ✅ |
 | `foundry gpt-5-mini` | `azure-openai` | *(shared Foundry endpoint)* | `gpt-5-mini` | — | ❌ | ✅ |
+
+`ollama llama3.1` is a single local model that acts as the classifier (processor), the local
+rule target, and the local tool-caller — see [Why `llama3.1:8b`](#why-llama31). Pull it once
+with `ollama pull llama3.1:8b`.
 
 `foundry gpt-5-mini` is also the seeded **default model**.
 

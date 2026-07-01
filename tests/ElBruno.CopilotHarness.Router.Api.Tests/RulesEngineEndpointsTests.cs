@@ -85,7 +85,7 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
             Description: "",
             ConditionType: "PromptContainsKeyword",
             ConditionValue: "translate",
-            TargetModel: "ollama llama3.2",
+            TargetModel: "ollama llama3.1",
             Priority: 1,
             Enabled: true);
 
@@ -107,7 +107,7 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
 
             Assert.NotNull(result);
             Assert.Equal(created.Name, result.MatchedRuleName);
-            Assert.Equal("ollama llama3.2", result.SelectedModel);
+            Assert.Equal("ollama llama3.1", result.SelectedModel);
         }
         finally
         {
@@ -124,7 +124,7 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
             Description: "Captures greetings and small talk such as hi and hola.",
             ConditionType: "SemanticMatch",
             ConditionValue: "",
-            TargetModel: "ollama llama3.2",
+            TargetModel: "ollama llama3.1",
             Priority: 7,
             Enabled: true);
 
@@ -157,7 +157,7 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
             Description: "",
             ConditionType: "PromptContainsKeyword",
             ConditionValue: "translate",
-            TargetModel: "ollama llama3.2",
+            TargetModel: "ollama llama3.1",
             Priority: 1,
             Enabled: true);
 
@@ -179,7 +179,7 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
             Assert.NotNull(result);
             // The enriched fields should always be present (defaults are fine when no trace facts exist).
             Assert.False(string.IsNullOrWhiteSpace(result.DecisionSource));
-            Assert.Equal("ollama llama3.2", result.SelectedModel);
+            Assert.Equal("ollama llama3.1", result.SelectedModel);
         }
         finally
         {
@@ -192,12 +192,12 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
     {
         var setResponse = await _client.PutAsJsonAsync(
             "/admin/rules/default",
-            new SetDefaultModelRequest("ollama llama3.2"));
+            new SetDefaultModelRequest("ollama llama3.1"));
         setResponse.EnsureSuccessStatusCode();
 
         var current = await _client.GetFromJsonAsync<DefaultModelDto>("/admin/rules/default");
         Assert.NotNull(current);
-        Assert.Equal("ollama llama3.2", current.ModelName);
+        Assert.Equal("ollama llama3.1", current.ModelName);
 
         // restore default to avoid cross-test interference within the shared fixture
         await _client.PutAsJsonAsync("/admin/rules/default", new SetDefaultModelRequest("foundry gpt-5-mini"));
