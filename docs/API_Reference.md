@@ -79,10 +79,19 @@ Condition-based routing rules + default model. See [Rules Engine](Rules_Engine.m
 | `POST` | `/admin/rules/test` | Dry-run evaluation. Body: `{ prompt, systemMessage?, stream, requestedModel? }`. Returns `{ matchedRuleName, selectedModel, reason, promptCharacters, userRequest, isSemantic, decisionSource, confidence, classificationIntent, classificationComplexity, semanticReason, analyzerPrompt }`. |
 | `GET` | `/admin/rules/default` | Get the default model name. |
 | `PUT` | `/admin/rules/default` | Set the default model. Body: `{ modelName }`. |
+| `GET` | `/admin/rules/basic` | Read the legacy basic-rules settings (big-prompt threshold, streaming profile, etc.). |
+| `PUT` | `/admin/rules/basic` | Update the basic-rules settings. Body: `BasicRulesUpdateRequest`. |
+| `GET` | `/admin/rules/confidence` | Return Phase 8 per-rule confidence scores. |
 
-`conditionType` is one of: `Always`, `PromptSizeAtLeast`, `IsStreaming`, `HasSystemMessage`, `RequestedModelEquals`, `PromptContainsKeyword`, `PromptMatchesRegex`, `IntentEquals`. For `IntentEquals`, `conditionValue` is an intent label (`simple-chat`, `github-actions`, `launch-app`, `code-task`, `long-form`) produced by the processor-model classifier — see [Rules Engine](Rules_Engine.md#intent-classification).
+`conditionType` is one of: `Always`, `PromptSizeAtLeast`, `IsStreaming`, `HasSystemMessage`, `RequestedModelEquals`, `PromptContainsKeyword`, `PromptMatchesRegex`, `IntentEquals`, `SemanticMatch`. For `IntentEquals`, `conditionValue` is an intent label (`simple-chat`, `github-actions`, `launch-app`, `code-task`, `long-form`) produced by the processor-model classifier — see [Rules Engine](Rules_Engine.md#intent-classification). For `SemanticMatch`, `conditionValue` is unused; the processor model selects the rule by reading each rule's `description` paragraph — see [Rules Engine](Rules_Engine.md#semantic-rules).
 
 `RoutingRuleDto`: `{ id, name, description, conditionType, conditionValue, targetModel, priority, enabled, updatedAtUtc }`.
+
+`BasicRulesDto`: `{ defaultProfile, bigPromptCharacterThreshold, bigProfile, streamingProfile, preferBigWhenSystemMessageExists, preferStreamingProfileWhenStreaming, updatedAtUtc }`.
+
+`BasicRulesUpdateRequest`: `{ defaultProfile, bigPromptCharacterThreshold, bigProfile, streamingProfile, preferBigWhenSystemMessageExists, preferStreamingProfileWhenStreaming }`.
+
+`RulesConfidenceResponse`: `{ items: [{ ruleKey, confidence, trend, lastEvaluatedAtUtc }] }`. `trend` is `stable`, `declining`, or `low`.
 
 ### Setup — `/admin/setup`
 
@@ -91,6 +100,22 @@ Condition-based routing rules + default model. See [Rules Engine](Rules_Engine.m
 | `GET` | `/admin/setup/state` | Returns setup completion state and the default model. |
 | `POST` | `/admin/setup/wizard` | Complete first-run setup. Body: `{ defaultModel, generateFirstRules }`. |
 | `POST` | `/admin/setup/generate-first-rules` | Generate the starter rule set. |
+
+### `POST /admin/playground/evaluate`
+
+Performs a dry-run routing evaluation and returns the fully routed request body. Useful for testing the full routing pipeline including the processor model.
+
+Body: `PlaygroundRequest` `{ prompt, systemMessage?, stream, requestedProfile? }`.
+
+Response: `{ profile, deployment, reason, promptCharacters, routedRequest }` where `routedRequest` is the OpenAI-compatible JSON object that would be forwarded to the selected model (with the resolved deployment name already written into `model`).
+
+### `GET /admin/system/validation`
+
+Returns a system-readiness checklist — setup state, model count, enabled models, model name presence, default model, rule count, and persistence validation. Useful as a pre-flight check.
+
+Response: `{ checks: [{ name, passed, message }] }`.
+
+Checks include: `setup-completed`, `models-configured`, `enabled-model`, `model-name-configured`, `default-model`, `rules-available`, `store-validation`, plus any advisory `warning` entries.
 
 ### `GET /admin/dashboard/snapshot`
 
@@ -149,17 +174,58 @@ VS Code Copilot).
 
 Returns the Phase 6 operational readiness snapshot for auth, rate limiting, backoff, background jobs, and infrastructure.
 
-### `GET /admin/traces/{traceId}`
+### Traces — `/admin/traces`
 
-Returns routing trace details for a routed request.
+In-memory trace store for routing diagnostics.
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/admin/traces/{traceId}` | Returns full trace details for one routed request (`RoutingTraceResponse`). |
+| `DELETE` | `/admin/traces/{traceId}` | Delete one trace. Response: `{ deleted: bool }`. |
+| `POST` | `/admin/traces/delete` | Bulk-delete by ID list. Body: `{ traceIds: string[] }`. Response: `{ deletedCount: int }`. |
+| `DELETE` | `/admin/traces` | Clear all in-memory traces. Response: `{ cleared: bool }`. |
 
 ### `GET /admin/clients/connected`
 
-Returns current connected client summary.
+Returns current connected client summary (from the real-time activity store).
 
 ### `GET /admin/requests/live`
 
-Returns live/recent routed requests.
+Returns live/recent routed requests (from the real-time activity store).
+
+### `GET /admin/telemetry/clients`
+
+Returns connected-client telemetry aggregated from the in-memory trace store. Query: `?limit=` (1–500, default 200).
+
+Response: `{ snapshotUtc, clients: [{ clientId, displayName, source, version?, lastSeenUtc, requestsLastHour, lastProfile, lastDeployment }] }`.
+
+### `GET /admin/telemetry/requests`
+
+Returns recent per-request telemetry from the in-memory trace store. Query: `?limit=` (1–200, default 200).
+
+Response: `{ snapshotUtc, requests: [{ traceId, createdAtUtc, endpoint, clientId, clientDisplayName, clientVersion?, profile, deployment, reason, classificationIntent, classificationComplexity }] }`.
+
+### Phase 8 — Continuous Evaluation
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/admin/recommendations/pending` | List pending rule recommendations awaiting review. |
+| `POST` | `/admin/recommendations/decision` | Approve or reject a recommendation. Body: `{ recommendationId, decision, reason? }`. `decision` is `"approve"` or `"reject"`. Returns `200 OK` or `404` if not found. |
+| `GET` | `/admin/profiles/teams` | List team profiles. |
+| `POST` | `/admin/profiles/teams` | Create a team profile. Body: `{ name, description, preferredModels, isDefault }`. Returns `201 Created`. |
+| `DELETE` | `/admin/profiles/teams/{name}` | Delete a team profile by slug. Returns `204 No Content` or `404`. |
+| `GET` | `/admin/profiles/projects` | List project profiles. |
+| `POST` | `/admin/profiles/projects` | Create a project profile. Body: `{ name, teamProfile, tags, overrideProfile }`. Returns `201 Created`. |
+| `DELETE` | `/admin/profiles/projects/{name}` | Delete a project profile by slug. Returns `204 No Content` or `404`. |
+| `GET` | `/admin/benchmarks/status` | Return benchmark scheduler status and recent runs. |
+
+`RecommendationsResponse`: `{ recommendations: [{ id, ruleKey, currentValue, recommendedValue, rationale, confidence, status, createdAtUtc }] }`.
+
+`AdminTeamProfileDto`: `{ name, description, preferredModels, isDefault }`.
+
+`AdminProjectProfileDto`: `{ name, teamProfile, tags, overrideProfile }`.
+
+`BenchmarkStatusResponse`: `{ schedulerStatus, lastRunAtUtc?, nextRunAtUtc?, recentRuns: [{ id, status, trigger, startedAtUtc, completedAtUtc?, totalTests, passedTests, failedTests }], results: [...] }`.
 
 ## Judge
 

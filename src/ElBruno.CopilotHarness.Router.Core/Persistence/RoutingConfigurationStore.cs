@@ -329,43 +329,32 @@ public sealed class RoutingConfigurationStore(
             return [];
         }
 
-        var smallModel = PickModel(models, "mini", "small", "llama", "3.1") ?? models[0];
-        var largeModel = PickModel(models, "5.5", "large", "big", "gpt-5") ?? models[^1];
+        // Prefer provider type for the local/cloud split (robust even when a cloud model name
+        // contains hints like "mini"), then fall back to keyword hints, then to positional
+        // defaults. Local = an Ollama-hosted model; cloud = anything else (Azure OpenAI/Foundry).
+        var smallModel = models.FirstOrDefault(model => model.ProviderType == (int)ModelProviderType.Ollama)
+            ?? PickModel(models, "ollama", "llama", "phi", "qwen", "local")
+            ?? models[0];
+        var largeModel = models.FirstOrDefault(model => model.ProviderType != (int)ModelProviderType.Ollama)
+            ?? PickModel(models, "gpt", "foundry", "azure", "large", "big")
+            ?? models[^1];
         var now = DateTimeOffset.UtcNow;
 
+        // Tuned starter set. Order matters: the semantic "Simple chat" (p5) and the
+        // deterministic guards (p6-p30) are evaluated before the broader semantic rules
+        // (GitHub / Launch App at p100-p110) and the semantic catch-all (Others, p120).
+        // Semantic rules carry an empty ConditionValue; the classifier matches them by
+        // their Description text. Local intents target the small (Ollama) model; heavier
+        // work targets the large (cloud) model. Keep this in sync with docs/Rules_Engine.md.
         dbContext.RoutingRules.AddRange(
             new RoutingRuleEntity
             {
                 Name = "Simple chat",
-                Description = "Short greetings and small talk stay on the local processor model.",
-                ConditionType = (int)RoutingRuleConditionType.IntentEquals,
-                ConditionValue = ClassifierIntentNames.SimpleChat,
+                Description = "Captures short, simple, conversational prompts in any language - greetings and small talk such as 'hi', 'hello', 'hola', 'thanks', 'gracias', 'how are you' - that do not require reading or changing code. Also captures lightweight information lookups that GitHub Copilot answers using its web search tools, for example 'search the web for ...', 'look up ...', 'find online ...', 'what is the latest ...', or general questions about current facts or documentation.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
                 TargetModel = smallModel.Name,
-                Priority = 10,
-                Enabled = true,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
-            },
-            new RoutingRuleEntity
-            {
-                Name = "GitHub actions",
-                Description = "Git/GitHub operations (commit, push, open PR) route to the local model. Copilot drives the tools.",
-                ConditionType = (int)RoutingRuleConditionType.IntentEquals,
-                ConditionValue = ClassifierIntentNames.GithubActions,
-                TargetModel = smallModel.Name,
-                Priority = 20,
-                Enabled = true,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
-            },
-            new RoutingRuleEntity
-            {
-                Name = "Launch app",
-                Description = "Requests to run or launch the application route to the local model.",
-                ConditionType = (int)RoutingRuleConditionType.IntentEquals,
-                ConditionValue = ClassifierIntentNames.LaunchApp,
-                TargetModel = smallModel.Name,
-                Priority = 30,
+                Priority = 5,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -377,7 +366,7 @@ public sealed class RoutingConfigurationStore(
                 ConditionType = (int)RoutingRuleConditionType.IntentEquals,
                 ConditionValue = ClassifierIntentNames.CodeTask,
                 TargetModel = largeModel.Name,
-                Priority = 40,
+                Priority = 6,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -389,7 +378,7 @@ public sealed class RoutingConfigurationStore(
                 ConditionType = (int)RoutingRuleConditionType.PromptSizeAtLeast,
                 ConditionValue = "2500",
                 TargetModel = largeModel.Name,
-                Priority = 50,
+                Priority = 10,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -401,7 +390,7 @@ public sealed class RoutingConfigurationStore(
                 ConditionType = (int)RoutingRuleConditionType.HasSystemMessage,
                 ConditionValue = string.Empty,
                 TargetModel = largeModel.Name,
-                Priority = 60,
+                Priority = 20,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -409,11 +398,47 @@ public sealed class RoutingConfigurationStore(
             new RoutingRuleEntity
             {
                 Name = "Streaming requests",
-                Description = "Route streaming requests to the faster model.",
+                Description = "Route streaming requests to the larger model.",
                 ConditionType = (int)RoutingRuleConditionType.IsStreaming,
                 ConditionValue = string.Empty,
+                TargetModel = largeModel.Name,
+                Priority = 30,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "GitHub actions",
+                Description = "Captures all GitHub-related requests - both actions that change the repository (commit all the changes, push to GitHub, create or merge a pull request, manage branches, tags, releases or labels) AND read-only questions about the repository or its GitHub state (are there any open issues, list or check issues, pull request status, repository status, list branches, labels, releases, who opened an issue, what PRs are open). Any request about GitHub issues, pull requests, or repository status belongs here.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
                 TargetModel = smallModel.Name,
-                Priority = 70,
+                Priority = 100,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Launch App actions",
+                Description = "Captures all actions where the user asks Copilot to launch, run, build or start the application.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
+                TargetModel = smallModel.Name,
+                Priority = 110,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            new RoutingRuleEntity
+            {
+                Name = "Others actions",
+                Description = "Catch-all rule. Captures every request that does not match the other rules, including complex coding tasks.",
+                ConditionType = (int)RoutingRuleConditionType.SemanticMatch,
+                ConditionValue = string.Empty,
+                TargetModel = largeModel.Name,
+                Priority = 120,
                 Enabled = true,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now

@@ -421,67 +421,22 @@ app.MapPost("/v1/chat/completions", async (
             routingDecision.Profile.Deployment,
             routingDecision.Reason);
 
-        // Tool-calling capability guard + size-aware routing:
-        //  • A tool request that lands on a model which can't do tool-calling is redirected to a tool-capable
-        //    model (small payloads prefer the local tool-caller; heavy ones prefer the cloud).
-        //  • A tool request that lands on the LOCAL model with a heavy agentic payload is redirected to the
-        //    cloud too — even though the local model is tool-capable, it can't serve a huge working set
-        //    without over-generating and tripping the client's "Response too long" cap.
-        var requestHadTools = OpenAiApiUtilities.RequestHasTools(requestPayload);
-        var toolOverrideApplied = false;
-        string? overrideReason = null;
+        // Tool-calling capability guard + size-aware routing + local-route token clamp.
+        // See ToolRoutingGuard for the full rationale.
         var routingOptions = await routingService.GetRoutingOptionsAsync(cancellationToken);
+        var guardResult = ToolRoutingGuard.Apply(
+            requestPayload,
+            selectedProfileName,
+            selectedProfile,
+            routingOptions,
+            traceId,
+            logger);
 
-        if (requestHadTools)
-        {
-            var totalPromptChars = BasicModelRouter.GetPromptCharacterCount(requestPayload);
-            var localMax = routingOptions.Rules.LocalToolCallingMaxPromptCharacters;
-            var payloadWithinLocalLimit = localMax <= 0 || totalPromptChars <= localMax;
-            var selectedIsLocal = selectedProfile.Type == ModelProviderType.Ollama;
-
-            var modelCannotDoTools = !selectedProfile.SupportsToolCalling;
-            var localPayloadTooLarge = selectedIsLocal && !payloadWithinLocalLimit;
-
-            if (modelCannotDoTools || localPayloadTooLarge)
-            {
-                // Small tool requests prefer the local tool-caller; oversized agentic payloads prefer the cloud.
-                var preferLocal = payloadWithinLocalLimit;
-                var capable = OpenAiApiUtilities.FindToolCapableModel(routingOptions, selectedProfileName, preferLocal);
-                if (capable is { } target)
-                {
-                    overrideReason = localPayloadTooLarge
-                        ? $"Agentic tool request payload ({totalPromptChars} chars) exceeds the local limit ({localMax}); routed from local '{selectedProfileName}' to cloud '{target.ProfileName}' to avoid an oversized response."
-                        : payloadWithinLocalLimit
-                            ? $"Request requires tool-calling; '{selectedProfileName}' does not support it, routed to '{target.ProfileName}'."
-                            : $"Request requires tool-calling; '{selectedProfileName}' does not support it, routed to '{target.ProfileName}' (payload {totalPromptChars} chars exceeds local limit {localMax}, preferring cloud).";
-                    selectedProfileName = target.ProfileName;
-                    selectedProfile = target.Profile;
-                    requestPayload["model"] = selectedProfile.Deployment;
-                    toolOverrideApplied = true;
-                    logger.LogInformation(
-                        "Tool-capability override applied for trace {TraceId}. {OverrideReason}",
-                        traceId,
-                        overrideReason);
-                }
-                else
-                {
-                    overrideReason =
-                        $"Request requires tool-calling but '{selectedProfileName}' cannot serve it and no alternative tool-capable model is enabled.";
-                    logger.LogWarning(
-                        "Tool-capability override unavailable for trace {TraceId}. {OverrideReason}",
-                        traceId,
-                        overrideReason);
-                }
-            }
-        }
-
-        // Safety net: cap output tokens for LOCAL (Ollama) routes so a small local model cannot run away and
-        // produce an oversized response (which the client rejects as "Response too long").
-        if (selectedProfile.Type == ModelProviderType.Ollama &&
-            routingOptions.Rules.LocalRouteMaxTokens > 0)
-        {
-            OpenAiApiUtilities.ClampMaxTokens(requestPayload, routingOptions.Rules.LocalRouteMaxTokens);
-        }
+        selectedProfileName = guardResult.ProfileName;
+        selectedProfile = guardResult.Profile;
+        var requestHadTools = guardResult.HadTools;
+        var toolOverrideApplied = guardResult.OverrideApplied;
+        var overrideReason = guardResult.OverrideReason;
 
         var startedAt = DateTimeOffset.UtcNow;
         try

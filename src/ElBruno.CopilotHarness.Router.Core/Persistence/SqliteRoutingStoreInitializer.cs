@@ -10,6 +10,9 @@ public sealed class SqliteRoutingStoreInitializer(
     private readonly RoutingOptions _bootstrapOptions = bootstrapOptions.Value;
 
     private const string SeedDefaultModel = "foundry gpt-5-mini";
+    private const string SeedLocalModelName = "ollama llama3.1";
+    private const string SeedLocalModelDeployment = "llama3.1:8b";
+    private const string SeedLocalModelEndpoint = "http://localhost:11434";
 
     private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled, bool IsProcessor, bool SupportsCustomTemperature, bool SupportsToolCalling)> SeedModels()
     {
@@ -17,10 +20,10 @@ public sealed class SqliteRoutingStoreInitializer(
         // local tool-caller. It streams structured tool_calls with valid args (run: ollama pull llama3.1:8b).
         yield return (
             "seed-ollama-llama31",
-            "ollama llama3.1",
+            SeedLocalModelName,
             (int)ModelProviderType.Ollama,
-            "http://localhost:11434",
-            "llama3.1:8b",
+            SeedLocalModelEndpoint,
+            SeedLocalModelDeployment,
             "2024-10-21",
             true,
             true,   // processor model (classifier)

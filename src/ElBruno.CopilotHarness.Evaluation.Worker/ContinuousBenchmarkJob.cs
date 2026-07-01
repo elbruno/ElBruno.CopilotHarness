@@ -46,7 +46,9 @@ internal sealed class ContinuousBenchmarkJob(
                 try
                 {
                     await store.UpdateRunStatusAsync(run.RunId, "running", ct);
-                    // TODO: dispatch real evaluation work here
+                    // NOTE: This harness has no server-side evaluation runner. Benchmark runs are
+                    // informational status transitions only; there is intentionally no real LLM
+                    // evaluation dispatched here. Wire an evaluator in at this point to enable it.
                     await store.UpdateRunStatusAsync(run.RunId, "completed", ct);
                     logger.LogInformation("Benchmark run {RunId} completed.", run.RunId);
                 }

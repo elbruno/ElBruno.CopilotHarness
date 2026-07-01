@@ -131,16 +131,12 @@ path used (`processor-model` vs `deterministic`) is shown on the
 
 ### Seeded intent rules
 
-The starter rule set (and the first-run wizard) seeds intent rules that mirror the
-vocabulary above:
-
-| Rule | Condition | Target |
-|---|---|---|
-| Simple chat | `IntentEquals simple-chat` | `ollama llama3.1` |
-| GitHub actions | `IntentEquals github-actions` | `ollama llama3.1` |
-| Launch app | `IntentEquals launch-app` | `ollama llama3.1` |
-| Code tasks | `IntentEquals code-task` | `foundry gpt-5-mini` |
-| Large prompts | `PromptSizeAtLeast` | `foundry gpt-5-mini` |
+In the default starter set the only `IntentEquals` rule is **Code tasks** (`conditionValue:
+code-task`, priority 6), which fast-tracks detected coding requests to the cloud model before
+the broader semantic sweep. The remaining intent vocabulary entries (`github-actions`,
+`launch-app`, `simple-chat`) are handled by `SemanticMatch` rules that rely on natural-language
+descriptions rather than a fixed label. See [Default starter rules](#default-starter-rules) for
+the complete seeded set.
 
 ---
 
@@ -202,18 +198,29 @@ Key properties:
 ## Default starter rules
 
 When no rules exist, the **Rules** page (and the Setup wizard) seeds the starter set below via
-`GenerateStarterRulesAsync`. All four are `SemanticMatch` rules. The first three route to the
-**local** processor model (🖥️, the model flagged `IsProcessor`); the catch-all routes to the
-**cloud** model (☁️). They are listed here in evaluation order (lowest priority first).
+`GenerateStarterRulesAsync`. A fresh install produces exactly **8 rules** — the defaults are
+good to go without further customisation. Rules are a mix of `SemanticMatch` rules (priorities
+5 and 100–120) and deterministic condition guards (priorities 6–30). "local" = the small Ollama
+model (`ollama llama3.1`, 🖥️); "cloud" = the large model (`foundry gpt-5-mini`, ☁️). Listed in
+evaluation order (lowest priority first).
 
-| # | Name | Condition type | Target engine | Priority | Enabled | Purpose |
+| # | Priority | Name | Condition type | Condition value | Target | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | Simple chat | `SemanticMatch` | local 🖥️ | 5 | ✅ | Greetings, small talk, and lightweight web-search lookups. |
-| 2 | GitHub actions | `SemanticMatch` | local 🖥️ | 10 | ✅ | Any GitHub request — repo-changing actions **and** read-only repo/issue/PR questions. |
-| 3 | Launch App actions | `SemanticMatch` | local 🖥️ | 20 | ✅ | Launch / run / build / start the application. |
-| 4 | Others actions *(catch-all)* | `SemanticMatch` | cloud ☁️ | 30 | ✅ | Everything else, including complex coding tasks. |
+| 1 | 5 | Simple chat | `SemanticMatch` | — | local 🖥️ | Greetings, small talk, and lightweight web-search lookups. |
+| 2 | 6 | Code tasks | `IntentEquals` | `code-task` | cloud ☁️ | Writing, refactoring, or debugging code fast-tracks to the cloud model. |
+| 3 | 10 | Large prompts | `PromptSizeAtLeast` | `2500` | cloud ☁️ | Any user message ≥ 2 500 characters. |
+| 4 | 20 | System-guided prompts | `HasSystemMessage` | — | cloud ☁️ | Requests that carry a system message. |
+| 5 | 30 | Streaming requests | `IsStreaming` | — | cloud ☁️ | Streaming (`stream: true`) requests. |
+| 6 | 100 | GitHub actions | `SemanticMatch` | — | local 🖥️ | Any GitHub request — repo-changing actions **and** read-only repo/issue/PR questions. |
+| 7 | 110 | Launch App actions | `SemanticMatch` | — | local 🖥️ | Launch / run / build / start the application. |
+| 8 | 120 | Others actions *(catch-all)* | `SemanticMatch` | — | cloud ☁️ | Everything else, including complex coding tasks. |
 
-The **full semantic paragraph** for each rule (so they can be recreated from scratch):
+The semantic rules (rows 1, 6, 7, 8) match by their **Description** paragraph — `conditionValue`
+is empty and the processor model picks the best-matching rule from the natural-language
+descriptions. The deterministic rules (rows 2–5) are evaluated first and short-circuit the
+semantic sweep when their condition fires.
+
+The **full description paragraph** for each semantic rule (so they can be recreated from scratch):
 
 **1 · Simple chat** — *local, priority 5*
 
@@ -224,7 +231,7 @@ The **full semantic paragraph** for each rule (so they can be recreated from scr
 > 'find online ...', 'what is the latest ...', or general questions about current facts or
 > documentation.
 
-**2 · GitHub actions** — *local, priority 10*
+**6 · GitHub actions** — *local, priority 100*
 
 > Captures all GitHub-related requests - both actions that change the repository (commit all
 > the changes, push to GitHub, create or merge a pull request, manage branches, tags, releases
@@ -233,12 +240,12 @@ The **full semantic paragraph** for each rule (so they can be recreated from scr
 > labels, releases, who opened an issue, what PRs are open). Any request about GitHub issues,
 > pull requests, or repository status belongs here.
 
-**3 · Launch App actions** — *local, priority 20*
+**7 · Launch App actions** — *local, priority 110*
 
 > Captures all actions where the user asks Copilot to launch, run, build or start the
 > application.
 
-**4 · Others actions** *(catch-all)* — *cloud, priority 30*
+**8 · Others actions** *(catch-all)* — *cloud, priority 120*
 
 > Catch-all rule. Captures every request that does not match the other rules, including complex
 > coding tasks.

@@ -1,0 +1,54 @@
+using System.Net.Http.Json;
+using ElBruno.CopilotHarness.Router.Api.Admin;
+
+namespace ElBruno.CopilotHarness.Router.Api.Tests;
+
+/// <summary>
+/// Locks in the tuned "start from zero" starter rule set produced by
+/// <c>GenerateStarterRulesAsync</c>. A fresh database ships two seeded models
+/// (<c>ollama llama3.1</c> = local/small, <c>foundry gpt-5-mini</c> = cloud/large),
+/// so the wizard must emit exactly the 8 golden rules documented in
+/// <c>docs/Rules_Engine.md</c>. Uses its own isolated factory (fresh DB) so the
+/// assertion is not affected by other tests mutating the shared fixture.
+/// </summary>
+public sealed class StarterRulesSeedTests
+{
+    private const string LocalModel = "ollama llama3.1";
+    private const string CloudModel = "foundry gpt-5-mini";
+
+    [Fact]
+    public async Task Wizard_OnFreshDatabase_SeedsTunedGoldenRuleSet()
+    {
+        using var factory = RouterApiWebApplicationFactory.Create();
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsync("/admin/rules/wizard", content: null);
+        response.EnsureSuccessStatusCode();
+
+        var rules = await response.Content.ReadFromJsonAsync<List<RoutingRuleDto>>();
+        Assert.NotNull(rules);
+
+        var expected = new (string Name, int Priority, string ConditionType, string TargetModel)[]
+        {
+            ("Simple chat", 5, "SemanticMatch", LocalModel),
+            ("Code tasks", 6, "IntentEquals", CloudModel),
+            ("Large prompts", 10, "PromptSizeAtLeast", CloudModel),
+            ("System-guided prompts", 20, "HasSystemMessage", CloudModel),
+            ("Streaming requests", 30, "IsStreaming", CloudModel),
+            ("GitHub actions", 100, "SemanticMatch", LocalModel),
+            ("Launch App actions", 110, "SemanticMatch", LocalModel),
+            ("Others actions", 120, "SemanticMatch", CloudModel),
+        };
+
+        Assert.Equal(expected.Length, rules!.Count);
+
+        foreach (var (name, priority, conditionType, targetModel) in expected)
+        {
+            var rule = Assert.Single(rules, r => r.Name == name);
+            Assert.Equal(priority, rule.Priority);
+            Assert.Equal(conditionType, rule.ConditionType);
+            Assert.Equal(targetModel, rule.TargetModel);
+            Assert.True(rule.Enabled, $"Seeded rule '{name}' should be enabled.");
+        }
+    }
+}

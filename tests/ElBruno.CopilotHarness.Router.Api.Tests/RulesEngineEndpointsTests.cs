@@ -13,6 +13,24 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
         _client = factory.CreateClient();
     }
 
+    // The default seed now includes semantic rules (incl. an "Others actions" catch-all) that,
+    // by design, take precedence over deterministic rules whenever any semantic rule matches.
+    // Tests that specifically validate deterministic keyword-rule matching remove the semantic
+    // rules first so the deterministic path is exercised in isolation (order-independent).
+    private async Task RemoveSemanticRulesAsync()
+    {
+        var rules = await _client.GetFromJsonAsync<List<RoutingRuleDto>>("/admin/rules");
+        if (rules is null)
+        {
+            return;
+        }
+
+        foreach (var rule in rules.Where(r => string.Equals(r.ConditionType, "SemanticMatch", StringComparison.OrdinalIgnoreCase)))
+        {
+            await _client.DeleteAsync($"/admin/rules/{rule.Id}");
+        }
+    }
+
     [Fact]
     public async Task Rules_Wizard_GeneratesStarterRules()
     {
@@ -80,6 +98,8 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
     [Fact]
     public async Task Rules_Test_MatchesExpectedRuleAndModel()
     {
+        await RemoveSemanticRulesAsync();
+
         var create = new RoutingRuleUpsertRequest(
             Name: $"keyword-{Guid.NewGuid():N}",
             Description: "",
@@ -152,6 +172,8 @@ public sealed class RulesEngineEndpointsTests : IClassFixture<RouterApiWebApplic
     [Fact]
     public async Task Rules_Test_ConditionRule_ReturnsEnrichedMetadata()
     {
+        await RemoveSemanticRulesAsync();
+
         var create = new RoutingRuleUpsertRequest(
             Name: $"keyword-{Guid.NewGuid():N}",
             Description: "",
