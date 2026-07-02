@@ -76,6 +76,104 @@ You should see `data: {...}` lines appearing token-by-token, ending with
 
 ---
 
+## How the proxy processes a request
+
+Every `POST /v1/chat/completions` call flows through four steps in
+`Program.cs`.  Understanding them is the whole point of the sample — this is
+where a "dumb pipe" becomes a *harness*.
+
+```
+VS Code Copilot ──▶  ① Buffer body ──▶ ② Parse once ──▶ ③ Forward to Ollama ──▶ ④ Relay response
+                                          │
+                                          ├─ observe the ask   (CopilotMessageExtractor)
+                                          ├─ detect streaming  ("stream": true?)
+                                          └─ process the model ("model" pass-through vs remap)
+```
+
+| Step | What happens | Why |
+|---|---|---|
+| **① Buffer** | Read the raw request body into a string once. | The body is a forward-only stream — you can only read it once, so we buffer it before both parsing **and** forwarding. |
+| **② Parse once** | Parse the JSON a single time into a `JsonObject` and reuse it for all three tasks below. | Avoids deserializing the same payload three times. |
+| **③ Forward** | POST the (possibly modified) body to Ollama's OpenAI-compatible endpoint using the long-timeout `HttpClient`. | Ollama mirrors the exact `/v1/chat/completions` shape, so forwarding is a near-passthrough. |
+| **④ Relay** | Stream the SSE bytes straight back for streaming requests, or return the full JSON otherwise. | The caller (VS Code) sees tokens appear in real time. |
+
+### ② a — Parsing the Copilot message (`CopilotMessageExtractor`)
+
+VS Code Copilot Chat does **not** send just the word you typed.  It wraps your
+one-line ask inside a multi-kilobyte XML-like envelope:
+
+```xml
+<attachments>...file contents...</attachments>
+<context>...editor context...</context>
+<reminderInstructions>...standing instructions...</reminderInstructions>
+<userRequest>explain async/await in C#</userRequest>
+```
+
+If you naively logged the last `user` message you would see ~3 000 characters
+of boilerplate instead of `explain async/await in C#`.  `CopilotMessageExtractor`
+peels the envelope away so the harness can make cheap, accurate decisions.
+It runs a small, deterministic algorithm:
+
+1. **Find the last `user` message.**  Copilot resends the whole conversation on
+   every turn; the *last* `user` entry is the current ask, everything before it
+   is history.
+2. **Read its text — handling both content shapes:**
+   - a plain string: `"content": "hi"`
+   - a multi-part array (vision / Copilot): `"content": [{"type":"text","text":"hi"}]`
+     — the extractor concatenates every `text` part.
+3. **Unwrap the envelope, in priority order:**
+   1. If `<userRequest>…</userRequest>` (or `<user-request>`) is present, return
+      its inner text. This is Copilot's primary convention — VS Code always puts
+      the typed words here.
+   2. Otherwise, strip every known wrapper block and return what's left. The
+      recognised tags are:
+      `attachments`, `context`, `reminderInstructions`, `environment_info`,
+      `editorContext`, `currentEditor`, `instructions`, `toolResult`,
+      `tool-result`.
+   3. If stripping removes everything (e.g. a plain `curl`/OpenAI-SDK client that
+      sends no envelope), fall back to the raw message unchanged.
+
+The result is logged as the `[copilot ask]` line:
+
+```
+[copilot ask] explain async/await in C#
+```
+
+> **This log line is the seed of all intelligence.**  Once you can see the ask
+> clearly you can route on it, apply policy to it, attribute cost to it, or
+> classify its intent — which is exactly what the full harness does.  The class
+> is `public static`, so `CopilotMessageExtractor.GetLastUserMessageText(body)`
+> (or `ExtractTypedUserMessage(rawText)`) can be reused verbatim in your own code.
+
+### ② b — Processing the `model` field (pass-through vs remap)
+
+The proxy discovers which models Ollama actually has installed (Ollama's
+`GET /api/tags`) **once at startup** and treats that as a pass-through
+allowlist.  Then, for each request, it looks at the `"model"` field:
+
+- **Installed model → forwarded UNCHANGED.**  Whatever model you picked in the
+  VS Code model picker is what actually runs. This is what lets one proxy serve
+  many Ollama models. You'll see `[model passthrough] 'qwen2.5:7b-instruct'`.
+- **Unknown id / utility alias → remapped to the fallback model.**  VS Code's
+  agent surface sends background "utility" requests with
+  `model: "copilot-utility-small"`, which Ollama doesn't have. The proxy rewrites
+  it to `DefaultModel` so Ollama doesn't 404. You'll see
+  `[model rewrite] 'copilot-utility-small' → 'llama3.1:8b'`.
+
+Only the body is rewritten when a remap happens; installed models are forwarded
+byte-for-byte. See **Register in VS Code → Serving multiple Ollama models** and
+the **Troubleshooting** section for the full story on the utility slot.
+
+### ② c — Detecting streaming
+
+The OpenAI protocol signals streaming with `"stream": true`.  The proxy reads
+that flag while parsing and uses it to decide step ④: streaming requests get an
+`text/event-stream` response piped through unbuffered; non-streaming requests
+get a single JSON body.  Copilot Chat always sets `stream: true`; plain `curl`
+tests often don't.
+
+---
+
 ## Register in VS Code as a BYOK model provider
 
 VS Code Copilot supports custom model providers via the
