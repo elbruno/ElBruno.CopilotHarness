@@ -136,6 +136,35 @@ satisfied (see Troubleshooting for why):
 "chat.utilitySmallModel": "copilot-utility-small"
 ```
 
+### Serving multiple Ollama models from one proxy
+
+You are **not** limited to a single model.  The proxy discovers every model
+Ollama has installed (via Ollama's `GET /api/tags`) at startup and **passes any
+of them through untouched** when VS Code requests it.  So you can register as
+many models as you like under one provider — they all point at the same
+`http://localhost:5099/v1/chat/completions` URL, and each one runs on its
+matching Ollama model:
+
+```json
+{
+  "name": "ollamaRouter",
+  "vendor": "customendpoint",
+  "apiKey": "ollama-local",
+  "apiType": "chat-completions",
+  "models": [
+    { "id": "llama3.1:8b",         "name": "llama3.1:8b",         "url": "http://localhost:5099/v1/chat/completions", "toolCalling": true, "maxInputTokens": 128000, "maxOutputTokens": 16000 },
+    { "id": "qwen2.5:7b-instruct", "name": "qwen2.5:7b-instruct", "url": "http://localhost:5099/v1/chat/completions", "toolCalling": true, "maxInputTokens": 128000, "maxOutputTokens": 16000 }
+  ]
+}
+```
+
+> **The rule:** if the requested `id` is a model Ollama has installed, the proxy
+> forwards it **unchanged** (you'll see `[model passthrough]` in the terminal).
+> If it isn't — the `copilot-utility-small` alias or a typo — the proxy remaps
+> it to the fallback model (`[model rewrite]`).  The model id **must exactly
+> match** the Ollama model name (run `ollama list` to see them).  Pulled a new
+> model after starting the proxy?  Restart it so it re-discovers the list.
+
 ---
 
 ## Troubleshooting
@@ -211,24 +240,29 @@ it.
 
 Starting with this version the proxy automatically handles the two-model split:
 
-1. **`GET /v1/models`** lists *both* `llama3.1:8b` **and** `copilot-utility-small`
-   so VS Code accepts the utility alias as a valid BYOK candidate.
+1. **`GET /v1/models`** lists *every installed Ollama model* (discovered at
+   startup via Ollama's `/api/tags`) **and** the `copilot-utility-small` alias,
+   so VS Code accepts each real model and the utility alias as valid BYOK
+   candidates.
 
 2. **`POST /v1/chat/completions`** inspects the `"model"` field on every
-   incoming request.  If the model ID is not the real Ollama model, the proxy
-   rewrites it before forwarding:
+   incoming request and either passes it through or remaps it:
 
    ```
-   Copilot sends:  { "model": "copilot-utility-small", ... }
-   Proxy rewrites: { "model": "llama3.1:8b",           ... }  → Ollama
+   Installed model  → forwarded UNCHANGED  ([model passthrough])
+     Copilot sends:  { "model": "qwen2.5:7b-instruct", ... }  → Ollama (as-is)
+
+   Unknown / alias  → remapped to fallback ([model rewrite])
+     Copilot sends:  { "model": "copilot-utility-small", ... }
+     Proxy rewrites: { "model": "llama3.1:8b",           ... }  → Ollama
    ```
 
-   You will see a `[model rewrite]` log line in the terminal for each utility
-   call so it is obvious what is happening on stage.
+   You will see a `[model passthrough]` or `[model rewrite]` log line in the
+   terminal for each call so it is obvious what is happening on stage.
 
-3. The utility model ID is configurable via `appsettings.json`
-   (`Ollama:UtilityModelId`, default `copilot-utility-small`).  You can change
-   it without touching the code.
+3. Both the utility alias and the fallback model are configurable via
+   `appsettings.json` (`Ollama:UtilityModelId` and `Ollama:DefaultModel`).
+   Leave `DefaultModel` unset to auto-pick the first installed model.
 
 **To use Fix C you still need Fix B** (the VS Code settings) — VS Code does
 not automatically discover utility models from `GET /v1/models`.  The two fixes
@@ -313,7 +347,7 @@ just one idea: start with a proxy, observe the ask — everything else follows.
 | Setting | Default | Override |
 |---|---|---|
 | Ollama base URL | `http://localhost:11434` | `appsettings.json` → `Ollama.BaseUrl` or env `Ollama__BaseUrl` |
-| Default model | `llama3.1:8b` | `appsettings.json` → `Ollama.DefaultModel` or env `Ollama__DefaultModel` |
+| Default / fallback model | `llama3.1:8b` (or first installed) | `appsettings.json` → `Ollama.DefaultModel` or env `Ollama__DefaultModel` |
 | Utility model alias | `copilot-utility-small` | `appsettings.json` → `Ollama.UtilityModelId` or env `Ollama__UtilityModelId` |
 | Proxy port | **5099** | Change `app.Run(...)` in `Program.cs` |
 

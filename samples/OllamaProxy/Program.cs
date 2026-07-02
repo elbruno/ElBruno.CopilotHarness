@@ -30,8 +30,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Read Ollama settings from appsettings.json (or environment overrides).
 // Defaults are safe for a stock Ollama installation.
-var ollamaBaseUrl  = builder.Configuration["Ollama:BaseUrl"]        ?? "http://localhost:11434";
-var defaultModel   = builder.Configuration["Ollama:DefaultModel"]   ?? "llama3.1:8b";
+var ollamaBaseUrl = builder.Configuration["Ollama:BaseUrl"] ?? "http://localhost:11434";
+// The DEFAULT/FALLBACK model.  This is used ONLY as the remap target when a
+// request arrives for the synthetic utility alias or an unknown model id.
+// Real model ids that Ollama has installed are passed through untouched (see
+// the POST handler below).  If no explicit value is configured we fall back to
+// the first installed Ollama model, then to "llama3.1:8b".
+// (defaultModel itself is computed after the app is built — see section 2b —
+//  because it may depend on the list of installed models.)
+var configuredDefaultModel = builder.Configuration["Ollama:DefaultModel"];
 
 // WHY A UTILITY MODEL ID?
 //   GitHub Copilot's AGENT surface (the "Describe what to build" input in
@@ -54,10 +61,10 @@ var defaultModel   = builder.Configuration["Ollama:DefaultModel"]   ?? "llama3.1
 //   FIX (this proxy's approach):
 //     • GET  /v1/models  — advertises BOTH the main model ID AND this
 //       utility ID so VS Code discovers a valid utility candidate.
-//     • POST /v1/chat/completions — if the request arrives with model =
-//       utilityModelId (e.g. "copilot-utility-small"), REWRITE it to
-//       defaultModel before forwarding.  Ollama only knows llama3.1:8b;
-//       it would 404 on any synthetic alias.
+//     • POST /v1/chat/completions — forwards the requested model UNCHANGED
+//       when Ollama has it installed (so the user's pick is honored), and
+//       REWRITES it to defaultModel only for the utility alias / unknown ids
+//       (Ollama would 404 on those synthetic aliases).
 var utilityModelId = builder.Configuration["Ollama:UtilityModelId"] ?? "copilot-utility-small";
 
 // Register a named HttpClient for forwarding requests to Ollama.
@@ -81,53 +88,116 @@ builder.Services.AddHttpClient("ollama", client =>
 var app = builder.Build();
 
 // ---------------------------------------------------------------------------
+// 2b. DISCOVER INSTALLED OLLAMA MODELS (the pass-through allowlist)
+//
+//  We ask Ollama which models are actually installed locally (GET /api/tags)
+//  ONE TIME at startup and cache the names.  This list is the "pass-through
+//  allowlist": when VS Code sends a chat request for one of THESE ids, we
+//  forward it to Ollama UNCHANGED so the user's model pick is honored.  Any id
+//  NOT in this list (the synthetic utility alias, a typo, etc.) is remapped to
+//  defaultModel so Ollama doesn't 404.
+//
+//  WHY AT STARTUP?  It keeps the per-request hot path fast and the teaching
+//  code simple.  Pulled a new model with `ollama pull <name>`?  Restart the
+//  proxy to pick it up.  A production harness would cache with a short TTL.
+// ---------------------------------------------------------------------------
+var installedModels = new List<string>();
+try
+{
+    var probe = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient("ollama");
+    // /api/tags is Ollama's native "list installed models" endpoint.
+    // Shape: { "models": [ { "name": "llama3.1:8b", ... }, ... ] }
+    using var tagsResponse = await probe.GetAsync("/api/tags");
+    if (tagsResponse.IsSuccessStatusCode)
+    {
+        var tagsJson = await tagsResponse.Content.ReadAsStringAsync();
+        if (JsonNode.Parse(tagsJson)?["models"] is JsonArray modelsArray)
+        {
+            foreach (var m in modelsArray)
+            {
+                var name = m?["name"]?.GetValue<string>();
+                if (!string.IsNullOrWhiteSpace(name))
+                    installedModels.Add(name);
+            }
+        }
+    }
+}
+catch (Exception ex)
+{
+    // Ollama not running yet, or unreachable.  Degrade gracefully: with an
+    // empty allowlist EVERY request falls back to defaultModel (the original
+    // single-model behavior), so the proxy still works — it just can't pass
+    // models through until Ollama is up and the proxy is restarted.
+    app.Logger.LogWarning(
+        "Could not list Ollama models at startup: {Message}. Model pass-through disabled until restart.",
+        ex.Message);
+}
+
+// Case-insensitive set for fast pass-through checks on the request hot path.
+var installedModelSet = new HashSet<string>(installedModels, StringComparer.OrdinalIgnoreCase);
+
+// Resolve the remap/fallback target: explicit config → first installed model → default.
+var defaultModel = configuredDefaultModel
+    ?? installedModels.FirstOrDefault()
+    ?? "llama3.1:8b";
+
+app.Logger.LogInformation(
+    "Installed Ollama models: {Models}. Remap/fallback model: {Default}",
+    installedModels.Count > 0 ? string.Join(", ", installedModels) : "(none discovered)",
+    defaultModel);
+
+// ---------------------------------------------------------------------------
 // 3. ENDPOINTS
 // ---------------------------------------------------------------------------
 
 // --- 3a. Health / info endpoint -------------------------------------------
 // A quick "is it alive?" check.  Open http://localhost:5099/ in a browser
 // or run: curl http://localhost:5099/health
-app.MapGet("/",      () => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, utilityModel = utilityModelId, ollamaUrl = ollamaBaseUrl });
-app.MapGet("/health",() => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, utilityModel = utilityModelId, ollamaUrl = ollamaBaseUrl });
+app.MapGet("/", () => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, utilityModel = utilityModelId, ollamaUrl = ollamaBaseUrl });
+app.MapGet("/health", () => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, utilityModel = utilityModelId, ollamaUrl = ollamaBaseUrl });
 
 // --- 3b. Models list -------------------------------------------------------
 // VS Code and many OpenAI-compatible clients call GET /v1/models before
-// sending a chat request to confirm the model ID exists.  We return TWO
-// entries:
+// sending a chat request to confirm the model ID exists.  We return:
 //
-//   1. The real Ollama model (e.g. llama3.1:8b) — used for main chat turns.
+//   1. Every model Ollama actually has installed (discovered at startup) —
+//      any of these can be selected in VS Code and is forwarded as-is.
 //   2. The utility alias (e.g. copilot-utility-small) — needed so VS Code
 //      accepts it as a valid BYOK candidate for the utility model slot.
 //
-// Both IDs map to the SAME underlying Ollama model at inference time.
-// The POST endpoint rewrites any utility alias back to defaultModel.
+// Real model IDs run on their own Ollama model; the utility alias is remapped
+// to defaultModel by the POST endpoint (Ollama has no such model).
 app.MapGet("/v1/models", () =>
 {
-    var modelsResponse = new
+    var data = new List<object>();
+
+    // Advertise every installed model (or defaultModel if discovery found none).
+    var advertised = installedModelSet.Count > 0
+        ? (IEnumerable<string>)installedModels
+        : new[] { defaultModel };
+
+    foreach (var id in advertised)
     {
-        @object = "list",
-        data = new object[]
+        data.Add(new
         {
-            new
-            {
-                id       = defaultModel,
-                @object  = "model",
-                created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                owned_by = "ollama"
-            },
-            // Utility alias — same underlying model, synthetic ID.
-            // VS Code needs to see this ID here so it trusts it as a valid
-            // BYOK model when the user sets chat.utilitySmallModel.
-            new
-            {
-                id       = utilityModelId,
-                @object  = "model",
-                created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                owned_by = "ollama"
-            }
-        }
-    };
-    return Results.Json(modelsResponse);
+            id,
+            @object  = "model",
+            created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            owned_by = "ollama"
+        });
+    }
+
+    // Utility alias — synthetic ID VS Code uses for the background utility slot.
+    // Not a real Ollama model; the POST handler remaps it to defaultModel.
+    data.Add(new
+    {
+        id       = utilityModelId,
+        @object  = "model",
+        created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        owned_by = "ollama"
+    });
+
+    return Results.Json(new { @object = "list", data });
 });
 
 // --- 3c. Chat completions — THE CORE PROXY --------------------------------
@@ -163,31 +233,31 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     //  We parse the JSON body a SINGLE time and reuse the JsonObject for
     //  all three tasks, avoiding redundant deserialization overhead.
     //
-    //  --- THE MODEL REWRITE — why it exists ---
+    //  --- MODEL PASS-THROUGH vs REMAP — why it exists ---
     //
     //  Copilot's agent surface sends TWO distinct kinds of requests:
     //
-    //    a) Main model turns  — model = "llama3.1:8b"
-    //       These are the user's actual chat messages.
+    //    a) Main model turns  — model = the id the user PICKED in the model
+    //       picker (e.g. "llama3.1:8b" OR "qwen2.5:7b-instruct").  These are
+    //       the user's actual chat messages, and we want to honor that choice.
     //
     //    b) Utility turns     — model = "copilot-utility-small"
     //       Background tasks VS Code runs silently: generating a title for
     //       the chat session, suggesting a commit message, producing rename
     //       hints, etc.  The user never explicitly triggers these.
     //
-    //  Ollama only has model (a) installed locally.  If we forward request
-    //  (b) unchanged, Ollama returns HTTP 404 "model not found" and the
-    //  agent surface surfaces the error:
+    //  Solution:
+    //    • If the requested model IS installed in Ollama (case a) → forward it
+    //      UNCHANGED.  This is what lets ONE proxy serve MANY Ollama models:
+    //      whatever the user selects in VS Code is what actually runs.
+    //    • If it is NOT installed (case b — the synthetic utility alias, or a
+    //      typo) → remap it to defaultModel, because Ollama would otherwise
+    //      return HTTP 404 and the agent surface shows:
     //
-    //    "No utility model is configured for 'copilot-utility-small'
-    //     while the selected main model is BYOK."
-    //
-    //  Solution: detect any non-default model ID and silently remap it to
-    //  defaultModel before forwarding.  All IDs this proxy advertises via
-    //  GET /v1/models are just aliases — they all run on the same Ollama
-    //  model.  Ollama never sees the synthetic alias.
+    //        "No utility model is configured for 'copilot-utility-small'
+    //         while the selected main model is BYOK."
     // ------------------------------------------------------------------
-    bool   isStreaming    = false;
+    bool isStreaming = false;
     string requestedModel = defaultModel;
 
     try
@@ -210,17 +280,30 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             // Copilot Chat always sets this; plain curl tests often don't.
             isStreaming = jsonBody["stream"]?.GetValue<bool>() ?? false;
 
-            // ---- Rewrite model ID ----
+            // ---- Honor the requested model (pass-through) OR remap it ----
+            //
+            //  VS Code sends model = the id the user picked in the model picker.
+            //  If Ollama actually has that model installed, we PASS IT THROUGH
+            //  untouched so the user's choice runs.  If not (utility alias or an
+            //  unknown id), we REMAP to defaultModel so Ollama doesn't 404.
             requestedModel = jsonBody["model"]?.GetValue<string>() ?? defaultModel;
 
-            if (!string.Equals(requestedModel, defaultModel, StringComparison.OrdinalIgnoreCase))
+            if (installedModelSet.Contains(requestedModel))
             {
-                // The request arrived with a synthetic alias (e.g. the
-                // utility model ID).  Replace it with the real Ollama model
-                // so Ollama can handle it.  Log the rewrite so the audience
-                // can see exactly what the agent surface is doing.
+                // Real, installed model — forward as-is.  Log so the audience
+                // can see the user's pick flowing straight to Ollama.
                 logger.LogInformation(
-                    "[model rewrite] '{RequestedModel}' → '{DefaultModel}' (utility alias remapped to Ollama model)",
+                    "[model passthrough] '{RequestedModel}' (installed — forwarded unchanged)",
+                    requestedModel);
+                Console.WriteLine($"[model passthrough] '{requestedModel}'");
+            }
+            else
+            {
+                // Utility alias or unknown id — remap to a real model so Ollama
+                // can serve it.  This is what keeps the agent surface's utility
+                // slot working.  Log the rewrite so it's visible on stage.
+                logger.LogInformation(
+                    "[model rewrite] '{RequestedModel}' → '{DefaultModel}' (not installed — remapped so Ollama can serve it)",
                     requestedModel, defaultModel);
                 Console.WriteLine($"[model rewrite] '{requestedModel}' → '{defaultModel}'");
 
@@ -245,7 +328,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     //  in STEP 2.  Never re-read request.Body (it was consumed in STEP 1).
     // ------------------------------------------------------------------
     var httpClient = clientFactory.CreateClient("ollama");
-    var ollamaUri  = "/v1/chat/completions"; // relative to the BaseAddress set above
+    var ollamaUri = "/v1/chat/completions"; // relative to the BaseAddress set above
 
     using var ollamaRequest = new HttpRequestMessage(HttpMethod.Post, ollamaUri)
     {
@@ -292,7 +375,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
         // Streaming: set SSE content-type and pipe bytes straight through.
         // DO NOT buffer — that would defeat the purpose of streaming.
         response.ContentType = "text/event-stream; charset=utf-8";
-        response.Headers["Cache-Control"]    = "no-cache";
+        response.Headers["Cache-Control"] = "no-cache";
         response.Headers["X-Accel-Buffering"] = "no"; // tell nginx not to buffer either
 
         await using var ollamaStream = await ollamaResponse.Content.ReadAsStreamAsync();
