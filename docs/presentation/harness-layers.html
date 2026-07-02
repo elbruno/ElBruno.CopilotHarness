@@ -327,6 +327,47 @@
     to   { opacity: 1; transform: translateX(0); }
   }
 
+  /* ── Hook / question slide ───────────────────────────────── */
+  .big-q {
+    font-size: clamp(1.8em, 3.4vw, 2.8em);
+    font-weight: 800;
+    text-align: center;
+    line-height: 1.16;
+    max-width: 780px;
+    background: linear-gradient(135deg, var(--accent1), #bc8cff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .big-q em { font-style: italic; }
+
+  .q-punch {
+    margin-top: 26px;
+    font-size: clamp(1.3em, 2.2vw, 1.9em);
+    font-weight: 700;
+    text-align: center;
+    color: var(--text);
+  }
+
+  .q-accent { color: var(--l3); }
+
+  /* Pulse the punch line to catch the room each time the slide is shown */
+  .slide.active .q-punch { animation: qpulse 1.9s ease-in-out 0.5s infinite; }
+
+  @keyframes qpulse {
+    0%, 100% { transform: scale(1);    text-shadow: 0 0 0 rgba(63,185,80,0); }
+    50%      { transform: scale(1.045); text-shadow: 0 0 26px rgba(63,185,80,0.45); }
+  }
+
+  .q-teaser {
+    margin-top: 30px;
+    font-size: 0.92em;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    text-align: center;
+  }
+
   /* ── Nav chrome ──────────────────────────────────────────── */
   .nav-bar {
     position: fixed;
@@ -462,8 +503,20 @@
     <p class="subtitle">Simple, well-scoped actions stay <strong style="color:var(--l3);">local</strong> — fast, private, free. Only the heavy analysis reaches for the <strong style="color:var(--l1);">cloud</strong>.</p>
   </div>
 
-  <!-- Slide 3 — Layer diagram (builds step by step) -->
-  <div class="slide" id="slide-3" role="region" aria-label="The 5 layers">
+  <!-- Slide 3 — The hook: the question that opens the door to the harness -->
+  <div class="slide" id="slide-3" role="region" aria-label="The question">
+    <div class="kicker">Here's the thing…</div>
+    <div class="big-q">Who decides <em>which</em> model runs your prompt?</div>
+    <p class="subtitle" style="max-width:660px;">
+      Right now, GitHub Copilot sends <strong>every</strong> request to a single cloud model —
+      one you don't pick, don't see, and can't reroute.
+    </p>
+    <div class="q-punch">What if that decision were <span class="q-accent">yours</span>?</div>
+    <div class="q-teaser">↓&nbsp; Local for speed &amp; privacy · Cloud for power · Your rules</div>
+  </div>
+
+  <!-- Slide 4 — Layer diagram (builds step by step) -->
+  <div class="slide" id="slide-4" role="region" aria-label="The 5 layers">
     <div class="kicker" style="margin-bottom:10px;">The 5 Layers of the Harness</div>
 
     <div class="diagram" id="diagram">
@@ -569,8 +622,8 @@
     </div>
   </div>
 
-  <!-- Slide 4 — Why it matters -->
-  <div class="slide" id="slide-4" role="region" aria-label="Why it matters">
+  <!-- Slide 5 — Why it matters -->
+  <div class="slide" id="slide-5" role="region" aria-label="Why it matters">
     <div class="kicker">Why it matters</div>
     <h2>Your Copilot, Your Rules</h2>
     <p class="subtitle">
@@ -587,8 +640,8 @@
     </div>
   </div>
 
-  <!-- Slide 5 — How to get started -->
-  <div class="slide" id="slide-5" role="region" aria-label="Get started">
+  <!-- Slide 6 — How to get started -->
+  <div class="slide" id="slide-6" role="region" aria-label="Get started">
     <div class="kicker">Getting Started</div>
     <h2>Three commands, then you're routing</h2>
     <div style="margin-top:24px; text-align:left; max-width:560px; width:100%;">
@@ -615,8 +668,8 @@
     </div>
   </div>
 
-  <!-- Slide 6 — Closing / CTA -->
-  <div class="slide" id="slide-6" role="region" aria-label="Call to action">
+  <!-- Slide 7 — Closing / CTA -->
+  <div class="slide" id="slide-7" role="region" aria-label="Call to action">
     <div class="kicker">Open Source · MIT License</div>
     <h1>Start Routing Today</h1>
     <p class="one-liner">
@@ -682,8 +735,8 @@
 
 <script>
 /* ── State ──────────────────────────────────────────────────── */
-const TOTAL_SLIDES = 7;
-const DIAGRAM_SLIDE = 3;  // index of the layer-diagram slide (builds over sub-steps)
+const TOTAL_SLIDES = 8;
+const DIAGRAM_SLIDE = 4;  // index of the layer-diagram slide (builds over sub-steps)
 let currentSlide = 0;     // 0-based index into slides[]
 let layerStep = 0;        // for the diagram slide: how many layers revealed (0 = none, 5 = all)
 const LAYER_COUNT = 5;
