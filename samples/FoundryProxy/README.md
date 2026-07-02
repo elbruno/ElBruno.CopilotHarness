@@ -154,6 +154,110 @@ You should see `data: {...}` lines appearing token-by-token, ending with
 
 ---
 
+## How the proxy processes a request
+
+Every `POST /v1/chat/completions` call flows through three steps in
+`Program.cs`.  Understanding them is the whole point of the sample — this is
+where a "dumb pipe" becomes a *harness*.
+
+```
+VS Code Copilot ──▶ ① Buffer body ──▶ ② Parse once ──▶ ③ Forward to Azure ──▶ relay response
+                                          │
+                                          ├─ observe the ask     (CopilotMessageExtractor)
+                                          ├─ detect streaming    ("stream": true?)
+                                          ├─ resolve deployment  (model → Azure deployment)
+                                          └─ strip sampling params (temperature/top_p ≠ 1)
+```
+
+| Step | What happens | Why |
+|---|---|---|
+| **① Buffer** | Read the raw request body into a string once. | The body is a forward-only stream — you can only read it once, so we buffer it before both parsing **and** forwarding. |
+| **② Parse once** | Parse the JSON a single time into a `JsonObject` and reuse it for all tasks below. | Avoids deserializing the same payload repeatedly. |
+| **③ Forward** | POST the (possibly modified) body to Azure OpenAI at `openai/deployments/{deployment}/chat/completions?api-version=…`, authenticated with the server-side `api-key` header. | Azure selects the model by the **deployment in the URL path**, and authenticates with `api-key` (not a bearer token). |
+
+### ② a — Parsing the Copilot message (`CopilotMessageExtractor`)
+
+VS Code Copilot Chat does **not** send just the word you typed.  It wraps your
+one-line ask inside a multi-kilobyte XML-like envelope:
+
+```xml
+<attachments>...file contents...</attachments>
+<context>...editor context...</context>
+<reminderInstructions>...standing instructions...</reminderInstructions>
+<userRequest>explain async/await in C#</userRequest>
+```
+
+If you naively logged the last `user` message you would see ~3 000 characters
+of boilerplate instead of `explain async/await in C#`.  `CopilotMessageExtractor`
+peels the envelope away so the harness can make cheap, accurate decisions.
+It runs a small, deterministic algorithm:
+
+1. **Find the last `user` message.**  Copilot resends the whole conversation on
+   every turn; the *last* `user` entry is the current ask.
+2. **Read its text — handling both content shapes:** a plain string
+   (`"content": "hi"`) or a multi-part array
+   (`"content": [{"type":"text","text":"hi"}]` — the extractor concatenates
+   every `text` part).
+3. **Unwrap the envelope, in priority order:** return the inner text of
+   `<userRequest>…</userRequest>` if present; otherwise strip every known
+   wrapper block (`attachments`, `context`, `reminderInstructions`,
+   `environment_info`, `editorContext`, `currentEditor`, `instructions`,
+   `toolResult`, …); if stripping removes everything (a plain `curl` client),
+   fall back to the raw message unchanged.
+
+The result is logged as the `[copilot ask]` line. **This log line is the seed of
+all intelligence** — once you can see the ask clearly you can route on it, apply
+policy, attribute cost, or classify intent. The class is `public static`, so
+`CopilotMessageExtractor.GetLastUserMessageText(body)` can be reused verbatim.
+
+### ② b — Resolving the model to an Azure deployment (pass-through vs remap)
+
+This is the key nuance versus the Ollama sample:
+
+- **Ollama** carries the model in the request **body** — so OllamaProxy rewrites
+  the body's `"model"` field.
+- **Azure OpenAI** carries the deployment in the **URL path**
+  (`openai/deployments/{deployment}/chat/completions`) and *ignores* the body
+  `model`. So to honor the model the user picked, FoundryProxy uses the requested
+  id **as the deployment name when it builds the URL** (`BuildRequestUri`).
+
+For each request it looks at the `"model"` field:
+
+- **A real deployment id → routed to that deployment (pass-through).**  Whatever
+  model you picked in the VS Code model picker becomes the deployment in the URL.
+  This is what lets one proxy serve `gpt-5.5`, `gpt-chat-latest`, `DeepSeek-V4-Flash`,
+  etc. You'll see `[model passthrough] 'gpt-5.5'`.
+- **Utility alias / empty / unknown id → routed to the default deployment.**
+  VS Code's agent surface sends background "utility" requests with
+  `model: "copilot-utility-small"`. The proxy routes those to `Foundry:Deployment`
+  (the fallback) so the utility slot works and typos don't 404. You'll see
+  `[model rewrite] 'copilot-utility-small' → deployment 'gpt-4o-mini'`.
+
+**Config-driven, not auto-discovered.** The Ollama sample discovers installed
+models via `GET /api/tags`. Azure OpenAI has no data-plane "list deployments"
+API (that is a control-plane / ARM operation), so you declare the deployments
+this proxy may pass through in `Foundry:Deployments` (see *Serving multiple
+Foundry deployments* below). Leave it empty to allow **any** requested id to be
+used as a deployment name.
+
+### ② c — Stripping unsupported sampling params
+
+Newer Foundry models (`gpt-5.x`, `gpt-chat-latest`, o-series) only accept the
+**default** `temperature`/`top_p` of `1` and return a `400 unsupported_value` for
+anything else. VS Code Copilot sends `temperature: 0.1` on every call, so when
+`Foundry:StripUnsupportedSamplingParams` is `true` (the default) the proxy removes
+any non-default `temperature`/`top_p` before forwarding. You'll see
+`[param strip] removed 'temperature'=0.1`.
+
+### ② d — Detecting streaming
+
+The OpenAI protocol signals streaming with `"stream": true`.  The proxy reads
+that flag while parsing and pipes an `text/event-stream` response straight back
+for streaming requests, or returns a single JSON body otherwise. Copilot Chat
+always sets `stream: true`; plain `curl` tests often don't.
+
+---
+
 ## Register in VS Code as a BYOK model provider
 
 VS Code Copilot supports custom model providers via the
@@ -213,6 +317,29 @@ Replace `"gpt-4o-mini"` with your actual deployment name if it differs.
 
 After registering, open VS Code Copilot Chat, click the model picker, and
 select **gpt-4o-mini** from the custom providers list.
+
+### Serving multiple Foundry deployments
+
+One proxy can front **many** Foundry deployments — parity with the Ollama
+sample's install-aware pass-through. List the deployment names you want to expose
+in `appsettings.json` (or via env vars):
+
+```jsonc
+"Foundry": {
+  "Deployment": "gpt-4o-mini",                                  // fallback + utility slot
+  "Deployments": [ "gpt-5.5", "gpt-chat-latest", "DeepSeek-V4-Flash" ]
+}
+```
+
+Then register each id in `chatLanguageModels.json` (all pointing at
+`http://localhost:5100/v1/chat/completions`) and pick any of them in VS Code.
+The proxy uses the **requested id as the Azure deployment name** in the URL path,
+so each selection hits its matching deployment. Anything not in the list — and
+the `copilot-utility-small` utility alias — falls back to `Foundry:Deployment`.
+
+> Leave `Foundry:Deployments` empty to allow **any** requested id to be used as a
+> deployment name (the utility alias still falls back to `Foundry:Deployment`).
+> `GET /v1/models` advertises every configured deployment plus the utility alias.
 
 **For agent mode (the "Describe what to build" surface):** also add the
 following two lines to your VS Code `settings.json` so the utility slot is
@@ -334,7 +461,8 @@ a small/fast one for utility tasks) and route by the requested model ID.
 |---|---|---|
 | Azure endpoint | *(required)* | User Secrets: `dotnet user-secrets set "Foundry:Endpoint" "..."` |
 | Azure API key | *(required)* | User Secrets: `dotnet user-secrets set "Foundry:ApiKey" "..."` |
-| Deployment name | *(required)* | User Secrets: `dotnet user-secrets set "Foundry:Deployment" "..."` |
+| Deployment name | *(required)* | User Secrets: `dotnet user-secrets set "Foundry:Deployment" "..."` — fallback + utility slot |
+| Extra deployments | *(none)* | `appsettings.json` → `Foundry.Deployments` array or env `Foundry__Deployments__0`, `__1`… — ids VS Code may pass through to matching Azure deployments |
 | API version | `2024-10-21` | `appsettings.json` → `Foundry.ApiVersion` or env `Foundry__ApiVersion` |
 | Utility model alias | `copilot-utility-small` | `appsettings.json` → `Foundry.UtilityModelId` or env `Foundry__UtilityModelId` |
 | Proxy port | **5100** | Change `app.Run(...)` in `Program.cs` |

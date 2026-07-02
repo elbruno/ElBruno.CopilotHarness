@@ -89,6 +89,28 @@ var foundryApiVersion    = builder.Configuration["Foundry:ApiVersion"]     ?? "2
 var stripUnsupportedSamplingParams =
     builder.Configuration.GetValue<bool?>("Foundry:StripUnsupportedSamplingParams") ?? true;
 
+// Optional list of Azure deployment names this proxy is allowed to route to.
+//
+//  THE "PASS-THROUGH ALLOWLIST" (parity with the Ollama sample):
+//    When VS Code requests one of these model ids, the proxy uses that id AS
+//    the deployment name in the Azure URL path — so selecting different models
+//    in VS Code actually hits different Foundry deployments from one endpoint.
+//
+//  WHY CONFIG AND NOT AUTO-DISCOVERY?
+//    The Ollama sample discovers installed models via Ollama's GET /api/tags.
+//    Azure OpenAI has no equivalent that works with just a data-plane api-key
+//    (listing deployments is a control-plane / ARM operation), so you declare
+//    your deployment names here instead — in appsettings.json:
+//      "Foundry": { "Deployments": [ "gpt-5.5", "gpt-chat-latest" ] }
+//    or via env: Foundry__Deployments__0=gpt-5.5  Foundry__Deployments__1=...
+//
+//    Leave it EMPTY to allow ANY requested model id to be used as a deployment
+//    name (the utility alias still falls back to the default deployment).
+var configuredDeployments = builder.Configuration
+    .GetSection("Foundry:Deployments")
+    .Get<string[]>() ?? Array.Empty<string>();
+var deploymentAllowlist = new HashSet<string>(configuredDeployments, StringComparer.OrdinalIgnoreCase);
+
 // WHY A UTILITY MODEL ID?
 //   GitHub Copilot's AGENT surface (the "Describe what to build" input in
 //   VS Code) uses TWO separate model "slots" at the same time:
@@ -110,17 +132,16 @@ var stripUnsupportedSamplingParams =
 //   FIX (this proxy's approach):
 //     • GET  /v1/models  — advertises BOTH the deployment name AND this
 //       utility ID so VS Code discovers a valid utility candidate.
-//     • POST /v1/chat/completions — if the request arrives with model =
-//       utilityModelId (e.g. "copilot-utility-small"), LOG the rewrite.
-//       For Azure the deployment is specified in the URL path, not the
-//       body, so all requests already hit the same deployment regardless
-//       of what "model" field the body carries.  We optionally set
-//       body["model"] = deployment for cleanliness (see STEP 2 below).
+//     • POST /v1/chat/completions — the requested model id is used AS the
+//       Azure deployment name in the URL path, so selecting different models
+//       in VS Code hits different deployments (pass-through).  If the request
+//       arrives with model = utilityModelId (e.g. "copilot-utility-small"),
+//       or an id not in the configured allowlist, we LOG a rewrite and route
+//       it to the DEFAULT deployment instead (see STEP 2 below).
 //
-//   NOTE: a single Foundry deployment serves both the main AND utility
-//   slots in this simple sample.  In production you would configure two
-//   separate deployments (e.g. a large model for chat, a small/fast one
-//   for utility tasks) and route by model ID.
+//   NOTE: the default Foundry deployment serves the utility slot in this
+//   simple sample.  List your real deployments in Foundry:Deployments so the
+//   main slot can pass through to each of them.
 var utilityModelId       = builder.Configuration["Foundry:UtilityModelId"] ?? "copilot-utility-small";
 
 // ---------------------------------------------------------------------------
@@ -161,11 +182,13 @@ static string GetAzureResourceBase(string endpoint)
 var resourceBase = isConfigured ? GetAzureResourceBase(foundryEndpoint) : string.Empty;
 var targetHost   = isConfigured ? new Uri(resourceBase).Host : "(not configured)";
 
-// The full URL used for every chat completions request:
-//   {resourceBase}openai/deployments/{deployment}/chat/completions?api-version={apiVersion}
-var foundryRequestUri = isConfigured
-    ? $"{resourceBase}openai/deployments/{Uri.EscapeDataString(foundryDeployment)}/chat/completions?api-version={Uri.EscapeDataString(foundryApiVersion)}"
-    : string.Empty;
+// Build the Azure chat-completions URL for a SPECIFIC deployment.
+//   {resourceBase}openai/deployments/{deployment}/chat/completions?api-version=...
+// The deployment name goes in the URL PATH (that is how Azure selects the
+// model), so we compute this PER REQUEST from the resolved deployment — this
+// is exactly what lets one proxy serve many deployments.
+string BuildRequestUri(string deployment) =>
+    $"{resourceBase}openai/deployments/{Uri.EscapeDataString(deployment)}/chat/completions?api-version={Uri.EscapeDataString(foundryApiVersion)}";
 
 // Register a named HttpClient for forwarding requests to Azure OpenAI.
 //
@@ -256,43 +279,53 @@ app.MapGet("/health", () => new
 
 // --- 3b. Models list -------------------------------------------------------
 // VS Code and many OpenAI-compatible clients call GET /v1/models before
-// sending a chat request to confirm the model ID exists.  We return TWO
-// entries:
+// sending a chat request to confirm the model ID exists.  We return:
 //
-//   1. The Azure deployment name (e.g. gpt-4o-mini) — used for main chat.
+//   1. Every configured Azure deployment (Foundry:Deployments) — or the single
+//      default deployment if no list is configured — each of which can be
+//      selected in VS Code and is routed to the deployment of the same name.
 //   2. The utility alias (e.g. copilot-utility-small) — needed so VS Code
 //      accepts it as a valid BYOK candidate for the utility model slot.
 //
-// Both IDs route to the SAME underlying Azure deployment at inference time.
-// For Azure the deployment is in the URL path, so the body's "model" field
-// does not change which deployment is invoked.
+// The requested model id becomes the Azure deployment (URL path); the utility
+// alias / unknown ids are routed to the default deployment.
 app.MapGet("/v1/models", () =>
 {
-    var modelsResponse = new
+    var ids = new List<string>();
+
+    if (deploymentAllowlist.Count > 0)
+        ids.AddRange(configuredDeployments);
+
+    // Always include the default deployment so it is selectable too.
+    if (isConfigured && !ids.Any(x => string.Equals(x, foundryDeployment, StringComparison.OrdinalIgnoreCase)))
+        ids.Add(foundryDeployment);
+
+    if (ids.Count == 0)
+        ids.Add("not-configured");
+
+    var data = new List<object>();
+    foreach (var id in ids)
     {
-        @object = "list",
-        data = new object[]
+        data.Add(new
         {
-            new
-            {
-                id       = isConfigured ? foundryDeployment : "not-configured",
-                @object  = "model",
-                created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                owned_by = "azure-openai"
-            },
-            // Utility alias — same underlying Azure deployment, synthetic ID.
-            // VS Code needs to see this ID here so it trusts it as a valid
-            // BYOK model when the user sets chat.utilitySmallModel.
-            new
-            {
-                id       = utilityModelId,
-                @object  = "model",
-                created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                owned_by = "azure-openai"
-            }
-        }
-    };
-    return Results.Json(modelsResponse);
+            id,
+            @object  = "model",
+            created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            owned_by = "azure-openai"
+        });
+    }
+
+    // Utility alias — synthetic ID VS Code uses for the background utility slot.
+    // Not a real deployment; the POST handler routes it to the default deployment.
+    data.Add(new
+    {
+        id       = utilityModelId,
+        @object  = "model",
+        created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        owned_by = "azure-openai"
+    });
+
+    return Results.Json(new { @object = "list", data });
 });
 
 // --- 3c. Chat completions — THE CORE PROXY --------------------------------
@@ -344,23 +377,25 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     //  We parse the JSON body a SINGLE time and reuse the JsonObject for
     //  all three tasks, avoiding redundant deserialization overhead.
     //
-    //  --- THE MODEL FIELD FOR AZURE — an important nuance ---
+    //  --- ROUTING THE MODEL TO A DEPLOYMENT — the Azure nuance ---
     //
-    //  For Ollama the "model" field in the body tells Ollama WHICH model
-    //  to run — so OllamaProxy MUST rewrite it.
-    //
-    //  For Azure OpenAI the deployment is encoded in the URL path:
+    //  For Ollama the "model" field in the body tells Ollama WHICH model to
+    //  run.  For Azure OpenAI the DEPLOYMENT is encoded in the URL PATH:
     //    openai/deployments/{deployment}/chat/completions
-    //  Azure ignores the body "model" field entirely.  So even if Copilot's
-    //  agent surface sends model="copilot-utility-small", the request still
-    //  hits our chosen deployment.
+    //  Azure ignores the body "model" field entirely.
     //
-    //  We STILL log the rewrite so the audience can see the utility-slot
-    //  traffic, and we set body["model"] = deployment for cleanliness so
-    //  any logging or response inspection shows the real deployment name.
+    //  So to honor the model the user picked (parity with the Ollama sample)
+    //  we use the requested model id AS the deployment name when we build the
+    //  URL.  That is what lets ONE proxy serve MANY Foundry deployments:
+    //    • requested id is a real deployment → route to it (pass-through)
+    //    • utility alias / unknown id         → route to the default deployment
+    //  (see the deployment-resolution block below).  We also set
+    //  body["model"] = the resolved deployment for cleanliness so logs and
+    //  response inspection show the real deployment name.
     // ------------------------------------------------------------------
-    bool   isStreaming    = false;
-    string requestedModel = foundryDeployment;
+    bool   isStreaming        = false;
+    string requestedModel     = foundryDeployment;
+    string resolvedDeployment = foundryDeployment; // the Azure deployment we'll hit
 
     try
     {
@@ -382,28 +417,50 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             // Copilot Chat always sets this; plain curl tests often don't.
             isStreaming = jsonBody["stream"]?.GetValue<bool>() ?? false;
 
-            // ---- Handle model field ----
+            // ---- Resolve which Azure DEPLOYMENT to route to ----
+            //
+            //  Parity with the Ollama sample: honor the model the user picked.
+            //  For Azure, "honoring" it means using the requested id AS the
+            //  deployment name in the URL path (built below via BuildRequestUri).
+            //
+            //    • utility alias / empty                 → default deployment
+            //    • allowlist configured & id not in it   → default deployment
+            //    • otherwise                             → the requested id
             requestedModel = jsonBody["model"]?.GetValue<string>() ?? foundryDeployment;
 
             // Track whether we changed the body so we only re-serialize once.
             bool bodyModified = false;
 
-            if (!string.Equals(requestedModel, foundryDeployment, StringComparison.OrdinalIgnoreCase))
-            {
-                // The request arrived with a non-deployment model ID (e.g. the
-                // utility model alias "copilot-utility-small").
-                //
-                // KEY POINT FOR AZURE: the deployment is in the URL path, so
-                // this model ID has NO effect on which deployment is invoked.
-                // We log the rewrite to make the utility-slot traffic visible
-                // on stage, and we update the body field so logs/responses show
-                // the real deployment name.
-                logger.LogInformation(
-                    "[model rewrite] '{RequestedModel}' → deployment '{Deployment}' (Azure: deployment is in URL path, body model field is cosmetic)",
-                    requestedModel, foundryDeployment);
-                Console.WriteLine($"[model rewrite] '{requestedModel}' → deployment '{foundryDeployment}'");
+            bool isUtilityAlias = string.Equals(requestedModel, utilityModelId, StringComparison.OrdinalIgnoreCase);
+            bool notInAllowlist = deploymentAllowlist.Count > 0 && !deploymentAllowlist.Contains(requestedModel);
 
-                jsonBody["model"] = foundryDeployment;
+            if (string.IsNullOrWhiteSpace(requestedModel) || isUtilityAlias || notInAllowlist)
+            {
+                // Utility alias, empty, or an id we don't recognise → fall back
+                // to the default deployment so the utility slot keeps working
+                // and typos don't 404.  Log it so the traffic is visible on stage.
+                resolvedDeployment = foundryDeployment;
+                logger.LogInformation(
+                    "[model rewrite] '{RequestedModel}' → deployment '{Deployment}' (utility/unknown id — routed to the default deployment)",
+                    requestedModel, resolvedDeployment);
+                Console.WriteLine($"[model rewrite] '{requestedModel}' → deployment '{resolvedDeployment}'");
+            }
+            else
+            {
+                // Real deployment id → route straight to it.  This is what lets
+                // one proxy serve gpt-5.5, gpt-chat-latest, DeepSeek, etc.
+                resolvedDeployment = requestedModel;
+                logger.LogInformation(
+                    "[model passthrough] '{RequestedModel}' (routed to the Azure deployment of the same name)",
+                    requestedModel);
+                Console.WriteLine($"[model passthrough] '{requestedModel}'");
+            }
+
+            // Reflect the resolved deployment in the body for cleanliness (Azure
+            // ignores the body model, but logs/responses then show the truth).
+            if (!string.Equals(jsonBody["model"]?.GetValue<string>(), resolvedDeployment, StringComparison.Ordinal))
+            {
+                jsonBody["model"] = resolvedDeployment;
                 bodyModified = true;
             }
 
@@ -465,7 +522,8 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     // STEP 3: FORWARD TO AZURE OPENAI
     //
     //  We use the pre-configured "foundry" HttpClient (5-minute timeout).
-    //  The full target URL was computed at startup from the user secrets.
+    //  The target URL is computed PER REQUEST from the resolved deployment
+    //  (BuildRequestUri) — that is how one proxy serves many deployments.
     //
     //  AUTH: Azure OpenAI uses the "api-key" request header.
     //  This is NOT a Bearer token — do NOT use "Authorization: Bearer ...".
@@ -476,6 +534,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     //  in STEP 2.  Never re-read request.Body (it was consumed in STEP 1).
     // ------------------------------------------------------------------
     var httpClient = clientFactory.CreateClient("foundry");
+    var foundryRequestUri = BuildRequestUri(resolvedDeployment);
 
     using var foundryRequest = new HttpRequestMessage(HttpMethod.Post, foundryRequestUri)
     {
