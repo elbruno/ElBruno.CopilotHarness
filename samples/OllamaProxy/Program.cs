@@ -30,8 +30,35 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Read Ollama settings from appsettings.json (or environment overrides).
 // Defaults are safe for a stock Ollama installation.
-var ollamaBaseUrl = builder.Configuration["Ollama:BaseUrl"] ?? "http://localhost:11434";
-var defaultModel  = builder.Configuration["Ollama:DefaultModel"] ?? "llama3.1:8b";
+var ollamaBaseUrl  = builder.Configuration["Ollama:BaseUrl"]        ?? "http://localhost:11434";
+var defaultModel   = builder.Configuration["Ollama:DefaultModel"]   ?? "llama3.1:8b";
+
+// WHY A UTILITY MODEL ID?
+//   GitHub Copilot's AGENT surface (the "Describe what to build" input in
+//   VS Code) uses TWO separate model "slots" at the same time:
+//
+//     1. MAIN model   — the model the user selected in the model picker
+//                       (e.g. llama3.1:8b).  Handles the user's chat turns.
+//     2. UTILITY model — a lightweight background model VS Code uses for
+//                        small, fast tasks: generating chat titles, producing
+//                        commit-message suggestions, rename hints, etc.
+//
+//   When the main model is a BYOK custom endpoint, VS Code loses access to
+//   its built-in GitHub-hosted utility models (you're offline / private).
+//   It then looks for a BYOK-registered model to fill the utility slot.
+//   If none is registered the agent surface shows:
+//
+//     "No utility model is configured for 'copilot-utility-small'
+//      while the selected main model is BYOK."
+//
+//   FIX (this proxy's approach):
+//     • GET  /v1/models  — advertises BOTH the main model ID AND this
+//       utility ID so VS Code discovers a valid utility candidate.
+//     • POST /v1/chat/completions — if the request arrives with model =
+//       utilityModelId (e.g. "copilot-utility-small"), REWRITE it to
+//       defaultModel before forwarding.  Ollama only knows llama3.1:8b;
+//       it would 404 on any synthetic alias.
+var utilityModelId = builder.Configuration["Ollama:UtilityModelId"] ?? "copilot-utility-small";
 
 // Register a named HttpClient for forwarding requests to Ollama.
 //
@@ -60,25 +87,42 @@ var app = builder.Build();
 // --- 3a. Health / info endpoint -------------------------------------------
 // A quick "is it alive?" check.  Open http://localhost:5099/ in a browser
 // or run: curl http://localhost:5099/health
-app.MapGet("/",      () => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, ollamaUrl = ollamaBaseUrl });
-app.MapGet("/health",() => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, ollamaUrl = ollamaBaseUrl });
+app.MapGet("/",      () => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, utilityModel = utilityModelId, ollamaUrl = ollamaBaseUrl });
+app.MapGet("/health",() => new { status = "ok", proxy = "OllamaProxy", model = defaultModel, utilityModel = utilityModelId, ollamaUrl = ollamaBaseUrl });
 
 // --- 3b. Models list -------------------------------------------------------
 // VS Code and many OpenAI-compatible clients call GET /v1/models before
-// sending a chat request to confirm the model ID exists.  We return a minimal
-// static response containing the configured model so the probe succeeds.
+// sending a chat request to confirm the model ID exists.  We return TWO
+// entries:
+//
+//   1. The real Ollama model (e.g. llama3.1:8b) — used for main chat turns.
+//   2. The utility alias (e.g. copilot-utility-small) — needed so VS Code
+//      accepts it as a valid BYOK candidate for the utility model slot.
+//
+// Both IDs map to the SAME underlying Ollama model at inference time.
+// The POST endpoint rewrites any utility alias back to defaultModel.
 app.MapGet("/v1/models", () =>
 {
     var modelsResponse = new
     {
         @object = "list",
-        data = new[]
+        data = new object[]
         {
             new
             {
-                id      = defaultModel,
-                @object = "model",
-                created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                id       = defaultModel,
+                @object  = "model",
+                created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                owned_by = "ollama"
+            },
+            // Utility alias — same underlying model, synthetic ID.
+            // VS Code needs to see this ID here so it trusts it as a valid
+            // BYOK model when the user sets chat.utilitySmallModel.
+            new
+            {
+                id       = utilityModelId,
+                @object  = "model",
+                created  = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 owned_by = "ollama"
             }
         }
@@ -89,20 +133,22 @@ app.MapGet("/v1/models", () =>
 // --- 3c. Chat completions — THE CORE PROXY --------------------------------
 //
 //  This endpoint is what VS Code BYOK points to.  It:
-//   1. Reads and parses the incoming OpenAI-style request body.
-//   2. Uses CopilotMessageExtractor to pull out what the user actually typed
+//   1. Reads and parses the incoming OpenAI-style request body ONCE.
+//   2. REWRITES the "model" field if it is a utility alias — translating
+//      e.g. "copilot-utility-small" → "llama3.1:8b" before forwarding.
+//      Ollama would 404 on any unknown model ID, so this rewrite is essential
+//      for the agent surface to work when only one local model is running.
+//   3. Uses CopilotMessageExtractor to pull out what the user actually typed
 //      and logs it — this is the "observe the ask" teaching moment.
-//   3. Forwards the original (unmodified) request body to Ollama.
-//   4. Streams the SSE bytes back if the request is a streaming request,
+//   4. Forwards the (possibly rewritten) request body to Ollama.
+//   5. Streams the SSE bytes back if the request is a streaming request,
 //      otherwise returns the JSON response as-is.
-//
-//  Pure proxy + observe — we don't change the forwarded body at all.
 app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse response,
     IHttpClientFactory clientFactory, ILogger<Program> logger) =>
 {
     // ------------------------------------------------------------------
-    // STEP 1: Buffer the request body so we can (a) parse it for logging
-    //         and (b) forward it unchanged to Ollama.
+    // STEP 1: Buffer the request body so we can (a) parse it and
+    //         (b) forward the (possibly modified) body to Ollama.
     // ------------------------------------------------------------------
     string bodyText;
     using (var reader = new StreamReader(request.Body))
@@ -111,62 +157,92 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     }
 
     // ------------------------------------------------------------------
-    // STEP 2: OBSERVE THE ASK — extract and log what the user typed.
+    // STEP 2: PARSE ONCE — observe the ask, detect streaming, AND
+    //         rewrite the model field if needed.
     //
-    //  This is the key teaching moment.
-    //  CopilotMessageExtractor peels away the Copilot Chat XML envelope
-    //  (<attachments>, <context>, <userRequest>, etc.) so we see the
-    //  actual words, not kilobytes of boilerplate.
+    //  We parse the JSON body a SINGLE time and reuse the JsonObject for
+    //  all three tasks, avoiding redundant deserialization overhead.
     //
-    //  In a REAL harness (ElBruno.CopilotHarness) this is the spot where
-    //  you would:
-    //    • Route the request to a different model based on the ask
-    //    • Apply content policies or safety filters
-    //    • Record telemetry / cost-attribution per user/team
-    //    • Classify intent for smarter model selection
-    //  For this sample we ONLY log — no forwarded body is modified.
+    //  --- THE MODEL REWRITE — why it exists ---
+    //
+    //  Copilot's agent surface sends TWO distinct kinds of requests:
+    //
+    //    a) Main model turns  — model = "llama3.1:8b"
+    //       These are the user's actual chat messages.
+    //
+    //    b) Utility turns     — model = "copilot-utility-small"
+    //       Background tasks VS Code runs silently: generating a title for
+    //       the chat session, suggesting a commit message, producing rename
+    //       hints, etc.  The user never explicitly triggers these.
+    //
+    //  Ollama only has model (a) installed locally.  If we forward request
+    //  (b) unchanged, Ollama returns HTTP 404 "model not found" and the
+    //  agent surface surfaces the error:
+    //
+    //    "No utility model is configured for 'copilot-utility-small'
+    //     while the selected main model is BYOK."
+    //
+    //  Solution: detect any non-default model ID and silently remap it to
+    //  defaultModel before forwarding.  All IDs this proxy advertises via
+    //  GET /v1/models are just aliases — they all run on the same Ollama
+    //  model.  Ollama never sees the synthetic alias.
     // ------------------------------------------------------------------
+    bool   isStreaming    = false;
+    string requestedModel = defaultModel;
+
     try
     {
         var jsonBody = JsonNode.Parse(bodyText) as JsonObject;
         if (jsonBody is not null)
         {
+            // ---- Observe the ask ----
+            // CopilotMessageExtractor peels away the Copilot Chat XML
+            // envelope so we see only the words the user actually typed,
+            // not kilobytes of <attachments>/<context>/etc. boilerplate.
+            // In a REAL harness this extracted text drives routing, policy
+            // filters, cost attribution, and intent classification.
             var typedAsk = CopilotMessageExtractor.GetLastUserMessageText(jsonBody);
-            // Log to the console so the audience can see what Copilot asked:
             logger.LogInformation("[copilot ask] {TypedAsk}", typedAsk);
             Console.WriteLine($"[copilot ask] {typedAsk}");
+
+            // ---- Detect streaming ----
+            // OpenAI protocol: "stream": true → respond with SSE.
+            // Copilot Chat always sets this; plain curl tests often don't.
+            isStreaming = jsonBody["stream"]?.GetValue<bool>() ?? false;
+
+            // ---- Rewrite model ID ----
+            requestedModel = jsonBody["model"]?.GetValue<string>() ?? defaultModel;
+
+            if (!string.Equals(requestedModel, defaultModel, StringComparison.OrdinalIgnoreCase))
+            {
+                // The request arrived with a synthetic alias (e.g. the
+                // utility model ID).  Replace it with the real Ollama model
+                // so Ollama can handle it.  Log the rewrite so the audience
+                // can see exactly what the agent surface is doing.
+                logger.LogInformation(
+                    "[model rewrite] '{RequestedModel}' → '{DefaultModel}' (utility alias remapped to Ollama model)",
+                    requestedModel, defaultModel);
+                Console.WriteLine($"[model rewrite] '{requestedModel}' → '{defaultModel}'");
+
+                jsonBody["model"] = defaultModel;
+                bodyText = jsonBody.ToJsonString(); // forward the modified body
+            }
         }
     }
     catch (JsonException)
     {
-        // Malformed JSON — skip logging and let Ollama return the error.
+        // Malformed JSON — skip all parsing and let Ollama return the error.
     }
 
     // ------------------------------------------------------------------
-    // STEP 3: DETECT STREAMING
-    //
-    //  OpenAI protocol: if the request body contains "stream": true the
-    //  server must respond with Server-Sent Events (SSE) — a sequence of
-    //  "data: {...}\n\n" lines, terminated by "data: [DONE]\n\n".
-    //
-    //  Copilot Chat ALWAYS sets stream: true.  If we return a plain JSON
-    //  blob the editor will stall waiting for an SSE stream that never
-    //  starts.  So we MUST detect the flag and copy the SSE stream through.
-    // ------------------------------------------------------------------
-    bool isStreaming = false;
-    try
-    {
-        var peek = JsonNode.Parse(bodyText) as JsonObject;
-        isStreaming = peek?["stream"]?.GetValue<bool>() ?? false;
-    }
-    catch (JsonException) { /* non-fatal */ }
-
-    // ------------------------------------------------------------------
-    // STEP 4: FORWARD TO OLLAMA
+    // STEP 3: FORWARD TO OLLAMA
     //
     //  We use the pre-configured "ollama" HttpClient (5-minute timeout).
     //  The target is Ollama's OpenAI-compatible endpoint which mirrors the
     //  exact same /v1/chat/completions path and request/response shapes.
+    //
+    //  IMPORTANT: always use bodyText here — it may have been rewritten
+    //  in STEP 2.  Never re-read request.Body (it was consumed in STEP 1).
     // ------------------------------------------------------------------
     var httpClient = clientFactory.CreateClient("ollama");
     var ollamaUri  = "/v1/chat/completions"; // relative to the BaseAddress set above
@@ -202,7 +278,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     }
 
     // ------------------------------------------------------------------
-    // STEP 5: RELAY THE RESPONSE BACK TO THE CALLER
+    // STEP 4: RELAY THE RESPONSE BACK TO THE CALLER
     //
     //  Streaming path: copy the SSE byte-stream as it arrives so the
     //  caller (VS Code Copilot Chat) sees tokens appear in real time.

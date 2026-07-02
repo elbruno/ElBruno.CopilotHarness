@@ -98,11 +98,27 @@ Copilot custom model providers list:
         "vision": false,
         "maxInputTokens": 128000,
         "maxOutputTokens": 16000
+      },
+      {
+        "id": "copilot-utility-small",
+        "name": "Ollama utility (llama3.1:8b)",
+        "url": "http://localhost:5099/v1/chat/completions",
+        "toolCalling": false,
+        "vision": false,
+        "maxInputTokens": 128000,
+        "maxOutputTokens": 2048
       }
     ]
   }
 ]
 ```
+
+> **Why two model entries?**  
+> VS Code's agent surface uses a second "utility" model for background tasks
+> (chat titles, commit-message suggestions, rename hints).  When the main
+> model is BYOK, VS Code cannot use its built-in utility models and needs a
+> registered BYOK model to fill that slot.  See the Troubleshooting section
+> below for the full explanation.
 
 > **API key note:** Ollama doesn't use API keys for local access.  VS Code
 > may still prompt you to enter one.  Any non-empty string (e.g. `ollama-local`)
@@ -111,9 +127,126 @@ Copilot custom model providers list:
 After registering, open VS Code Copilot Chat, click the model picker, and
 select **llama3.1:8b** from the custom providers list.
 
+**For agent mode (the "Describe what to build" surface):** also add the
+following two lines to your VS Code `settings.json` so the utility slot is
+satisfied (see Troubleshooting for why):
+
+```json
+"chat.utilityModel":      "copilot-utility-small",
+"chat.utilitySmallModel": "copilot-utility-small"
+```
+
 ---
 
-## Incremental showcase script
+## Troubleshooting
+
+### "No utility model is configured for 'copilot-utility-small'"
+
+**What you saw (in the agent surface — the "Describe what to build" input):**
+
+```
+No utility model is configured for 'copilot-utility-small'
+while the selected main model is BYOK.
+```
+
+The reply was tagged `llama3.1:8b`, so the proxy round-trip works.  The error
+is about something else entirely.
+
+#### Why this happens
+
+VS Code Copilot's **agent surface** (CHAT / CODEX tabs) keeps **two model slots
+running at once**:
+
+| Slot | Purpose | ID it looks for |
+|---|---|---|
+| **Main model** | Your chat turns (what you type) | the model you picked (e.g. `llama3.1:8b`) |
+| **Utility model** | Background micro-tasks: chat title, commit message, rename hints | `copilot-utility-small` (internal ID) |
+
+When you use a built-in GitHub Copilot model, both slots are served by
+GitHub's infrastructure automatically.  
+When the main model is **BYOK** (a custom endpoint like this proxy), VS Code
+can no longer use its hosted utility models — you are effectively offline.
+It then looks for a **registered BYOK model** to fill the utility slot.  If
+none is found it surfaces the error above.
+
+> **Source:** VS Code BYOK blog post, June 2026:
+> *"Set `chat.utilityModel` and `chat.utilitySmallModel` to one of your BYOK
+> models to keep those features working."*  
+> — https://code.visualstudio.com/blogs/2026/06/18/byok-vscode
+
+---
+
+#### Fix A — Use Ask / Chat mode (quickest for single-model demos)
+
+Switch from the agent "build" surface to the regular **Ask** or **Chat** mode
+(the `@workspace` / inline chat / normal chat panel).  Those modes only use the
+main model and do not invoke the utility slot.
+
+**Limitation:** you lose multi-step agent workflows.
+
+---
+
+#### Fix B — Point VS Code's utility setting at a registered BYOK model
+
+Add these two lines to your VS Code `settings.json`
+(`Ctrl+Shift+P` → **Preferences: Open User Settings (JSON)**):
+
+```json
+"chat.utilityModel":      "copilot-utility-small",
+"chat.utilitySmallModel": "copilot-utility-small"
+```
+
+`copilot-utility-small` must be a model ID that is already registered in your
+`chatLanguageModels.json`.  The updated snippet in the **Register in VS Code**
+section above includes this entry — add it if you haven't already.
+
+**Why this works:** VS Code forwards utility requests to your proxy with
+`model: "copilot-utility-small"`.  The proxy sees the unknown ID and — because
+of Fix C below — silently rewrites it to `llama3.1:8b` before Ollama ever sees
+it.
+
+---
+
+#### Fix C — This proxy now serves the utility slot too *(default, no config needed)*
+
+Starting with this version the proxy automatically handles the two-model split:
+
+1. **`GET /v1/models`** lists *both* `llama3.1:8b` **and** `copilot-utility-small`
+   so VS Code accepts the utility alias as a valid BYOK candidate.
+
+2. **`POST /v1/chat/completions`** inspects the `"model"` field on every
+   incoming request.  If the model ID is not the real Ollama model, the proxy
+   rewrites it before forwarding:
+
+   ```
+   Copilot sends:  { "model": "copilot-utility-small", ... }
+   Proxy rewrites: { "model": "llama3.1:8b",           ... }  → Ollama
+   ```
+
+   You will see a `[model rewrite]` log line in the terminal for each utility
+   call so it is obvious what is happening on stage.
+
+3. The utility model ID is configurable via `appsettings.json`
+   (`Ollama:UtilityModelId`, default `copilot-utility-small`).  You can change
+   it without touching the code.
+
+**To use Fix C you still need Fix B** (the VS Code settings) — VS Code does
+not automatically discover utility models from `GET /v1/models`.  The two fixes
+work together: C makes the proxy handle any alias; B tells VS Code *which* alias
+to use.
+
+---
+
+**Demo-day checklist for full offline agent surface:**
+
+- [ ] `ollama pull llama3.1:8b` (model is downloaded)  
+- [ ] `dotnet run` in `samples\OllamaProxy` (proxy running on port 5099)  
+- [ ] `chatLanguageModels.json` has **both** model entries (main + utility)  
+- [ ] VS Code `settings.json` has `chat.utilitySmallModel: "copilot-utility-small"`  
+- [ ] Model picker → select **llama3.1:8b** → open agent surface → type "hi"  
+- [ ] Watch terminal: `[copilot ask]` for user turns + `[model rewrite]` for utility calls
+
+---
 
 Use this as a live presentation progression — each step is a small win that
 motivates building a real harness.
@@ -181,6 +314,7 @@ just one idea: start with a proxy, observe the ask — everything else follows.
 |---|---|---|
 | Ollama base URL | `http://localhost:11434` | `appsettings.json` → `Ollama.BaseUrl` or env `Ollama__BaseUrl` |
 | Default model | `llama3.1:8b` | `appsettings.json` → `Ollama.DefaultModel` or env `Ollama__DefaultModel` |
+| Utility model alias | `copilot-utility-small` | `appsettings.json` → `Ollama.UtilityModelId` or env `Ollama__UtilityModelId` |
 | Proxy port | **5099** | Change `app.Run(...)` in `Program.cs` |
 
 ---
