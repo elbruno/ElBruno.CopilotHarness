@@ -8,7 +8,7 @@
 ## Concept
 
 Earlier versions of the harness exposed three fixed routing **profiles** (`small`,
-`big`, `local`) that all shared a single Azure AI Foundry endpoint and API key. That
+`big`, `local`) that all shared a single Microsoft Foundry endpoint and API key. That
 model conflated *routing intent* with *connection details* and could only ever talk to
 one upstream service.
 
@@ -44,7 +44,7 @@ the default-model selector simply point at registry entries by `name`.
 - `modelName` is the Ollama model tag (e.g. `llama3.1:8b`).
 - Typical `endpoint`: `http://localhost:11434`.
 
-### Azure OpenAI / Azure AI Foundry (`type: azure-openai`)
+### Azure OpenAI / Microsoft Foundry (`type: azure-openai`)
 
 - Targets `{endpoint}/openai/deployments/{modelName}/chat/completions?api-version={apiVersion}`.
 - The `endpoint` should be the resource root (e.g. `https://<resource>.openai.azure.com`).

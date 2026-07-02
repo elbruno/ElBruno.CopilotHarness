@@ -33,8 +33,8 @@ aspire secret set AdminApiKey     "<any-password-you-choose>"
 
 | Parameter | What it is |
 |---|---|
-| `FoundryEndpoint` | Azure AI Foundry base URL (ends in `/openai/v1`) |
-| `FoundryApiKey` | Azure AI Foundry API key |
+| `FoundryEndpoint` | Microsoft Foundry base URL (ends in `/openai/v1`) |
+| `FoundryApiKey` | Microsoft Foundry API key |
 | `AdminApiKey` | A password **you invent** — protects the admin endpoints. Any string works. |
 
 ### Start

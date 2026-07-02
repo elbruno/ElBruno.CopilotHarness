@@ -18,7 +18,7 @@ semantic intent, admin UI — in a production-ready Aspire application.
 | Sample | Port | Description |
 |---|---|---|
 | [OllamaProxy](OllamaProxy/README.md) | 5099 | Minimal ASP.NET Core proxy that forwards VS Code Copilot Chat requests to a **local Ollama model** via the OpenAI-compatible API, with a `CopilotMessageExtractor` class that unwraps the Copilot Chat XML envelope to reveal what the user actually typed. |
-| [FoundryProxy](FoundryProxy/README.md) | 5100 | Minimal ASP.NET Core proxy that forwards VS Code Copilot Chat requests to an **Azure AI Foundry / Azure OpenAI** deployment. Uses **.NET User Secrets** for the endpoint, API key, and deployment name — credentials never touch the VS Code client or the repo. |
+| [FoundryProxy](FoundryProxy/README.md) | 5100 | Minimal ASP.NET Core proxy that forwards VS Code Copilot Chat requests to an **Microsoft Foundry / Azure OpenAI** deployment. Uses **.NET User Secrets** for the endpoint, API key, and deployment name — credentials never touch the VS Code client or the repo. |
 
 The two samples are **complementary**:
 

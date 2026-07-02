@@ -29,7 +29,7 @@ flowchart TB
     B["🔑 BYOK Configuration\nfor ElBruno.CopilotHarness"]
     C["🔀 ElBruno.CopilotHarness Router\n(launched with .NET Aspire)"]
     D["🧠 ElBruno.CopilotHarness Model Selector\n(rules engine + AI classifier)"]
-    E["⚡ Local LLM or Azure OpenAI\n(Ollama · Azure AI Foundry)"]
+    E["⚡ Local LLM or Azure OpenAI\n(Ollama · Microsoft Foundry)"]
 
     A --> B --> C --> D --> E
 ```
@@ -62,7 +62,7 @@ flowchart TB
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Aspire CLI](https://aspire.dev) — `dotnet tool install --global aspire`
 - A GitHub Copilot subscription
-- An Azure AI Foundry endpoint + API key (for upstream model calls)
+- An Microsoft Foundry endpoint + API key (for upstream model calls)
 
 ### 1 — Save your secrets (one-time setup)
 
@@ -79,8 +79,8 @@ aspire secret set AdminApiKey     "<any-password-you-choose>"
 
 | Parameter | What it is |
 |---|---|
-| `FoundryEndpoint` | Your Azure AI Foundry base URL (from the Azure portal, ends in `/openai/v1`) |
-| `FoundryApiKey` | Your Azure AI Foundry API key |
+| `FoundryEndpoint` | Your Microsoft Foundry base URL (from the Azure portal, ends in `/openai/v1`) |
+| `FoundryApiKey` | Your Microsoft Foundry API key |
 | `AdminApiKey` | A password **you create** — protects the admin API. Any string works (e.g. `my-local-admin-key`) |
 
 > **Tip:** `AdminApiKey` is not an external service key — it is a secret you invent to secure the harness admin endpoints. Set it to anything memorable.

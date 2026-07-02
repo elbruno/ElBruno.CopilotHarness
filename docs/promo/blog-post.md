@@ -67,7 +67,7 @@ There's also a **size-aware tool guard**: large agentic (tool-calling) payloads 
 Two model connections are seeded out of the box:
 
 - **`ollama llama3.1`** — `llama3.1:8b` running locally via Ollama. Free, private, fast for short prompts. Also the default AI classifier.
-- **`foundry gpt-5-mini`** — Azure AI Foundry / `gpt-5-mini`. Handles complex, large, or agentic requests.
+- **`foundry gpt-5-mini`** — Microsoft Foundry / `gpt-5-mini`. Handles complex, large, or agentic requests.
 
 You can register as many model connections as you need. Each connection has its own endpoint, API key (encrypted at rest via ASP.NET Core Data Protection), and capability flags (`supportsToolCalling`, `supportsCustomTemperature`). Rules reference models by name — changing the physical endpoint behind a name doesn't require touching any rule.
 
@@ -87,7 +87,7 @@ You can register as many model connections as you need. Each connection has its 
 
 ## Getting Started in Three Steps
 
-**Prerequisites:** .NET 10 SDK, Aspire CLI (`dotnet tool install --global aspire`), Ollama with `llama3.1:8b` pulled, a GitHub Copilot subscription, and an Azure AI Foundry endpoint.
+**Prerequisites:** .NET 10 SDK, Aspire CLI (`dotnet tool install --global aspire`), Ollama with `llama3.1:8b` pulled, a GitHub Copilot subscription, and an Microsoft Foundry endpoint.
 
 ```powershell
 # 1 — Set your secrets once

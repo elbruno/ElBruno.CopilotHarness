@@ -1,11 +1,11 @@
 // =============================================================================
-//  FoundryProxy — minimal OpenAI-compatible proxy for Azure AI Foundry /
+//  FoundryProxy — minimal OpenAI-compatible proxy for Microsoft Foundry /
 //                 Azure OpenAI.
 //
 //  PURPOSE (teaching sample)
 //  -------------------------
 //  This is intentionally the SMALLEST possible proxy that lets VS Code Copilot
-//  treat an Azure AI Foundry (Azure OpenAI) deployment as a BYOK (Bring Your
+//  treat an Microsoft Foundry (Azure OpenAI) deployment as a BYOK (Bring Your
 //  Own Key / Bring Your Own Model) provider.  Every line is commented so it
 //  can be read on stage.
 //

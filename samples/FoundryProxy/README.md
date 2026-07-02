@@ -1,7 +1,7 @@
-# FoundryProxy — Azure AI Foundry BYOK Proxy for VS Code Copilot
+# FoundryProxy — Microsoft Foundry BYOK Proxy for VS Code Copilot
 
 A **minimal, heavily-commented** ASP.NET Core Minimal API that proxies
-GitHub Copilot Chat requests to an **Azure AI Foundry** (Azure OpenAI) deployment
+GitHub Copilot Chat requests to an **Microsoft Foundry** (Azure OpenAI) deployment
 and exposes an OpenAI-compatible HTTP surface so VS Code can register it as a
 **BYOK (Bring Your Own Key / Bring Your Own Model)** provider.
 
@@ -29,7 +29,7 @@ client, the repo, or any config file that could be committed.
 
 | Requirement | Notes |
 |---|---|
-| [Azure AI Foundry](https://ai.azure.com) or [Azure OpenAI](https://portal.azure.com) resource | With at least one deployed model (e.g. `gpt-4o-mini`) |
+| [Microsoft Foundry](https://ai.azure.com) or [Azure OpenAI](https://portal.azure.com) resource | With at least one deployed model (e.g. `gpt-4o-mini`) |
 | Azure OpenAI Endpoint | `https://<resource-name>.openai.azure.com` (from the Azure portal) |
 | Azure OpenAI API Key | Primary or Secondary key from the Azure portal |
 | Deployment name | The name you gave the deployment (e.g. `gpt-4o-mini`) — **not** the base model name |
@@ -163,7 +163,7 @@ Copilot custom model providers list:
 ```json
 [
   {
-    "name": "Azure AI Foundry BYOK Proxy (sample)",
+    "name": "Microsoft Foundry BYOK Proxy (sample)",
     "vendor": "customendpoint",
     "apiKey": "vscode-provider-placeholder",
     "apiType": "chat-completions",
@@ -233,7 +233,7 @@ motivates building a real harness.
 ### Step 1 — BYOK to a cloud Foundry model with zero client change ✅ *(what this sample does)*
 
 Start the proxy and ask Copilot a question in VS Code.  Copilot answers using
-your **Azure AI Foundry** deployment:
+your **Microsoft Foundry** deployment:
 
 - ✅ Cloud model — GPT-4o-mini, GPT-4o, or any Azure OpenAI deployment  
 - ✅ Zero change to the VS Code client — just a model provider URL  

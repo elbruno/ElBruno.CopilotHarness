@@ -35,7 +35,7 @@ The README currently shows **7 screenshots** (excluding the BYOK JSON example):
 |---|---|
 | `aspire run` launches Router.Api + Admin.Web + Aspire dashboard | `AppHost.cs` — confirmed Router.Api, Admin.Web wired up |
 | Default local model: Ollama `llama3.1:8b` | `Model_Registry.md` seeded examples table |
-| Default cloud model: Azure AI Foundry `gpt-5-mini` | `Model_Registry.md` seeded examples table |
+| Default cloud model: Microsoft Foundry `gpt-5-mini` | `Model_Registry.md` seeded examples table |
 | BYOK custom endpoint: `http://localhost:5117/v1/chat/completions` | `README.md` step 5 |
 | Routing decisions logged with plain-language explanation | `Live_Routing.md` — "Why" field in feed |
 | AI classifier reads first ~200 chars of prompt | `Model_Registry.md` — Processor model section |
