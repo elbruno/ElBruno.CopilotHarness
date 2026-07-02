@@ -82,6 +82,13 @@ var foundryApiKey        = builder.Configuration["Foundry:ApiKey"]         ?? st
 var foundryDeployment    = builder.Configuration["Foundry:Deployment"]     ?? string.Empty;
 var foundryApiVersion    = builder.Configuration["Foundry:ApiVersion"]     ?? "2024-10-21";
 
+// Newer Foundry models (gpt-5.x, gpt-chat-latest, o-series) only accept the
+// default temperature/top_p of 1. When true (the default) we strip any other
+// value so Copilot's temperature: 0.1 doesn't trigger a 400. Set to false in
+// appsettings.json if you target an older model that honors custom sampling.
+var stripUnsupportedSamplingParams =
+    builder.Configuration.GetValue<bool?>("Foundry:StripUnsupportedSamplingParams") ?? true;
+
 // WHY A UTILITY MODEL ID?
 //   GitHub Copilot's AGENT surface (the "Describe what to build" input in
 //   VS Code) uses TWO separate model "slots" at the same time:
@@ -378,6 +385,9 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             // ---- Handle model field ----
             requestedModel = jsonBody["model"]?.GetValue<string>() ?? foundryDeployment;
 
+            // Track whether we changed the body so we only re-serialize once.
+            bool bodyModified = false;
+
             if (!string.Equals(requestedModel, foundryDeployment, StringComparison.OrdinalIgnoreCase))
             {
                 // The request arrived with a non-deployment model ID (e.g. the
@@ -394,6 +404,54 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
                 Console.WriteLine($"[model rewrite] '{requestedModel}' → deployment '{foundryDeployment}'");
 
                 jsonBody["model"] = foundryDeployment;
+                bodyModified = true;
+            }
+
+            // ---- Normalize unsupported sampling parameters ----
+            //
+            //  THE PROBLEM (seen live on stage):
+            //    Newer Foundry models — the gpt-5.x family, gpt-chat-latest,
+            //    the o-series, etc. — REJECT any custom "temperature" or
+            //    "top_p". They only accept the default value of 1 and return:
+            //      400 { "error": { "code": "unsupported_value",
+            //            "message": "Unsupported value: 'temperature' does not
+            //            support 0.1 with this model. Only the default (1) ..." }}
+            //
+            //  VS Code Copilot sends temperature: 0.1 on every request, so the
+            //  call fails before it ever reaches the model.
+            //
+            //  THE FIX:
+            //    Strip these fields when they are not the default. The model
+            //    then applies its own default (1) and the request succeeds.
+            //    The main router does the same thing behind its per-model
+            //    "SupportsCustomTemperature" flag; here we keep it simple and
+            //    always drop non-default values.
+            //
+            //    If you point this sample at an older model that DOES honor a
+            //    custom temperature, flip StripUnsupportedSamplingParams to
+            //    false in appsettings.json to forward the values untouched.
+            if (stripUnsupportedSamplingParams)
+            {
+                foreach (var param in new[] { "temperature", "top_p" })
+                {
+                    // TryGetValue guards against a missing field or a non-numeric
+                    // token — we only act on a real number that isn't the default.
+                    if (jsonBody[param] is JsonValue node &&
+                        node.TryGetValue<double>(out var value) &&
+                        value != 1.0)
+                    {
+                        logger.LogInformation(
+                            "[param strip] removed '{Param}'={Value} (this model only accepts the default of 1)",
+                            param, value);
+                        Console.WriteLine($"[param strip] removed '{param}'={value}");
+                        jsonBody.Remove(param);
+                        bodyModified = true;
+                    }
+                }
+            }
+
+            if (bodyModified)
+            {
                 bodyText = jsonBody.ToJsonString(); // forward the updated body
             }
         }
