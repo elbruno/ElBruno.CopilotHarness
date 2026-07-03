@@ -1,24 +1,60 @@
 {
   "_instructions": [
-    "Copy the settings below into your VS Code user settings.json.",
-    "Open it with: Command Palette (Ctrl+Shift+P) → Preferences: Open User Settings (JSON)",
-    "Then run: cd samples/FoundryLocalProxy && dotnet run",
-    "Then in VS Code Copilot Chat use: @harness-general <your task>"
+    "Add ALL blocks below to your VS Code user settings.json.",
+    "Open it: Command Palette (Ctrl+Shift+P) → Preferences: Open User Settings (JSON)",
+    "",
+    "STEP 1 — run the proxy (downloads phi-4-mini ~2.5GB on first run):",
+    "  cd samples/FoundryLocalProxy && dotnet run",
+    "",
+    "STEP 2 — add the settings below to settings.json, then reload VS Code.",
+    "",
+    "Why two blocks?",
+    "  chatLanguageModels  → used by agent .md files (@harness-* sub-agents via vscode.lm API)",
+    "  github.copilot.*    → used by Copilot Chat Ask mode AND Agent mode"
   ],
 
+  "_block1_chatLanguageModels_comment": "Add this to chatLanguageModels.json (or your provider list)",
+  "_block1_example": {
+    "name": "FoundryLocalProxy",
+    "vendor": "customendpoint",
+    "apiKey": "none",
+    "apiType": "chat-completions",
+    "models": [
+      {
+        "id": "phi-4-mini",
+        "name": "Phi-4 Mini (Foundry Local)",
+        "url": "http://localhost:5101/v1/chat/completions",
+        "modelListUrl": "http://localhost:5101/v1/models",
+        "toolCalling": true,
+        "vision": false,
+        "maxInputTokens": 128000,
+        "maxOutputTokens": 2048
+      },
+      {
+        "id": "copilot-utility-small",
+        "name": "Phi-4 Mini Utility (Foundry Local)",
+        "url": "http://localhost:5101/v1/chat/completions",
+        "modelListUrl": "http://localhost:5101/v1/models",
+        "toolCalling": true,
+        "vision": false,
+        "maxInputTokens": 128000,
+        "maxOutputTokens": 2048
+      }
+    ]
+  },
+
+  "_block2_settings_json_comment": "Add this to your VS Code settings.json (required for Agent mode)",
   "github.copilot.chat.customModels": [
     {
       "id": "phi-4-mini",
       "name": "Phi-4 Mini (Foundry Local)",
       "url": "http://localhost:5101/v1/chat/completions",
-      "modelListUrl": "http://localhost:5101/v1/models",
       "authType": "none"
     },
     {
       "id": "copilot-utility-small",
       "name": "Phi-4 Mini Utility (Foundry Local)",
       "url": "http://localhost:5101/v1/chat/completions",
-      "modelListUrl": "http://localhost:5101/v1/models",
       "authType": "none"
     }
   ],
