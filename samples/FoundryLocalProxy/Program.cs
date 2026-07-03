@@ -105,6 +105,27 @@ builder.Services.AddHttpClient("foundrylocal", client =>
 var app = builder.Build();
 var logger = app.Logger;
 
+// DEBUG MIDDLEWARE — logs every incoming request (headers + body snapshot).
+// Helps diagnose VS Code BYOK format issues. Remove in production.
+app.Use(async (ctx, next) =>
+{
+    ctx.Request.EnableBuffering();
+    var headers = string.Join(" | ", ctx.Request.Headers.Select(h => $"{h.Key}: {h.Value}"));
+    string bodySnippet = "";
+    if (ctx.Request.ContentLength > 0)
+    {
+        using var sr = new StreamReader(ctx.Request.Body, leaveOpen: true);
+        var raw = await sr.ReadToEndAsync();
+        bodySnippet = raw.Length > 300 ? raw[..300] + "…" : raw;
+        ctx.Request.Body.Position = 0;
+    }
+    Console.WriteLine($"\n[DEBUG] {ctx.Request.Method} {ctx.Request.Path}");
+    Console.WriteLine($"[DEBUG] Headers: {headers}");
+    if (!string.IsNullOrEmpty(bodySnippet))
+        Console.WriteLine($"[DEBUG] Body: {bodySnippet}");
+    await next();
+});
+
 // ---------------------------------------------------------------------------
 // 2b. INITIALISE THE FOUNDRY LOCAL SDK
 //
@@ -382,21 +403,113 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
         return;
     }
 
-    // STEP 4: Relay the response — stream SSE bytes or return full JSON.
+    // STEP 4: Relay the response — rewrite SSE chunks or return full JSON.
     response.StatusCode = (int)fwdResponse.StatusCode;
 
     if (isStreaming)
     {
         response.ContentType = "text/event-stream; charset=utf-8";
-        response.Headers["Cache-Control"]      = "no-cache";
-        response.Headers["X-Accel-Buffering"]  = "no";
-        await using var stream = await fwdResponse.Content.ReadAsStreamAsync();
-        await stream.CopyToAsync(response.Body);
+        response.Headers["Cache-Control"]     = "no-cache";
+        response.Headers["X-Accel-Buffering"] = "no";
+
+        // The Foundry Local SDK emits non-standard fields in every chunk:
+        //   • model:         canonical id (e.g. "Phi-4-mini-instruct-cuda-gpu:5") — VS Code
+        //                    validates this must match the requested id ("phi-4-mini")
+        //   • IsDelta, Successful, HttpStatusCode, CreatedAt — non-standard extras
+        //   • choices[].message alongside choices[].delta — non-standard
+        //   • choices[].delta.tool_calls:[] — VS Code treats this as a tool call event
+        //   • duplicate data:[DONE] — SDK sometimes sends [DONE] twice, confusing VS Code
+        //
+        // We parse each SSE line and emit a clean standard OpenAI chunk instead.
+        await using var sdkStream = await fwdResponse.Content.ReadAsStreamAsync();
+        using var reader = new System.IO.StreamReader(sdkStream);
+        bool doneSent = false;
+        string? line;
+        var enc = System.Text.Encoding.UTF8;
+
+        while ((line = await reader.ReadLineAsync()) is not null)
+        {
+            if (line.StartsWith("data: [DONE]", StringComparison.Ordinal))
+            {
+                if (!doneSent)
+                {
+                    await response.Body.WriteAsync(enc.GetBytes("data: [DONE]\n\n"));
+                    await response.Body.FlushAsync();
+                    doneSent = true;
+                }
+                continue; // skip duplicate [DONE]
+            }
+
+            if (!line.StartsWith("data: ", StringComparison.Ordinal) || doneSent)
+                continue; // skip blank lines, comments, and anything after [DONE]
+
+            var json = line[6..]; // strip "data: "
+            try
+            {
+                var node = JsonNode.Parse(json) as JsonObject;
+                if (node is null) continue;
+
+                // Fix model: use the alias the client requested, not the canonical SDK id.
+                node["model"] = requestedModel;
+
+                // Clean each choice: remove non-standard fields.
+                if (node["choices"] is JsonArray choices)
+                {
+                    foreach (var choice in choices)
+                    {
+                        if (choice is not JsonObject c) continue;
+                        c.Remove("message");      // non-standard; only "delta" belongs here
+                        if (c["delta"] is JsonObject delta)
+                        {
+                            // Remove empty tool_calls array — VS Code treats [] as a tool event.
+                            if (delta["tool_calls"] is JsonArray tc && tc.Count == 0)
+                                delta.Remove("tool_calls");
+                        }
+                    }
+                }
+
+                // Remove non-standard top-level fields.
+                node.Remove("IsDelta");
+                node.Remove("Successful");
+                node.Remove("HttpStatusCode");
+                node.Remove("CreatedAt");
+
+                // Ensure required fields are present.
+                if (node["object"] is null) node["object"] = "chat.completion.chunk";
+
+                // Skip SDK artifact: empty choices chunks carry no useful data.
+                if (node["choices"] is JsonArray ch && ch.Count == 0) continue;
+
+                var outLine = $"data: {node.ToJsonString()}\n\n";
+                await response.Body.WriteAsync(enc.GetBytes(outLine));
+                await response.Body.FlushAsync();
+            }
+            catch (JsonException)
+            {
+                // Unparseable line — forward as-is (safe fallback).
+                await response.Body.WriteAsync(enc.GetBytes($"{line}\n\n"));
+                await response.Body.FlushAsync();
+            }
+        }
+
+        if (!doneSent)
+        {
+            await response.Body.WriteAsync(enc.GetBytes("data: [DONE]\n\n"));
+            await response.Body.FlushAsync();
+        }
     }
     else
     {
         response.ContentType = "application/json; charset=utf-8";
-        await response.WriteAsync(await fwdResponse.Content.ReadAsStringAsync());
+        var rawJson = await fwdResponse.Content.ReadAsStringAsync();
+        // Fix model name in non-streaming response too.
+        try
+        {
+            var node = JsonNode.Parse(rawJson) as JsonObject;
+            if (node is not null) { node["model"] = requestedModel; rawJson = node.ToJsonString(); }
+        }
+        catch (JsonException) { /* leave as-is */ }
+        await response.WriteAsync(rawJson);
     }
 });
 
