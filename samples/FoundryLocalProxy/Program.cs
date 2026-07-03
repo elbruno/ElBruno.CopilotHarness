@@ -1,0 +1,387 @@
+// =============================================================================
+//  FoundryLocalProxy — minimal OpenAI-compatible proxy for Microsoft Foundry Local.
+//
+//  PURPOSE (teaching sample)
+//  -------------------------
+//  This is intentionally the SMALLEST possible proxy that lets VS Code Copilot
+//  treat a local Microsoft Foundry Local model as a BYOK (Bring Your Own Key /
+//  Bring Your Own Model) provider.  Every line is commented so it can be read
+//  on stage.
+//
+//  WHAT IS FOUNDRY LOCAL?
+//  ----------------------
+//  Microsoft Foundry Local (https://github.com/microsoft/Foundry-Local) is a
+//  free, offline model runtime that runs Phi, Llama, Mistral, Qwen, and other
+//  open-weight models directly on your CPU, GPU, or NPU — no Azure account,
+//  no internet connection, no per-token cost.
+//
+//  HOW DOES MODEL DOWNLOAD WORK?
+//  ------------------------------
+//  This proxy uses the official Foundry Local C# SDK (Microsoft.AI.Foundry.Local).
+//  The SDK handles EVERYTHING — daemon, model downloads, hardware optimisation,
+//  and an internal OpenAI-compatible REST server — with NO CLI required.
+//
+//  At startup the proxy:
+//    1. Initialises the SDK (starts the Foundry Local daemon if needed).
+//    2. Downloads GPU/NPU execution providers for optimal hardware use.
+//    3. Downloads the DefaultModel if not already in the local cache
+//       (phi-4-mini ≈ 2.5 GB on first run; instant on subsequent runs).
+//    4. Loads the model into memory and starts the SDK's internal REST server.
+//    5. Discovers which models are now loaded and builds the allowlist.
+//    6. Starts accepting VS Code BYOK requests on port 5101.
+//
+//  The SDK's DownloadAsync() SKIPS the download if the model is already cached,
+//  so subsequent proxy starts are near-instant.
+//
+//  ARCHITECTURE
+//  ------------
+//  VS Code Copilot → FoundryLocalProxy :5101 → SDK REST server :55588 → phi-4-mini
+//
+//  The proxy layer exists because:
+//    • VS Code BYOK needs a stable, known port (5101).
+//    • The proxy adds Copilot-specific logging ([copilot ask]).
+//    • The proxy handles the utility model alias rewrite.
+//    • The proxy is the BYOK teaching artefact — the SDK is the engine.
+//
+//  ADDITIONAL MODELS
+//  -----------------
+//  Set FoundryLocal:AdditionalModels in appsettings.json to load more models.
+//  All loaded models become selectable in VS Code via this one proxy endpoint.
+//  The SDK automatically picks the best hardware variant for each.
+//
+//  PRE-REQUISITES
+//  --------------
+//  None beyond .NET 10!  The SDK takes care of everything else.
+//  On first run you need an internet connection to download the model weights.
+//  After that the proxy works fully offline.
+//
+//  FIXED PORT: http://localhost:5101
+//  OllamaProxy uses 5099, FoundryProxy uses 5100 — all three can run together.
+// =============================================================================
+
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using FoundryLocalProxy;
+using Microsoft.AI.Foundry.Local;
+
+// ---------------------------------------------------------------------------
+// 1. BUILDER — wire up services before building the app
+// ---------------------------------------------------------------------------
+var builder = WebApplication.CreateBuilder(args);
+
+// Read settings from appsettings.json (or environment overrides).
+var defaultModelAlias = builder.Configuration["FoundryLocal:DefaultModel"] ?? "phi-4-mini";
+
+var additionalModels = builder.Configuration
+    .GetSection("FoundryLocal:AdditionalModels")
+    .Get<string[]>() ?? Array.Empty<string>();
+
+var internalPort = builder.Configuration.GetValue<int?>("FoundryLocal:InternalPort") ?? 55588;
+var internalBaseUrl = $"http://127.0.0.1:{internalPort}";
+
+var downloadEps = builder.Configuration.GetValue<bool?>("FoundryLocal:DownloadExecutionProviders") ?? true;
+
+// WHY A UTILITY MODEL ID?
+//   GitHub Copilot's AGENT surface uses TWO model slots simultaneously:
+//     1. MAIN model   — the model the user selected in the picker (phi-4-mini).
+//     2. UTILITY model — a lightweight background model for titles, commit
+//                        messages, rename hints, etc.
+//   When the main model is BYOK, VS Code needs a registered BYOK model for the
+//   utility slot too. We advertise this synthetic alias from GET /v1/models and
+//   remap it to defaultModelAlias on the POST path.
+var utilityModelId = builder.Configuration["FoundryLocal:UtilityModelId"] ?? "copilot-utility-small";
+
+// Register a named HttpClient for forwarding requests to the SDK's REST server.
+// Long timeout: LLM responses (especially non-streaming) can exceed 100 seconds.
+builder.Services.AddHttpClient("foundrylocal", client =>
+{
+    client.BaseAddress = new Uri(internalBaseUrl);
+    client.Timeout = TimeSpan.FromMinutes(5);
+});
+
+// ---------------------------------------------------------------------------
+// 2. BUILD THE APP
+// ---------------------------------------------------------------------------
+var app = builder.Build();
+var logger = app.Logger;
+
+// ---------------------------------------------------------------------------
+// 2b. INITIALISE THE FOUNDRY LOCAL SDK
+//
+//  The SDK handles the entire lifecycle:
+//    • Starts the Foundry Local daemon process if it isn't already running.
+//    • Downloads execution providers (GPU/NPU ONNX Runtime extensions)
+//      so the model runs on the best available hardware.
+//    • Downloads model weights on first use; reuses the local cache thereafter.
+//    • Starts an internal OpenAI-compatible REST server at internalBaseUrl.
+//
+//  FoundryLocalManager is a SINGLETON — CreateAsync must be called ONCE.
+// ---------------------------------------------------------------------------
+logger.LogInformation("Initialising Foundry Local SDK (daemon + model: {Model})...", defaultModelAlias);
+
+var sdkConfig = new Configuration
+{
+    AppName   = "FoundryLocalProxy",
+    LogLevel  = Microsoft.AI.Foundry.Local.LogLevel.Warning, // keep noise low
+    Web       = new Configuration.WebService { Urls = internalBaseUrl }
+};
+
+await FoundryLocalManager.CreateAsync(sdkConfig, logger);
+var mgr = FoundryLocalManager.Instance;
+
+// ---------------------------------------------------------------------------
+// 2c. DOWNLOAD EXECUTION PROVIDERS (GPU / NPU drivers)
+//
+//  Execution providers are the ONNX Runtime extensions that give Foundry Local
+//  access to hardware accelerators: CUDA (NVIDIA), QNN (Qualcomm NPU),
+//  Vitis (AMD NPU), OpenVINO (Intel), TensorRT, etc.
+//
+//  WHY DOWNLOAD THEM?
+//    Without the right EP, the model falls back to CPU, which is 3–10× slower.
+//    The SDK detects the current hardware and only downloads what is relevant —
+//    on a machine with no GPU the call completes in seconds.
+//
+//  The download is CACHED locally after the first run.
+// ---------------------------------------------------------------------------
+if (downloadEps)
+{
+    logger.LogInformation("Downloading execution providers for hardware acceleration...");
+    var currentEp = "";
+    await mgr.DownloadAndRegisterEpsAsync((epName, percent) =>
+    {
+        if (epName != currentEp)
+        {
+            if (currentEp != "") Console.WriteLine();
+            currentEp = epName;
+        }
+        Console.Write($"\r  [EP] {epName,-35} {percent,5:F0}%");
+    });
+    if (currentEp != "") Console.WriteLine();
+    logger.LogInformation("Execution providers ready.");
+}
+
+// ---------------------------------------------------------------------------
+// 2d. DOWNLOAD AND LOAD MODELS
+//
+//  For each configured model (DefaultModel + AdditionalModels):
+//    1. Look up the model by alias in the Foundry Local model catalog.
+//    2. Call DownloadAsync() — this SKIPS the download if the model weights
+//       are already in the local cache (~%USERPROFILE%/.foundry/cache).
+//    3. Call LoadAsync() — loads the weights into memory for inference.
+//
+//  On first run the download may take several minutes (phi-4-mini ≈ 2.5 GB).
+//  All subsequent starts are near-instant because the cache is reused.
+//
+//  The SDK automatically selects the best hardware-optimised model variant
+//  (e.g., GPU-quantised vs CPU-quantised) based on the current device.
+// ---------------------------------------------------------------------------
+var catalog = await mgr.GetCatalogAsync();
+
+// Collect all model aliases to load: DefaultModel first, then AdditionalModels.
+var allAliases = new List<string> { defaultModelAlias };
+allAliases.AddRange(additionalModels.Where(m => !string.IsNullOrWhiteSpace(m) && m != defaultModelAlias));
+
+var loadedModels = new List<string>();
+
+foreach (var alias in allAliases)
+{
+    var model = await catalog.GetModelAsync(alias);
+    if (model is null)
+    {
+        logger.LogWarning("Model '{Alias}' not found in the Foundry Local catalog. Skipping. " +
+                          "Run `foundry model list` to see available aliases.", alias);
+        continue;
+    }
+
+    // DownloadAsync skips the download if the model is already cached locally.
+    logger.LogInformation("Preparing model '{Alias}' (downloading if not cached)...", alias);
+    var downloadingLabel = alias;
+    await model.DownloadAsync(progress =>
+    {
+        Console.Write($"\r  [download] {downloadingLabel,-35} {progress,5:F0}%");
+        if (progress >= 100f) Console.WriteLine();
+    });
+
+    logger.LogInformation("Loading model '{Alias}' into memory...", alias);
+    await model.LoadAsync();
+    loadedModels.Add(model.Id); // model.Id is the canonical id (may differ from alias)
+    logger.LogInformation("Model '{Alias}' ready (id: {Id}).", alias, model.Id);
+}
+
+// ---------------------------------------------------------------------------
+// 2e. START THE SDK'S INTERNAL REST SERVER
+//
+//  The SDK starts an OpenAI-compatible REST server at internalBaseUrl.
+//  Our proxy (on port 5101) forwards VS Code BYOK requests to this server.
+//  The server stays up for the lifetime of the proxy process.
+// ---------------------------------------------------------------------------
+logger.LogInformation("Starting Foundry Local internal REST server on {Url}...", internalBaseUrl);
+await mgr.StartWebServiceAsync();
+logger.LogInformation("Internal REST server ready.");
+
+// Case-insensitive set for fast pass-through checks on the request hot path.
+var loadedModelSet = new HashSet<string>(loadedModels, StringComparer.OrdinalIgnoreCase);
+var defaultModel   = loadedModels.FirstOrDefault() ?? defaultModelAlias;
+
+logger.LogInformation(
+    "Proxy ready. Loaded models: {Models}. Fallback: {Default}",
+    loadedModels.Count > 0 ? string.Join(", ", loadedModels) : "(none)",
+    defaultModel);
+
+// ---------------------------------------------------------------------------
+// 2f. GRACEFUL SHUTDOWN — stop the REST server when the proxy exits
+// ---------------------------------------------------------------------------
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    logger.LogInformation("Stopping Foundry Local internal REST server...");
+    mgr.StopWebServiceAsync().GetAwaiter().GetResult();
+    logger.LogInformation("Foundry Local REST server stopped.");
+});
+
+// ---------------------------------------------------------------------------
+// 3. ENDPOINTS
+// ---------------------------------------------------------------------------
+
+// --- 3a. Health / info endpoint -------------------------------------------
+app.MapGet("/", () => new
+{
+    status       = "ok",
+    proxy        = "FoundryLocalProxy",
+    model        = defaultModel,
+    utilityModel = utilityModelId,
+    loadedModels,
+    internalRestServer = internalBaseUrl
+});
+app.MapGet("/health", () => new
+{
+    status       = "ok",
+    proxy        = "FoundryLocalProxy",
+    model        = defaultModel,
+    utilityModel = utilityModelId,
+    loadedModels,
+    internalRestServer = internalBaseUrl
+});
+
+// --- 3b. Models list -------------------------------------------------------
+// VS Code calls GET /v1/models to confirm model IDs before sending chat requests.
+// We return every loaded model plus the synthetic utility alias.
+app.MapGet("/v1/models", () =>
+{
+    var data = new List<object>();
+
+    var advertised = loadedModelSet.Count > 0
+        ? (IEnumerable<string>)loadedModels
+        : new[] { defaultModel };
+
+    foreach (var id in advertised)
+    {
+        data.Add(new { id, @object = "model", created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), owned_by = "foundry-local" });
+    }
+
+    // Utility alias — remapped to defaultModel by the POST handler.
+    data.Add(new { id = utilityModelId, @object = "model", created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), owned_by = "foundry-local" });
+
+    return Results.Json(new { @object = "list", data });
+});
+
+// --- 3c. Chat completions — THE CORE PROXY --------------------------------
+//
+//  Receives VS Code BYOK requests and forwards them to the SDK's internal
+//  REST server.  Handles:
+//    • Model pass-through: loaded model ids are forwarded unchanged.
+//    • Utility alias rewrite: "copilot-utility-small" → defaultModel.
+//    • Streaming: SSE bytes piped through in real time.
+//    • [copilot ask] logging: unwraps the Copilot Chat XML envelope.
+app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse response,
+    IHttpClientFactory clientFactory, ILogger<Program> reqLogger) =>
+{
+    // STEP 1: Buffer the body (consumed once; possibly rewritten before forwarding).
+    string bodyText;
+    using (var reader = new StreamReader(request.Body))
+        bodyText = await reader.ReadToEndAsync();
+
+    // STEP 2: Parse, log the ask, detect streaming, rewrite model if needed.
+    bool isStreaming     = false;
+    string requestedModel = defaultModel;
+
+    try
+    {
+        var jsonBody = JsonNode.Parse(bodyText) as JsonObject;
+        if (jsonBody is not null)
+        {
+            // Log what the user actually typed (unwrap Copilot Chat XML envelope).
+            var typedAsk = CopilotMessageExtractor.GetLastUserMessageText(jsonBody);
+            reqLogger.LogInformation("[copilot ask] {TypedAsk}", typedAsk);
+            Console.WriteLine($"[copilot ask] {typedAsk}");
+
+            isStreaming    = jsonBody["stream"]?.GetValue<bool>() ?? false;
+            requestedModel = jsonBody["model"]?.GetValue<string>() ?? defaultModel;
+
+            if (loadedModelSet.Contains(requestedModel))
+            {
+                // Known loaded model — pass through unchanged.
+                Console.WriteLine($"[model passthrough] '{requestedModel}'");
+            }
+            else
+            {
+                // Utility alias or unknown id — remap to a real loaded model.
+                Console.WriteLine($"[model rewrite] '{requestedModel}' → '{defaultModel}'");
+                jsonBody["model"] = defaultModel;
+                bodyText = jsonBody.ToJsonString();
+            }
+        }
+    }
+    catch (JsonException) { /* malformed JSON — let the SDK return the error */ }
+
+    // STEP 3: Forward to the SDK's internal REST server.
+    var httpClient = clientFactory.CreateClient("foundrylocal");
+
+    using var fwdRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
+    {
+        Content = new StringContent(bodyText, System.Text.Encoding.UTF8, "application/json")
+    };
+
+    var completionOption = isStreaming
+        ? HttpCompletionOption.ResponseHeadersRead
+        : HttpCompletionOption.ResponseContentRead;
+
+    HttpResponseMessage fwdResponse;
+    try
+    {
+        fwdResponse = await httpClient.SendAsync(fwdRequest, completionOption);
+    }
+    catch (TaskCanceledException)
+    {
+        response.StatusCode = 504;
+        await response.WriteAsync("{\"error\":\"Foundry Local request timed out after 5 minutes.\"}");
+        return;
+    }
+    catch (HttpRequestException ex)
+    {
+        response.StatusCode = 502;
+        await response.WriteAsync($"{{\"error\":\"Could not reach Foundry Local internal server at {internalBaseUrl}: {ex.Message}\"}}");
+        return;
+    }
+
+    // STEP 4: Relay the response — stream SSE bytes or return full JSON.
+    response.StatusCode = (int)fwdResponse.StatusCode;
+
+    if (isStreaming)
+    {
+        response.ContentType = "text/event-stream; charset=utf-8";
+        response.Headers["Cache-Control"]      = "no-cache";
+        response.Headers["X-Accel-Buffering"]  = "no";
+        await using var stream = await fwdResponse.Content.ReadAsStreamAsync();
+        await stream.CopyToAsync(response.Body);
+    }
+    else
+    {
+        response.ContentType = "application/json; charset=utf-8";
+        await response.WriteAsync(await fwdResponse.Content.ReadAsStringAsync());
+    }
+});
+
+// ---------------------------------------------------------------------------
+// 4. RUN ON THE FIXED PORT
+// ---------------------------------------------------------------------------
+app.Run("http://localhost:5101");

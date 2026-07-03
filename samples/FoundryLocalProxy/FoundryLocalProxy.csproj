@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!--
+      Standalone teaching sample — intentionally NOT part of the main ElBruno.CopilotHarness
+      solution so it cannot break the production build. net10.0, ASP.NET Core Minimal API.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FoundryLocalProxy</RootNamespace>
+    <AssemblyName>FoundryLocalProxy</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!--
+      WHY RuntimeIdentifier?
+      Microsoft.AI.Foundry.Local ships native ONNX Runtime binaries for hardware
+      acceleration (CUDA, QNN, OpenVINO, etc.). NuGet requires a concrete RID to
+      resolve the correct native assets at restore time.
+
+      Defaults to the current SDK RID (win-x64, linux-x64, osx-arm64, etc.)
+      so `dotnet run` and `dotnet build` work without extra flags.
+      Override via CLI: dotnet build -r linux-x64
+    -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'==''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!--
+    Foundry Local SDK — handles the daemon, model downloads, hardware detection,
+    and the internal OpenAI-compatible REST server. No CLI required.
+
+    TWO VARIANTS:
+      Microsoft.AI.Foundry.Local         — cross-platform (Windows/macOS/Linux)
+      Microsoft.AI.Foundry.Local.WinML   — Windows only, adds WinML hardware
+                                           acceleration (GPU, NPU, CUDA, QNN, OpenVINO)
+
+    Windows users get the same API surface from either package. The WinML variant
+    requires targeting net{x}-windows10.0.NNNNN and Platforms=ARM64;x64.
+    We use the cross-platform package here to keep the csproj simple and
+    the sample portable. Swap to WinML for maximum hardware performance on Windows.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AI.Foundry.Local" Version="*" />
+  </ItemGroup>
+
+</Project>

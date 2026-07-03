@@ -1,0 +1,20 @@
+{
+  "_comment": "Add these to your VS Code settings.json (Ctrl+Shift+P → Open User Settings JSON)",
+  "github.copilot.chat.customModels": [
+    {
+      "id": "phi-4-mini",
+      "name": "Phi-4 Mini (Foundry Local)",
+      "url": "http://localhost:5101/v1/chat/completions",
+      "modelListUrl": "http://localhost:5101/v1/models",
+      "authType": "none"
+    },
+    {
+      "id": "copilot-utility-small",
+      "name": "Phi-4 Mini Utility (Foundry Local)",
+      "url": "http://localhost:5101/v1/chat/completions",
+      "modelListUrl": "http://localhost:5101/v1/models",
+      "authType": "none"
+    }
+  ],
+  "chat.utilitySmallModel": "copilot-utility-small"
+}

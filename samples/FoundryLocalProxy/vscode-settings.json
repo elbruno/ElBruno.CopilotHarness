@@ -1,0 +1,27 @@
+{
+  "_instructions": [
+    "Copy the settings below into your VS Code user settings.json.",
+    "Open it with: Command Palette (Ctrl+Shift+P) → Preferences: Open User Settings (JSON)",
+    "Then run: cd samples/FoundryLocalProxy && dotnet run",
+    "Then in VS Code Copilot Chat use: @harness-general <your task>"
+  ],
+
+  "github.copilot.chat.customModels": [
+    {
+      "id": "phi-4-mini",
+      "name": "Phi-4 Mini (Foundry Local)",
+      "url": "http://localhost:5101/v1/chat/completions",
+      "modelListUrl": "http://localhost:5101/v1/models",
+      "authType": "none"
+    },
+    {
+      "id": "copilot-utility-small",
+      "name": "Phi-4 Mini Utility (Foundry Local)",
+      "url": "http://localhost:5101/v1/chat/completions",
+      "modelListUrl": "http://localhost:5101/v1/models",
+      "authType": "none"
+    }
+  ],
+
+  "chat.utilitySmallModel": "copilot-utility-small"
+}
