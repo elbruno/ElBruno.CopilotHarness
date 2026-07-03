@@ -181,7 +181,10 @@ var catalog = await mgr.GetCatalogAsync();
 var allAliases = new List<string> { defaultModelAlias };
 allAliases.AddRange(additionalModels.Where(m => !string.IsNullOrWhiteSpace(m) && m != defaultModelAlias));
 
-var loadedModels = new List<string>();
+var loadedModels = new List<string>();        // canonical SDK ids
+var loadedAliases = new List<string>();       // configured aliases (what VS Code uses)
+// Maps alias → canonical id for the POST rewrite path.
+var aliasToCanonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
 foreach (var alias in allAliases)
 {
@@ -204,7 +207,9 @@ foreach (var alias in allAliases)
 
     logger.LogInformation("Loading model '{Alias}' into memory...", alias);
     await model.LoadAsync();
-    loadedModels.Add(model.Id); // model.Id is the canonical id (may differ from alias)
+    loadedModels.Add(model.Id);          // e.g. "Phi-4-mini-instruct-cuda-gpu:5"
+    loadedAliases.Add(alias);            // e.g. "phi-4-mini"
+    aliasToCanonical[alias] = model.Id;  // alias → canonical
     logger.LogInformation("Model '{Alias}' ready (id: {Id}).", alias, model.Id);
 }
 
@@ -219,9 +224,10 @@ logger.LogInformation("Starting Foundry Local internal REST server on {Url}...",
 await mgr.StartWebServiceAsync();
 logger.LogInformation("Internal REST server ready.");
 
-// Case-insensitive set for fast pass-through checks on the request hot path.
+// Include aliases in the set so the POST handler can pass them through unchanged.
 var loadedModelSet = new HashSet<string>(loadedModels, StringComparer.OrdinalIgnoreCase);
-var defaultModel   = loadedModels.FirstOrDefault() ?? defaultModelAlias;
+loadedModelSet.UnionWith(loadedAliases); // add e.g. "phi-4-mini"
+var defaultModel   = loadedAliases.FirstOrDefault() ?? loadedModels.FirstOrDefault() ?? defaultModelAlias;
 
 logger.LogInformation(
     "Proxy ready. Loaded models: {Models}. Fallback: {Default}",
@@ -263,23 +269,27 @@ app.MapGet("/health", () => new
 });
 
 // --- 3b. Models list -------------------------------------------------------
-// VS Code calls GET /v1/models to confirm model IDs before sending chat requests.
-// We return every loaded model plus the synthetic utility alias.
+// VS Code validates the configured model id against modelListUrl.
+// We advertise the ALIASES (e.g. "phi-4-mini") so VS Code finds them by name,
+// plus the utility alias.  Canonical SDK ids are included as well for completeness.
 app.MapGet("/v1/models", () =>
 {
     var data = new List<object>();
+    long ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-    var advertised = loadedModelSet.Count > 0
-        ? (IEnumerable<string>)loadedModels
-        : new[] { defaultModel };
+    // Aliases first — these are the ids VS Code is configured with.
+    foreach (var alias in loadedAliases)
+        data.Add(new { id = alias, @object = "model", created = ts, owned_by = "foundry-local" });
 
-    foreach (var id in advertised)
+    // Canonical SDK ids (for completeness / interop).
+    foreach (var canonical in loadedModels)
     {
-        data.Add(new { id, @object = "model", created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), owned_by = "foundry-local" });
+        if (!loadedAliases.Any(a => aliasToCanonical.TryGetValue(a, out var c) && c == canonical))
+            data.Add(new { id = canonical, @object = "model", created = ts, owned_by = "foundry-local" });
     }
 
     // Utility alias — remapped to defaultModel by the POST handler.
-    data.Add(new { id = utilityModelId, @object = "model", created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), owned_by = "foundry-local" });
+    data.Add(new { id = utilityModelId, @object = "model", created = ts, owned_by = "foundry-local" });
 
     return Results.Json(new { @object = "list", data });
 });
@@ -317,16 +327,25 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             isStreaming    = jsonBody["stream"]?.GetValue<bool>() ?? false;
             requestedModel = jsonBody["model"]?.GetValue<string>() ?? defaultModel;
 
-            if (loadedModelSet.Contains(requestedModel))
+            // Resolve alias → canonical SDK id for the SDK's internal server.
+            // The internal server only understands canonical ids.
+            if (aliasToCanonical.TryGetValue(requestedModel, out var canonicalId))
             {
-                // Known loaded model — pass through unchanged.
+                Console.WriteLine($"[model alias→canonical] '{requestedModel}' → '{canonicalId}'");
+                jsonBody["model"] = canonicalId;
+                bodyText = jsonBody.ToJsonString();
+            }
+            else if (loadedModelSet.Contains(requestedModel))
+            {
+                // Already a canonical id — pass through unchanged.
                 Console.WriteLine($"[model passthrough] '{requestedModel}'");
             }
             else
             {
-                // Utility alias or unknown id — remap to a real loaded model.
-                Console.WriteLine($"[model rewrite] '{requestedModel}' → '{defaultModel}'");
-                jsonBody["model"] = defaultModel;
+                // Unknown id (e.g. utility alias) — remap to first loaded canonical id.
+                var fallbackCanonical = loadedModels.FirstOrDefault() ?? defaultModelAlias;
+                Console.WriteLine($"[model rewrite] '{requestedModel}' → '{fallbackCanonical}'");
+                jsonBody["model"] = fallbackCanonical;
                 bodyText = jsonBody.ToJsonString();
             }
         }
