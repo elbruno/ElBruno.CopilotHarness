@@ -1,19 +1,33 @@
 {
   "_instructions": [
-    "Add ALL blocks below to your VS Code user settings.json.",
-    "Open it: Command Palette (Ctrl+Shift+P) → Preferences: Open User Settings (JSON)",
-    "",
-    "STEP 1 — run the proxy (downloads phi-4-mini ~2.5GB on first run):",
+    "STEP 1 — run the proxy (downloads phi-4-mini ~2.5 GB on first run):",
     "  cd samples/FoundryLocalProxy && dotnet run",
     "",
-    "STEP 2 — add the settings below to settings.json, then reload VS Code.",
+    "STEP 2 — add the chatLanguageModels entry to:",
+    "  %APPDATA%\\Code\\User\\chatLanguageModels.json  (stable)",
+    "  %APPDATA%\\Code - Insiders\\User\\chatLanguageModels.json  (insiders)",
+    "  (create the file if it does not exist — the value is a JSON array)",
+    "",
+    "STEP 3 — add the settings.json block to your VS Code user settings.json:",
+    "  Command Palette (Ctrl+Shift+P) → Preferences: Open User Settings (JSON)",
+    "",
+    "STEP 4 — reload VS Code (Ctrl+Shift+P → Reload Window)",
     "",
     "Why two blocks?",
-    "  chatLanguageModels  → used by agent .md files (@harness-* sub-agents via vscode.lm API)",
-    "  github.copilot.*    → used by Copilot Chat Ask mode AND Agent mode"
+    "  chatLanguageModels  → Ask mode + @harness-* sub-agents (vscode.lm API)",
+    "  settings.json block → Agent mode (requires github.copilot.chat.customModels",
+    "                        AND both utility model settings)",
+    "",
+    "IMPORTANT: Do NOT use 'copilot-utility-small' as a BYOK model ID.",
+    "  That string is VS Code's internal model name. Using it as a BYOK model ID",
+    "  creates a circular lookup that VS Code cannot resolve.",
+    "  Use 'phi-4-mini' for both chat.utilityModel and chat.utilitySmallModel."
   ],
 
-  "_block1_chatLanguageModels_comment": "Add this to chatLanguageModels.json (or your provider list)",
+  "_block1_chatLanguageModels_comment": [
+    "Paste this object into your chatLanguageModels.json array.",
+    "The file is a JSON array: [ { ...existing... }, { paste here } ]"
+  ],
   "_block1_example": {
     "name": "FoundryLocalProxy",
     "vendor": "customendpoint",
@@ -29,35 +43,24 @@
         "vision": false,
         "maxInputTokens": 128000,
         "maxOutputTokens": 2048
-      },
-      {
-        "id": "copilot-utility-small",
-        "name": "Phi-4 Mini Utility (Foundry Local)",
-        "url": "http://localhost:5101/v1/chat/completions",
-        "modelListUrl": "http://localhost:5101/v1/models",
-        "toolCalling": true,
-        "vision": false,
-        "maxInputTokens": 128000,
-        "maxOutputTokens": 2048
       }
     ]
   },
 
-  "_block2_settings_json_comment": "Add this to your VS Code settings.json (required for Agent mode)",
+  "_block2_settings_json_comment": [
+    "Add the three keys below to your VS Code settings.json.",
+    "All three are required for Agent mode to work with BYOK.",
+    "chat.utilityModel and chat.utilitySmallModel must match your BYOK model ID,",
+    "NOT the internal 'copilot-utility-small' name."
+  ],
   "github.copilot.chat.customModels": [
     {
       "id": "phi-4-mini",
       "name": "Phi-4 Mini (Foundry Local)",
       "url": "http://localhost:5101/v1/chat/completions",
       "authType": "none"
-    },
-    {
-      "id": "copilot-utility-small",
-      "name": "Phi-4 Mini Utility (Foundry Local)",
-      "url": "http://localhost:5101/v1/chat/completions",
-      "authType": "none"
     }
   ],
-
-  "chat.utilitySmallModel": "copilot-utility-small"
+  "chat.utilityModel": "phi-4-mini",
+  "chat.utilitySmallModel": "phi-4-mini"
 }
