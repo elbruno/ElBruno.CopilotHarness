@@ -47,7 +47,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 //  Requires a running Ollama instance (http://localhost:11434 by default).
 //  Configure the default model and Ollama URL in OllamaProxy/appsettings.json.
 // ---------------------------------------------------------------------------
-builder.AddProject<Projects.OllamaProxy>("ollama-proxy")
+var ollamaProxy = builder.AddProject<Projects.OllamaProxy>("ollama-proxy")
     .WithHttpEndpoint(port: 5099, name: "http");
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ builder.AddProject<Projects.OllamaProxy>("ollama-proxy")
 //    dotnet user-secrets set "Foundry:ApiKey"     "your-api-key"
 //    dotnet user-secrets set "Foundry:Deployment" "gpt-4o-mini"
 // ---------------------------------------------------------------------------
-builder.AddProject<Projects.FoundryProxy>("foundry-proxy")
+var foundryProxy = builder.AddProject<Projects.FoundryProxy>("foundry-proxy")
     .WithHttpEndpoint(port: 5100, name: "http");
 
 // ---------------------------------------------------------------------------
@@ -71,7 +71,26 @@ builder.AddProject<Projects.FoundryProxy>("foundry-proxy")
 //  On FIRST RUN: expects an internet connection; downloads ~2.5 GB (cached after).
 //  On subsequent runs: near-instant startup from the local cache.
 // ---------------------------------------------------------------------------
-builder.AddProject<Projects.FoundryLocalProxy>("foundry-local-proxy")
+var foundryLocalProxy = builder.AddProject<Projects.FoundryLocalProxy>("foundry-local-proxy")
     .WithHttpEndpoint(port: 5101, name: "http");
+
+// ---------------------------------------------------------------------------
+// ProxiesTestApp — Blazor Server UI for testing all three proxies
+//
+//  Pages:
+//    /          — health dashboard (all 3 proxies, auto-refresh)
+//    /chat      — streaming chat with one proxy, model selector, system prompt
+//    /compare   — side-by-side: same prompt sent to all 3 proxies simultaneously
+//
+//  WithEnvironment injects the proxy base URLs so the app works with Aspire
+//  service discovery without needing the Microsoft.Extensions.ServiceDiscovery
+//  package. Falls back to appsettings.json when running standalone.
+// ---------------------------------------------------------------------------
+builder.AddProject<Projects.ProxiesTestApp>("proxies-test-app")
+    .WithEnvironment("ProxyUrls__Ollama",       ollamaProxy.GetEndpoint("http"))
+    .WithEnvironment("ProxyUrls__Foundry",      foundryProxy.GetEndpoint("http"))
+    .WithEnvironment("ProxyUrls__FoundryLocal", foundryLocalProxy.GetEndpoint("http"))
+    .WaitFor(ollamaProxy)
+    .WaitFor(foundryLocalProxy);
 
 builder.Build().Run();

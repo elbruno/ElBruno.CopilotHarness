@@ -17,6 +17,7 @@
     <ProjectReference Include="..\OllamaProxy\OllamaProxy.csproj" />
     <ProjectReference Include="..\FoundryProxy\FoundryProxy.csproj" />
     <ProjectReference Include="..\FoundryLocalProxy\FoundryLocalProxy.csproj" />
+    <ProjectReference Include="..\ProxiesTestApp\ProxiesTestApp.csproj" />
   </ItemGroup>
 
 </Project>
