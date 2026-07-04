@@ -178,3 +178,220 @@ See [`docs/Agents_Architecture.md`](../../docs/Agents_Architecture.md) for the f
 | `GET` | `/health` | Same as `/` |
 | `GET` | `/v1/models` | OpenAI-compatible model list |
 | `POST` | `/v1/chat/completions` | Chat proxy (streaming + non-streaming) |
+
+---
+
+## Testing with curl
+
+Start the proxy first (`dotnet run`), then use any of the snippets below.
+PowerShell equivalents are included for Windows users who don't have curl in PATH.
+
+---
+
+### 1 — Health check
+
+```bash
+curl http://localhost:5101/health
+```
+
+```powershell
+Invoke-RestMethod http://localhost:5101/health | ConvertTo-Json
+```
+
+Expected response:
+```json
+{
+  "status": "ok",
+  "proxy": "FoundryLocalProxy",
+  "model": "phi-4-mini",
+  "utilityModel": "copilot-utility-small",
+  "loadedModels": ["phi-4-mini"],
+  "internalRestServer": "http://127.0.0.1:55588"
+}
+```
+
+---
+
+### 2 — List available models
+
+```bash
+curl http://localhost:5101/v1/models
+```
+
+```powershell
+Invoke-RestMethod http://localhost:5101/v1/models | ConvertTo-Json -Depth 5
+```
+
+Expected response includes every loaded alias plus the utility alias:
+```json
+{
+  "object": "list",
+  "data": [
+    { "id": "phi-4-mini",           "object": "model", "owned_by": "foundry-local" },
+    { "id": "copilot-utility-small","object": "model", "owned_by": "foundry-local" }
+  ]
+}
+```
+
+---
+
+### 3 — Simple chat question (non-streaming)
+
+```bash
+curl http://localhost:5101/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "phi-4-mini",
+    "stream": false,
+    "messages": [
+      { "role": "user", "content": "What is Microsoft Foundry Local?" }
+    ]
+  }'
+```
+
+```powershell
+$body = @{
+    model    = "phi-4-mini"
+    stream   = $false
+    messages = @( @{ role = "user"; content = "What is Microsoft Foundry Local?" } )
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod http://localhost:5101/v1/chat/completions `
+    -Method Post -ContentType "application/json" -Body $body |
+    ConvertTo-Json -Depth 10
+```
+
+---
+
+### 4 — Streaming chat (Server-Sent Events)
+
+```bash
+curl http://localhost:5101/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -N \
+  -d '{
+    "model": "phi-4-mini",
+    "stream": true,
+    "messages": [
+      { "role": "user", "content": "Write a haiku about running AI models locally." }
+    ]
+  }'
+```
+
+You should see `data: {...}` lines appear token-by-token, ending with `data: [DONE]`.
+
+```powershell
+# PowerShell streaming — prints each SSE chunk as it arrives
+$req = [System.Net.WebRequest]::Create("http://localhost:5101/v1/chat/completions")
+$req.Method = "POST"; $req.ContentType = "application/json"
+$body = '{"model":"phi-4-mini","stream":true,"messages":[{"role":"user","content":"Write a haiku about running AI models locally."}]}'
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+$req.ContentLength = $bytes.Length
+$req.GetRequestStream().Write($bytes, 0, $bytes.Length)
+$reader = New-Object System.IO.StreamReader($req.GetResponse().GetResponseStream())
+while (-not $reader.EndOfStream) { Write-Host $reader.ReadLine() }
+```
+
+---
+
+### 5 — Use the utility model alias
+
+The `copilot-utility-small` alias is remapped to the default model automatically:
+
+```bash
+curl http://localhost:5101/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "copilot-utility-small",
+    "stream": false,
+    "messages": [
+      { "role": "user", "content": "Suggest a short git commit message for adding dark mode." }
+    ]
+  }'
+```
+
+---
+
+### 6 — Switch to a different loaded model
+
+First add the model to `appsettings.json`:
+```json
+{ "FoundryLocal": { "AdditionalModels": ["phi-3.5-mini"] } }
+```
+
+Then restart the proxy and target the other model by name:
+
+```bash
+curl http://localhost:5101/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "phi-3.5-mini",
+    "stream": false,
+    "messages": [
+      { "role": "user", "content": "Explain the difference between Phi-3.5 and Phi-4." }
+    ]
+  }'
+```
+
+Any model id returned by `GET /v1/models` is valid in the `"model"` field.
+
+---
+
+### 7 — Multi-turn conversation
+
+```bash
+curl http://localhost:5101/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "phi-4-mini",
+    "stream": false,
+    "messages": [
+      { "role": "user",      "content": "My name is Bruno." },
+      { "role": "assistant", "content": "Nice to meet you, Bruno!" },
+      { "role": "user",      "content": "What is my name?" }
+    ]
+  }'
+```
+
+---
+
+### 8 — System prompt
+
+```bash
+curl http://localhost:5101/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "phi-4-mini",
+    "stream": false,
+    "messages": [
+      { "role": "system", "content": "You are a concise assistant. Reply in one sentence only." },
+      { "role": "user",   "content": "What is the capital of France?" }
+    ]
+  }'
+```
+
+---
+
+### 9 — Quick connectivity smoke-test (all endpoints in one go)
+
+```bash
+echo "=== / ===" && curl -s http://localhost:5101/ | python -m json.tool
+echo "=== /health ===" && curl -s http://localhost:5101/health | python -m json.tool
+echo "=== /v1/models ===" && curl -s http://localhost:5101/v1/models | python -m json.tool
+echo "=== chat ===" && curl -s http://localhost:5101/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"phi-4-mini","stream":false,"messages":[{"role":"user","content":"ping"}]}' \
+  | python -m json.tool
+```
+
+```powershell
+# PowerShell version
+foreach ($path in "/", "/health", "/v1/models") {
+    Write-Host "`n=== GET $path ===" -ForegroundColor Cyan
+    Invoke-RestMethod "http://localhost:5101$path" | ConvertTo-Json -Depth 5
+}
+Write-Host "`n=== POST /v1/chat/completions ===" -ForegroundColor Cyan
+$b = '{"model":"phi-4-mini","stream":false,"messages":[{"role":"user","content":"ping"}]}'
+Invoke-RestMethod http://localhost:5101/v1/chat/completions -Method Post `
+    -ContentType "application/json" -Body $b | ConvertTo-Json -Depth 10
+```

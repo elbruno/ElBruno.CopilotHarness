@@ -257,12 +257,22 @@ logger.LogInformation(
 
 // ---------------------------------------------------------------------------
 // 2f. GRACEFUL SHUTDOWN — stop the REST server when the proxy exits
+//
+//  WHY Task.Run + Wait instead of .GetAwaiter().GetResult()?
+//    .GetAwaiter().GetResult() on a synchronous callback can deadlock if the
+//    SDK awaits a context that is already blocked on this callback.
+//    Task.Run offloads to a fresh thread pool thread so the async continuation
+//    always has a free thread to complete on.  The 15-second cap ensures CTRL+C
+//    always exits cleanly even if the Foundry Local daemon is slow to unload.
 // ---------------------------------------------------------------------------
 app.Lifetime.ApplicationStopping.Register(() =>
 {
     logger.LogInformation("Stopping Foundry Local internal REST server...");
-    mgr.StopWebServiceAsync().GetAwaiter().GetResult();
-    logger.LogInformation("Foundry Local REST server stopped.");
+    var stopped = Task.Run(() => mgr.StopWebServiceAsync()).Wait(TimeSpan.FromSeconds(15));
+    if (!stopped)
+        logger.LogWarning("Foundry Local REST server did not stop within 15 s — continuing shutdown.");
+    else
+        logger.LogInformation("Foundry Local REST server stopped.");
 });
 
 // ---------------------------------------------------------------------------
@@ -390,6 +400,11 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     {
         fwdResponse = await httpClient.SendAsync(fwdRequest, completionOption);
     }
+    catch (TaskCanceledException ex) when (ex.CancellationToken == request.HttpContext.RequestAborted)
+    {
+        // Client disconnected or server shutting down — nothing to write back.
+        return;
+    }
     catch (TaskCanceledException)
     {
         response.StatusCode = 504;
@@ -426,8 +441,13 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
         bool doneSent = false;
         string? line;
         var enc = System.Text.Encoding.UTF8;
+        // Use the request's abort token so the loop exits immediately when:
+        //   • the client disconnects, OR
+        //   • CTRL+C is pressed (ApplicationStopping cancels all active requests).
+        var ct = request.HttpContext.RequestAborted;
 
-        while ((line = await reader.ReadLineAsync()) is not null)
+        while (!ct.IsCancellationRequested &&
+               (line = await reader.ReadLineAsync(ct).ConfigureAwait(false)) is not null)
         {
             if (line.StartsWith("data: [DONE]", StringComparison.Ordinal))
             {
