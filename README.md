@@ -145,6 +145,57 @@ If VS Code opens `chatLanguageModels.json`, this working example matches the har
 
 ---
 
+## Option 2 — Smart Agents with local models
+
+The **agents pattern** is a second way to use this repo. Instead of routing every prompt through the harness proxy, you use VS Code Copilot's multi-agent feature: `@harness-general` is a cloud-model orchestrator that delegates routine tasks — start/stop an app, open a GitHub PR, analyse a stack trace — to local sub-agents running on **phi-4-mini**. Routine work costs zero cloud credits.
+
+### Agent roles
+
+| Agent | Selectable | Model | Purpose |
+|---|---|---|---|
+| `@harness-general` | ✅ You call this | Copilot default (cloud) | Orchestrator — routes tasks, answers architecture questions |
+| `@harness-launch` | ❌ Sub-agent | phi-4-mini (local) | Start/stop apps, resolve port conflicts |
+| `@harness-github` | ❌ Sub-agent | phi-4-mini (local) | Issues, PRs, GitHub Actions, releases |
+| `@harness-debug` | ❌ Sub-agent | phi-4-mini (local) | Error analysis, stack traces, test failures |
+
+### Cost comparison
+
+| Request type | Cloud-only | With agents |
+|---|---|---|
+| "run the API" | ~500 tokens | 0 (local) |
+| "open a PR" | ~800 tokens | 0 (local) |
+| "debug this error" | ~1 200 tokens | 0 (local) |
+| Typical 10-task session | ~8 000 tokens | ~1 500 cloud + 0 local |
+
+### Quick start (3 steps)
+
+```powershell
+# Step 1 — Start FoundryLocalProxy (serves phi-4-mini locally)
+cd proxies/FoundryLocalProxy && dotnet run
+# Easiest alternative: aspire start from proxies/
+cd proxies && aspire start
+
+# Step 2 — Register phi-4-mini as a BYOK model in VS Code
+# Open the model picker → Manage Models → Add Models → Custom Endpoint
+# See docs/Agents_Architecture.md for the full chatLanguageModels.json snippet
+
+# Step 3 — Install agent templates (skip if you're already in this repo)
+harness init   # copies .github/agents/ and chatLanguageModels.json into your repo
+```
+
+### Usage examples
+
+```
+@harness-general start the web API
+@harness-general open a PR for the current branch
+@harness-general why is AuthController throwing a NullReferenceException?
+@harness-general review the architecture of the Router service
+```
+
+📖 Full details: [docs/Agents_Architecture.md](docs/Agents_Architecture.md)
+
+---
+
 ## Documentation
 
 | Doc | Description |

@@ -144,4 +144,116 @@ public class DocAccuracyTests
         Assert.False(content.Contains("\"github.copilot.chat.customModels\""),
             $"vscode-settings.json template still contains deprecated key '\"github.copilot.chat.customModels\"'. File: {templatePath}");
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 6: README documents the Smart Agents / Option 2 section
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void Readme_Contains_AgentsPatternSection()
+    {
+        var root = GetRepoRoot();
+        var readmePath = Path.Combine(root, "README.md");
+
+        Assert.True(File.Exists(readmePath), $"File not found: {readmePath}");
+
+        var content = File.ReadAllText(readmePath);
+
+        Assert.True(content.Contains("@harness-general"),
+            "README.md should contain '@harness-general' (agents section) but does not.");
+
+        Assert.True(content.Contains("phi-4-mini"),
+            "README.md should contain 'phi-4-mini' in the context of the agents section but does not.");
+
+        Assert.True(content.Contains("Option 2") || content.Contains("Smart Agents"),
+            "README.md should contain 'Option 2' or 'Smart Agents' (section heading) but does not.");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 7: README documents both the BYOK and agents entry points
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void Readme_Contains_Both_BYOK_And_Agents_EntryPoints()
+    {
+        var root = GetRepoRoot();
+        var readmePath = Path.Combine(root, "README.md");
+
+        Assert.True(File.Exists(readmePath), $"File not found: {readmePath}");
+
+        var content = File.ReadAllText(readmePath);
+
+        Assert.True(content.Contains("BYOK") || content.Contains("Fast start"),
+            "README.md should contain 'BYOK' or 'Fast start' (Option 1 entry point) but does not.");
+
+        Assert.True(content.Contains("harness-general"),
+            "README.md should contain 'harness-general' (Option 2 / agents entry point) but does not.");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 8: No markdown file links to the old samples/ path
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void NoMarkdownFile_Links_To_Samples_Path()
+    {
+        var root = GetRepoRoot();
+
+        var violations = new List<string>();
+
+        // Collect all .md files from docs/, proxies/, tools/ and root README.md
+        var searchDirs = new[] { "docs", "proxies", "tools" };
+        var mdFiles = searchDirs
+            .Select(d => Path.Combine(root, d))
+            .Where(Directory.Exists)
+            .SelectMany(d => Directory.EnumerateFiles(d, "*.md", SearchOption.AllDirectories))
+            .ToList();
+
+        var rootReadme = Path.Combine(root, "README.md");
+        if (File.Exists(rootReadme))
+            mdFiles.Add(rootReadme);
+
+        var badPatterns = new[] { "(../samples/", "(samples/", "samples/FoundryLocalProxy" };
+
+        foreach (var mdFile in mdFiles)
+        {
+            var content = File.ReadAllText(mdFile);
+            foreach (var pattern in badPatterns)
+            {
+                if (content.Contains(pattern))
+                {
+                    violations.Add($"{Path.GetRelativePath(root, mdFile)} contains '{pattern}'");
+                    break;
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0,
+            "Markdown file(s) contain references to the old samples/ path:\n" + string.Join("\n", violations));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 9: All docs/ relative links in README.md exist on disk
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void AllDocLinks_In_README_Exist_On_Disk()
+    {
+        var root = GetRepoRoot();
+        var readmePath = Path.Combine(root, "README.md");
+
+        Assert.True(File.Exists(readmePath), $"File not found: {readmePath}");
+
+        var content = File.ReadAllText(readmePath);
+
+        // Extract all [text](path) links where path starts with docs/
+        var missing = new List<string>();
+        var regex = new System.Text.RegularExpressions.Regex(@"\]\((docs/[^)#\s]+)");
+        foreach (System.Text.RegularExpressions.Match match in regex.Matches(content))
+        {
+            var relativePath = match.Groups[1].Value;
+            var fullPath = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(fullPath))
+                missing.Add(relativePath);
+        }
+
+        Assert.True(missing.Count == 0,
+            "README.md links to docs/ file(s) that do not exist on disk:\n" + string.Join("\n", missing));
+    }
 }
