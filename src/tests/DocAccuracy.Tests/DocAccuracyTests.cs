@@ -581,6 +581,127 @@ public class DocAccuracyTests
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Proxies.Common — shared library exists and is wired correctly
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ProxiesCommon_ProjectFile_Exists()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "proxies", "Proxies.Common", "Proxies.Common.csproj");
+
+        Assert.True(File.Exists(filePath),
+            $"Proxies.Common project file not found — was it deleted or moved? Expected: {filePath}");
+    }
+
+    [Fact]
+    public void ProxiesCommon_CopilotMessageExtractor_Exists()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "proxies", "Proxies.Common", "CopilotMessageExtractor.cs");
+
+        Assert.True(File.Exists(filePath),
+            $"CopilotMessageExtractor.cs not found in Proxies.Common. Expected: {filePath}");
+    }
+
+    [Fact]
+    public void ProxiesCommon_CopilotMessageExtractor_HasCorrectNamespace()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "proxies", "Proxies.Common", "CopilotMessageExtractor.cs");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+        Assert.True(content.Contains("namespace Proxies.Common"),
+            $"CopilotMessageExtractor.cs should declare 'namespace Proxies.Common'. File: {filePath}");
+    }
+
+    [Fact]
+    public void DuplicateCopilotMessageExtractor_DoesNotExist_InProxyProjects()
+    {
+        var root = GetRepoRoot();
+        var proxyDirs = new[]
+        {
+            Path.Combine(root, "src", "proxies", "OllamaProxy"),
+            Path.Combine(root, "src", "proxies", "FoundryProxy"),
+            Path.Combine(root, "src", "proxies", "FoundryLocalProxy"),
+        };
+
+        var violations = proxyDirs
+            .Select(dir => Path.Combine(dir, "CopilotMessageExtractor.cs"))
+            .Where(File.Exists)
+            .ToList();
+
+        Assert.True(violations.Count == 0,
+            $"CopilotMessageExtractor.cs should only exist in Proxies.Common, but was found in:\n{string.Join("\n", violations)}");
+    }
+
+    [Fact]
+    public void AllThreeProxyCsproj_Reference_ProxiesCommon()
+    {
+        var root = GetRepoRoot();
+        var proxyProjects = new[]
+        {
+            Path.Combine(root, "src", "proxies", "OllamaProxy",       "OllamaProxy.csproj"),
+            Path.Combine(root, "src", "proxies", "FoundryProxy",      "FoundryProxy.csproj"),
+            Path.Combine(root, "src", "proxies", "FoundryLocalProxy", "FoundryLocalProxy.csproj"),
+        };
+
+        var missing = proxyProjects
+            .Where(p => !File.ReadAllText(p).Contains("Proxies.Common"))
+            .Select(Path.GetFileName)
+            .ToList();
+
+        Assert.True(missing.Count == 0,
+            $"These proxy .csproj files do not reference Proxies.Common:\n{string.Join("\n", missing)}");
+    }
+
+    [Fact]
+    public void ProxiesSolution_Includes_ProxiesCommon()
+    {
+        var root = GetRepoRoot();
+        var slnx = Path.Combine(root, "src", "proxies", "Proxies.slnx");
+
+        Assert.True(File.Exists(slnx), $"Proxies.slnx not found: {slnx}");
+
+        var content = File.ReadAllText(slnx);
+        Assert.True(content.Contains("Proxies.Common"),
+            $"Proxies.slnx should include Proxies.Common project but does not. File: {slnx}");
+    }
+
+    [Fact]
+    public void BlogPost_01_Exists_WithImages()
+    {
+        var root = GetRepoRoot();
+        var blogPost = Path.Combine(root, "docs", "blog", "01-CopilotHarness.md");
+        var imagesDir = Path.Combine(root, "docs", "blog", "01-CopilotHarness-images");
+
+        Assert.True(File.Exists(blogPost),
+            $"Blog post 01-CopilotHarness.md not found. Expected: {blogPost}");
+
+        Assert.True(Directory.Exists(imagesDir),
+            $"Blog images folder not found. Expected: {imagesDir}");
+
+        var images = Directory.GetFiles(imagesDir);
+        Assert.True(images.Length > 0,
+            $"Blog images folder exists but is empty: {imagesDir}");
+    }
+
+    [Fact]
+    public void BlogPost_01_MentionsProxiesCommon()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "blog", "01-CopilotHarness.md");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+        Assert.True(content.Contains("Proxies.Common") || content.Contains("CopilotMessageExtractor"),
+            $"Blog post should mention Proxies.Common or CopilotMessageExtractor. File: {filePath}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────
     private static int CountOccurrences(string source, string pattern)

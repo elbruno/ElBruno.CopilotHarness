@@ -12,5 +12,6 @@
     <Project Path="src/tests/DocAccuracy.Tests/DocAccuracy.Tests.csproj" />
     <Project Path="src/tests/ElBruno.CopilotHarness.Judge.Web.Tests/ElBruno.CopilotHarness.Judge.Web.Tests.csproj" />
     <Project Path="src/tests/ElBruno.CopilotHarness.Router.Api.Tests/ElBruno.CopilotHarness.Router.Api.Tests.csproj" />
+    <Project Path="src/tests/Proxies.Common.Tests/Proxies.Common.Tests.csproj" />
   </Folder>
 </Solution>

@@ -8,6 +8,29 @@ tool that speaks the OpenAI API works without changes.
 
 ---
 
+## Architecture
+
+```
+src/proxies/
+├── Proxies.Common/          ← Shared utilities (CopilotMessageExtractor, etc.)
+├── OllamaProxy/             ← Ollama backend (port 5099)
+├── FoundryProxy/            ← Azure OpenAI / Foundry cloud (port 5100)
+├── FoundryLocalProxy/       ← Foundry Local SDK, offline (port 5101)
+├── Proxies.ServiceDefaults/ ← Shared OTEL wiring for Aspire traces
+├── ProxiesTestApp/          ← Blazor test UI (port 5102)
+└── AppHost/                 ← Aspire AppHost (aspire start)
+```
+
+### Shared library — `Proxies.Common`
+
+All three proxies share a single `CopilotMessageExtractor` class in `Proxies.Common`.
+It unwraps the GitHub Copilot Chat XML envelope — every message Copilot sends buries the
+user's typed text inside a `<userRequest>` tag surrounded by `<attachments>`, `<context>`,
+and `<reminderInstructions>` blocks. Without extraction, logging and routing see ~3 KB
+of boilerplate instead of the actual ask.
+
+---
+
 ## Proxies
 
 | Proxy | Port | Backend | Notes |
