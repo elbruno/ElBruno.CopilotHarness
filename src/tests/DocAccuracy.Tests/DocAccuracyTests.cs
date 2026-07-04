@@ -256,4 +256,93 @@ public class DocAccuracyTests
         Assert.True(missing.Count == 0,
             "README.md links to docs/ file(s) that do not exist on disk:\n" + string.Join("\n", missing));
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 10: Presentation has at least three slides
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void Presentation_HasAtLeastThreeSlides()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "presentation", "harness-layers.html");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        // Both class="slide" and class="slide active" contain this substring
+        var count = CountOccurrences(content, "class=\"slide\"");
+
+        Assert.True(count >= 3,
+            $"Expected at least 3 slides in harness-layers.html but found {count}.");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 11: Presentation mentions harness-general
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void Presentation_MentionsHarnessGeneral()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "presentation", "harness-layers.html");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("harness-general"),
+            $"harness-layers.html should mention 'harness-general' but does not. File: {filePath}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 12: Presentation mentions FoundryLocalProxy
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void Presentation_MentionsFoundryLocalProxy()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "presentation", "harness-layers.html");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("FoundryLocalProxy"),
+            $"harness-layers.html should mention 'FoundryLocalProxy' but does not. File: {filePath}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Test 13: Presentation has no unclosed <div> tags
+    // ──────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void Presentation_HasNoUnclosedDivTags()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "presentation", "harness-layers.html");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        var openCount  = CountOccurrences(content, "<div");
+        var closeCount = CountOccurrences(content, "</div>");
+
+        Assert.True(openCount == closeCount,
+            $"harness-layers.html has unbalanced div tags: {openCount} opening <div> vs {closeCount} closing </div>.");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ──────────────────────────────────────────────────────────────────────────
+    private static int CountOccurrences(string source, string pattern)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(pattern, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += pattern.Length;
+        }
+        return count;
+    }
 }
