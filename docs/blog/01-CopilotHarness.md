@@ -138,6 +138,8 @@ curl http://localhost:5099/health
 # → {"status":"ok","backend":"ollama","models":["llama3.1:8b",...]}
 ```
 
+![Proxies test app — health dashboard showing all three proxies green](01-CopilotHarness-images/testapp-health.png)
+
 ---
 
 ## 5. FoundryLocalProxy — Offline + NPU Inference
@@ -154,6 +156,8 @@ dotnet run
 ```
 
 The **Models page** in the test app shows which models are cached, lets you load/unload (frees GPU RAM instantly), and delete models from disk:
+
+![Foundry Local model management — load, unload, delete cached models](01-CopilotHarness-images/testapp-models.png)
 
 > 💡 **Tip:** Use the Models page to download a model *before* chatting with it. If you send a chat request to an unloaded model, you get a clear error explaining the model needs to be loaded first — not a cryptic 500.
 
@@ -210,7 +214,15 @@ What starts:
 
 > **Requires Aspire CLI:** `dotnet workload install aspire`
 
-The **Aspire dashboard** shows OpenTelemetry traces for every request, including custom `LlmActivity` spans with prompt text, model ID, token counts, and latency. You can see exactly what Copilot sent and what the model returned.
+The Blazor **test app** at `http://localhost:5102` gives you a browser UI to test all three proxies without writing any code:
+
+![Chat page — pick a proxy, model, and send a message with streaming support](01-CopilotHarness-images/testapp-chat.png)
+
+![Compare page — same prompt sent to all three proxies simultaneously](01-CopilotHarness-images/testapp-compare.png) traces for every request, including custom `LlmActivity` spans with prompt text, model ID, token counts, and latency. You can see exactly what Copilot sent and what the model returned.
+
+![Aspire dashboard — all four services running and healthy](01-CopilotHarness-images/aspire-dashboard.png)
+
+![Aspire traces — LLM spans with latency and token counts](01-CopilotHarness-images/aspire-traces.png)
 
 To stop everything:
 
@@ -223,6 +235,8 @@ aspire stop
 ## 8. Wire It to VS Code Copilot
 
 The `/setup` page at `http://localhost:5102/setup` generates the exact `chatLanguageModels.json` snippet for each running proxy, with the correct port and model ID. Copy and paste into your VS Code user config folder:
+
+![Setup page — auto-generated VS Code config snippets for each proxy](01-CopilotHarness-images/testapp-setup.png)
 
 - **Windows:** `%APPDATA%\Code\User\chatLanguageModels.json`
 - **macOS:** `~/Library/Application Support/Code/User/chatLanguageModels.json`
