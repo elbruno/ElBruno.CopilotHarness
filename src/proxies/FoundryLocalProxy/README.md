@@ -166,7 +166,7 @@ This proxy is the local model backend for the **Harness multi-agent pattern**:
 - `@harness-github` — GitHub/PR/Actions specialist, **uses phi-4-mini via this proxy**
 - `@harness-debug` — error analysis specialist, **uses phi-4-mini via this proxy**
 
-See [`docs/Agents_Architecture.md`](../../docs/Agents_Architecture.md) for the full setup.
+See [`docs/Agents_Architecture.md`](../../../docs/Agents_Architecture.md) for the full setup.
 
 ---
 

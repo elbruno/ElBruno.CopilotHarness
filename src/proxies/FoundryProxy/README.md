@@ -400,7 +400,7 @@ two ends of the spectrum:
 - **OllamaProxy** → local model, zero cloud cost, fully offline  
 - **FoundryProxy** → cloud Foundry model, full GPT-4o capability, user secrets  
 
-The **[ElBruno.CopilotHarness](../../README.md)** project combines both —
+The **[ElBruno.CopilotHarness](../../../README.md)** project combines both —
 the `Router.Api` receives every Copilot request and routes it to either a
 local Ollama model or a Foundry deployment based on configurable policy rules
 (topic sensitivity, model capability, cost budget, etc.).  The two samples

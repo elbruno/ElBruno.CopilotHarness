@@ -28,7 +28,7 @@ public class DocAccuracyTests
     public void StartCommand_References_ProxiesPath_Not_SamplesPath()
     {
         var root = GetRepoRoot();
-        var filePath = Path.Combine(root, "tools", "CopilotHarness.Tool", "Commands", "StartCommand.cs");
+        var filePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Commands", "StartCommand.cs");
 
         Assert.True(File.Exists(filePath), $"File not found: {filePath}");
 
@@ -83,7 +83,7 @@ public class DocAccuracyTests
     public void NoMarkdownFiles_Contain_StaleProxyPath()
     {
         var root = GetRepoRoot();
-        var searchDirs = new[] { "docs", "tools", "proxies" };
+        var searchDirs = new[] { "docs", Path.Combine("src", "tools"), Path.Combine("src", "proxies") };
         const string stale = "samples/FoundryLocalProxy";
 
         var violations = new List<string>();
@@ -112,7 +112,7 @@ public class DocAccuracyTests
     public void ProxiesReadme_Covers_AllTestAppPages()
     {
         var root = GetRepoRoot();
-        var readmePath = Path.Combine(root, "proxies", "README.md");
+        var readmePath = Path.Combine(root, "src", "proxies", "README.md");
 
         Assert.True(File.Exists(readmePath), $"File not found: {readmePath}");
 
@@ -132,7 +132,7 @@ public class DocAccuracyTests
     public void VsCodeSettingsTemplate_UsesNewFormat()
     {
         var root = GetRepoRoot();
-        var templatePath = Path.Combine(root, "tools", "CopilotHarness.Tool", "Templates", "vscode-settings.json");
+        var templatePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Templates", "vscode-settings.json");
 
         Assert.True(File.Exists(templatePath), $"File not found: {templatePath}");
 
@@ -199,7 +199,7 @@ public class DocAccuracyTests
         var violations = new List<string>();
 
         // Collect all .md files from docs/, proxies/, tools/ and root README.md
-        var searchDirs = new[] { "docs", "proxies", "tools" };
+        var searchDirs = new[] { "docs", Path.Combine("src", "proxies"), Path.Combine("src", "tools") };
         var mdFiles = searchDirs
             .Select(d => Path.Combine(root, d))
             .Where(Directory.Exists)

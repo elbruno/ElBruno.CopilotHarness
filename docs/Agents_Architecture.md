@@ -52,7 +52,7 @@ model for those agents. `phi-4-mini` must be registered in VS Code settings (see
 
 ## FoundryLocalProxy — the local model backend
 
-The sub-agents use **phi-4-mini** via **FoundryLocalProxy** (`proxies/FoundryLocalProxy`).
+The sub-agents use **phi-4-mini** via **FoundryLocalProxy** (`src/proxies/FoundryLocalProxy`).
 
 ### How it works
 
@@ -86,7 +86,7 @@ The SDK ships everything it needs as NuGet dependencies.
 ### Starting the proxy
 
 ```bash
-cd proxies/FoundryLocalProxy
+cd src/proxies/FoundryLocalProxy
 dotnet run
 ```
 
@@ -163,7 +163,7 @@ A ready-to-use `chatLanguageModels.json` template is at `proxies/FoundryLocalPro
 ### Step 2 — Start the proxy
 
 ```bash
-cd proxies/FoundryLocalProxy && dotnet run
+cd src/proxies/FoundryLocalProxy && dotnet run
 ```
 
 ### Step 3 — Use the agents
@@ -182,7 +182,7 @@ The general agent routes the first three to local sub-agents; the fourth it hand
 
 ## Adding more models
 
-Edit `proxies/FoundryLocalProxy/appsettings.json`:
+Edit `src/proxies/FoundryLocalProxy/appsettings.json`:
 
 ```json
 {
@@ -217,7 +217,7 @@ sub-agent frontmatter.
 
 ## Distribution: the `harness` dotnet tool
 
-A .NET global tool (`tools/CopilotHarness.Tool/`) lets any team adopt this pattern
+A .NET global tool (`src/tools/CopilotHarness.Tool/`) lets any team adopt this pattern
 in their own repo with a single command.
 
 ### Installation
@@ -227,7 +227,7 @@ in their own repo with a single command.
 dotnet tool install -g copilot-harness
 
 # From source (this repo):
-cd tools/CopilotHarness.Tool
+cd src/tools/CopilotHarness.Tool
 dotnet pack
 dotnet tool install -g --add-source ./nupkg copilot-harness
 ```

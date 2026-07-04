@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ElBruno.CopilotHarness.Judge.Web\ElBruno.CopilotHarness.Judge.Web.csproj" />
+    <ProjectReference Include="..\..\..\src\ElBruno.CopilotHarness.Judge.Web\ElBruno.CopilotHarness.Judge.Web.csproj" />
   </ItemGroup>
 
 </Project>

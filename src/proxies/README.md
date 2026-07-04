@@ -103,5 +103,5 @@ dotnet run
 > Add `FoundryLocalProxy` for offline / NPU inference.  
 > Add `FoundryProxy` for cloud models with proper secret management.  
 >
-> The full **[ElBruno.CopilotHarness](../README.md)** router builds on all three patterns,
+> The full **[ElBruno.CopilotHarness](../../README.md)** router builds on all three patterns,
 > dynamically routing each Copilot request to the right provider based on policy rules.

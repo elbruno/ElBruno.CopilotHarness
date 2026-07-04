@@ -22,7 +22,7 @@ public sealed class StartCommand : Command<StartSettings>
 
         if (proxyProjectPath is null)
         {
-            AnsiConsole.MarkupLine("[red]✗ Could not locate proxies/FoundryLocalProxy/.[/]");
+            AnsiConsole.MarkupLine("[red]✗ Could not locate src/proxies/FoundryLocalProxy/.[/]");
             AnsiConsole.MarkupLine("[grey]Clone the ElBruno.CopilotHarness repo and run from its root, or pass:[/]");
             AnsiConsole.MarkupLine("[yellow]  harness start --proxy-path <path-to-FoundryLocalProxy>[/]");
             return 1;
@@ -80,13 +80,19 @@ public sealed class StartCommand : Command<StartSettings>
         if (explicitPath is not null)
             return Directory.Exists(explicitPath) ? explicitPath : null;
 
-        // Walk up from cwd looking for proxies/FoundryLocalProxy
+        // Walk up from cwd looking for proxies/FoundryLocalProxy (legacy layout)
+        // or src/proxies/FoundryLocalProxy (current src/ layout)
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir.FullName, "proxies", "FoundryLocalProxy");
+            var candidate = Path.Combine(dir.FullName, "src", "proxies", "FoundryLocalProxy");
             if (Directory.Exists(candidate))
                 return candidate;
+
+            var legacyCandidate = Path.Combine(dir.FullName, "proxies", "FoundryLocalProxy");
+            if (Directory.Exists(legacyCandidate))
+                return legacyCandidate;
+
             dir = dir.Parent;
         }
 

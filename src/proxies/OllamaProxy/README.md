@@ -435,7 +435,7 @@ Once you control the proxy layer you can add:
 - **Audit log** — immutable record of every ask and answer for compliance  
 
 All of these are implemented in the full
-[ElBruno.CopilotHarness](../../README.md) project.  This sample distils
+[ElBruno.CopilotHarness](../../../README.md) project.  This sample distils
 just one idea: start with a proxy, observe the ask — everything else follows.
 
 ---

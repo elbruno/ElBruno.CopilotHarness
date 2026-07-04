@@ -171,8 +171,8 @@ The **agents pattern** is a second way to use this repo. Instead of routing ever
 
 ```powershell
 # Step 1 — Start FoundryLocalProxy (serves phi-4-mini locally)
-cd proxies/FoundryLocalProxy && dotnet run
-# Easiest alternative: aspire start from proxies/
+cd src/proxies/FoundryLocalProxy && dotnet run
+# Easiest alternative: aspire start from src/proxies/
 cd proxies && aspire start
 
 # Step 2 — Register phi-4-mini as a BYOK model in VS Code
