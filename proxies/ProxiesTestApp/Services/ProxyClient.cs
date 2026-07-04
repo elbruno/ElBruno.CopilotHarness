@@ -13,7 +13,8 @@ public sealed class ChatMessage(string role, string content)
 }
 
 public sealed record HealthResult(bool Ok, string? Model, string? Proxy, long LatencyMs, string? Error);
-public sealed record ModelsResult(bool Ok, IReadOnlyList<string> Models, string? Error);
+public sealed record ModelInfo(string Id, bool Loaded);
+public sealed record ModelsResult(bool Ok, IReadOnlyList<string> Models, string? Error, IReadOnlyList<ModelInfo>? ModelInfos = null);
 
 public sealed class ProxyClient(IHttpClientFactory factory)
 {
@@ -50,11 +51,14 @@ public sealed class ProxyClient(IHttpClientFactory factory)
         {
             var client = factory.CreateClient(proxyName);
             var json   = await client.GetFromJsonAsync<JsonObject>("/v1/models", ct);
-            var ids    = json?["data"]?.AsArray()
-                             .Select(m => m?["id"]?.GetValue<string>() ?? "")
-                             .Where(s => s.Length > 0)
+            var items  = json?["data"]?.AsArray()
+                             .Select(m => new ModelInfo(
+                                 Id:     m?["id"]?.GetValue<string>() ?? "",
+                                 Loaded: m?["loaded"]?.GetValue<bool>() ?? true))  // non-FoundryLocal proxies don't set it → treat as loaded
+                             .Where(m => m.Id.Length > 0)
                              .ToList() ?? [];
-            return new ModelsResult(true, ids, null);
+            var ids = items.Select(m => m.Id).ToList();
+            return new ModelsResult(true, ids, null, items);
         }
         catch (Exception ex)
         {

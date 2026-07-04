@@ -217,6 +217,24 @@ if (downloadEps)
 // ---------------------------------------------------------------------------
 var catalog = await mgr.GetCatalogAsync();
 
+// Discover which of the known aliases actually exist in the Foundry Local catalog.
+// Used by GET /v1/models to show all available models in the UI dropdown (not just loaded ones).
+var knownCatalogAliases = new[] {
+    "phi-4-mini", "phi-4", "phi-3.5-mini", "phi-3-mini",
+    "llama-3.2-3b", "llama-3.2-1b", "mistral-7b-instruct", "phi-3.5-moe"
+};
+var catalogAliases = new List<string>();
+foreach (var a in knownCatalogAliases)
+{
+    var m = await catalog.GetModelAsync(a);
+    if (m is not null)
+        catalogAliases.Add(a);
+}
+if (catalogAliases.Count == 0)
+    catalogAliases.AddRange(knownCatalogAliases); // fallback if catalog lookup fails
+logger.LogInformation("Foundry Local catalog: {Count} models available: {Models}",
+    catalogAliases.Count, string.Join(", ", catalogAliases));
+
 // Collect all model aliases to load: DefaultModel first, then AdditionalModels.
 var allAliases = new List<string> { defaultModelAlias };
 allAliases.AddRange(additionalModels.Where(m => !string.IsNullOrWhiteSpace(m) && m != defaultModelAlias));
@@ -323,22 +341,29 @@ app.MapGet("/health", () => new
 // We advertise the ALIASES (e.g. "phi-4-mini") so VS Code finds them by name,
 // plus the utility alias.  Canonical SDK ids are included as well for completeness.
 app.MapGet("/v1/models", () =>
-{    var data = new List<object>();
+{
+    var data = new List<object>();
     long ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-    // Aliases first — these are the ids VS Code is configured with.
-    foreach (var alias in loadedAliases)
-        data.Add(new { id = alias, @object = "model", created = ts, owned_by = "foundry-local" });
-
-    // Canonical SDK ids (for completeness / interop).
-    foreach (var canonical in loadedModels)
+    // All catalog aliases — loaded ones first so VS Code picks a working default.
+    foreach (var alias in catalogAliases)
     {
-        if (!loadedAliases.Any(a => aliasToCanonical.TryGetValue(a, out var c) && c == canonical))
-            data.Add(new { id = canonical, @object = "model", created = ts, owned_by = "foundry-local" });
+        bool isLoaded = loadedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase);
+        data.Add(new { id = alias, @object = "model", created = ts, owned_by = "foundry-local",
+                        loaded = isLoaded });
     }
 
-    // Utility alias — remapped to defaultModel by the POST handler.
-    data.Add(new { id = utilityModelId, @object = "model", created = ts, owned_by = "foundry-local" });
+    // Canonical SDK ids that aren't covered by an alias (for interop).
+    foreach (var canonical in loadedModels)
+    {
+        if (!catalogAliases.Any(a => aliasToCanonical.TryGetValue(a, out var c) && c == canonical))
+            data.Add(new { id = canonical, @object = "model", created = ts, owned_by = "foundry-local",
+                            loaded = true });
+    }
+
+    // Utility alias — always listed, remapped to defaultModel on POST.
+    data.Add(new { id = utilityModelId, @object = "model", created = ts, owned_by = "foundry-local",
+                    loaded = true });
 
     return Results.Json(new { @object = "list", data });
 });
@@ -413,6 +438,24 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             {
                 // Already a canonical id — pass through unchanged.
                 reqLogger.LogDebug("[model] passthrough '{Model}'", requestedModel);
+            }
+            else if (catalogAliases.Contains(requestedModel, StringComparer.OrdinalIgnoreCase))
+            {
+                // Model is in the catalog but not loaded — return a helpful error.
+                reqLogger.LogWarning("[model] '{Requested}' is in the catalog but not loaded", requestedModel);
+                response.StatusCode = 503;
+                response.ContentType = "application/json";
+                await response.WriteAsJsonAsync(new
+                {
+                    error = new
+                    {
+                        message = $"Model '{requestedModel}' is available but not loaded. " +
+                                  $"Add it to FoundryLocal:AdditionalModels in appsettings.json and restart the proxy.",
+                        type    = "model_not_loaded",
+                        model   = requestedModel
+                    }
+                });
+                return;
             }
             else
             {

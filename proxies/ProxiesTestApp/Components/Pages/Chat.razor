@@ -18,9 +18,9 @@
     <div class="col-sm-4">
         <label class="form-label small fw-semibold">Model</label>
         <select class="form-select form-select-sm" @bind="_model">
-            @foreach (var m in _models)
+            @foreach (var m in _modelInfos)
             {
-                <option value="@m">@m</option>
+                <option value="@m.Id">@(m.Loaded ? m.Id : $"{m.Id} (not loaded)")</option>
             }
         </select>
     </div>
@@ -107,7 +107,7 @@
     private long   _latency;
     private int    _lastTokens;  // estimated token count for last response
     private readonly List<ChatMessage> _messages = [];
-    private List<string> _models = ["phi-4-mini"];
+    private List<ModelInfo> _modelInfos = [new ModelInfo("phi-4-mini", true)];
     private CancellationTokenSource _cts = new();
 
     protected override async Task OnParametersSetAsync()
@@ -126,10 +126,12 @@
     private async Task LoadModelsAsync()
     {
         var result = await Client.GetModelsAsync(_proxy);
-        if (result.Ok && result.Models.Count > 0)
+        if (result.Ok && result.ModelInfos is { Count: > 0 })
         {
-            _models = result.Models.ToList();
-            _model  = _models[0];
+            _modelInfos = result.ModelInfos.ToList();
+            // Auto-select first loaded model, or first model if none loaded
+            _model = _modelInfos.FirstOrDefault(m => m.Loaded)?.Id
+                  ?? _modelInfos[0].Id;
         }
     }
 
