@@ -625,4 +625,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
 // OllamaProxy uses 5099 — keeping them on separate ports so both proxies
 // can run simultaneously (useful for the full harness demo where the router
 // switches between local Ollama and cloud Foundry based on policy).
-app.Run("http://localhost:5100");
+// Port is configured via Properties/launchSettings.json (standalone dotnet run)
+// or via ASPNETCORE_URLS set by the Aspire AppHost (proxies/AppHost).
+// Both pin to 5100 so VS Code BYOK settings never need to change.
+app.Run();

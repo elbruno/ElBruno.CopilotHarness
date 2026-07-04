@@ -52,7 +52,7 @@ model for those agents. `phi-4-mini` must be registered in VS Code settings (see
 
 ## FoundryLocalProxy — the local model backend
 
-The sub-agents use **phi-4-mini** via **FoundryLocalProxy** (`samples/FoundryLocalProxy`).
+The sub-agents use **phi-4-mini** via **FoundryLocalProxy** (`proxies/FoundryLocalProxy`).
 
 ### How it works
 
@@ -86,7 +86,7 @@ The SDK ships everything it needs as NuGet dependencies.
 ### Starting the proxy
 
 ```bash
-cd samples/FoundryLocalProxy
+cd proxies/FoundryLocalProxy
 dotnet run
 ```
 
@@ -138,12 +138,12 @@ Open **Command Palette → Preferences: Open User Settings (JSON)** and add:
 }
 ```
 
-A ready-to-paste version of this snippet is at `samples/FoundryLocalProxy/vscode-settings.json`.
+A ready-to-paste version of this snippet is at `proxies/FoundryLocalProxy/vscode-settings.json`.
 
 ### Step 2 — Start the proxy
 
 ```bash
-cd samples/FoundryLocalProxy && dotnet run
+cd proxies/FoundryLocalProxy && dotnet run
 ```
 
 ### Step 3 — Use the agents
@@ -162,7 +162,7 @@ The general agent routes the first three to local sub-agents; the fourth it hand
 
 ## Adding more models
 
-Edit `samples/FoundryLocalProxy/appsettings.json`:
+Edit `proxies/FoundryLocalProxy/appsettings.json`:
 
 ```json
 {

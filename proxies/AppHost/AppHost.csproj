@@ -1,0 +1,22 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ProxiesAppHost</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      All three proxies are standalone — they are intentionally not part of the
+      main ElBruno.CopilotHarness solution.  The AppHost references them directly
+      so Aspire can launch, monitor, and show their logs in a single dashboard.
+    -->
+    <ProjectReference Include="..\OllamaProxy\OllamaProxy.csproj" />
+    <ProjectReference Include="..\FoundryProxy\FoundryProxy.csproj" />
+    <ProjectReference Include="..\FoundryLocalProxy\FoundryLocalProxy.csproj" />
+  </ItemGroup>
+
+</Project>

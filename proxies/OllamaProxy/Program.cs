@@ -394,5 +394,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
 // 4. RUN ON THE FIXED PORT
 // ---------------------------------------------------------------------------
 // Port 5099 is documented in the README and in the VS Code BYOK snippet.
-// Using app.Run() with an explicit URL is the simplest approach for a sample.
-app.Run("http://localhost:5099");
+// Port is configured via Properties/launchSettings.json (standalone dotnet run)
+// or via ASPNETCORE_URLS set by the Aspire AppHost (proxies/AppHost).
+// Both pin to 5099 so VS Code BYOK settings never need to change.
+app.Run();
