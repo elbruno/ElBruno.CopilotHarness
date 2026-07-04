@@ -23,11 +23,11 @@ Creates:
 - `.github/agents/harness-launch.agent.md`
 - `.github/agents/harness-github.agent.md`
 - `.github/agents/harness-debug.agent.md`
-- `copilot-harness-settings.json` — merge this into your VS Code `settings.json`
+- `copilot-harness-settings.json` — rename to `chatLanguageModels.json` and place in your VS Code user config folder
 
 ### `harness start`
 
-Starts the **FoundryLocalProxy** (runs `dotnet run` in `samples/FoundryLocalProxy/`).
+Starts the **FoundryLocalProxy** (runs `dotnet run` in `proxies/FoundryLocalProxy/`).
 
 ```bash
 harness start
@@ -55,9 +55,15 @@ dotnet tool install -g copilot-harness
 # 2. In your repo root:
 harness init
 
-# 3. Merge copilot-harness-settings.json into your VS Code settings.json
+# 3. Configure VS Code language models (choose one):
+#    a) Rename copilot-harness-settings.json to chatLanguageModels.json
+#       and place it in your VS Code user config folder, OR
+#    b) Use the Language Models editor:
+#       model picker → Manage Models → Add Models → Custom Endpoint
 
-# 4. Start the local proxy (from the ElBruno.CopilotHarness repo):
+# 4. Start the local proxy (easiest: aspire start from the proxies/ folder):
+cd /path/to/ElBruno.CopilotHarness/proxies && aspire start
+# Or start just FoundryLocalProxy:
 harness start
 
 # 5. Check health

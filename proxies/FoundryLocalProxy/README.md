@@ -52,7 +52,7 @@ phi-4-mini  (downloaded + cached + hardware-optimised by SDK)
 ## Quick start
 
 ```bash
-cd samples/FoundryLocalProxy
+cd proxies/FoundryLocalProxy
 dotnet run
 ```
 

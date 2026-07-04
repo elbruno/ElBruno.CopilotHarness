@@ -114,31 +114,51 @@ Subsequent runs:
 
 ### Step 1 — Register phi-4-mini as a BYOK model
 
-Open **Command Palette → Preferences: Open User Settings (JSON)** and add:
+Use one of the two methods:
+
+**Method A (UI):** In VS Code, open the Copilot Chat model picker → **Manage Models** → **Add Models** → **Custom Endpoint**.
+
+**Method B (Command Palette):** Run **Chat: Manage Language Models**.
+
+Both methods open (or create) `chatLanguageModels.json` — a **separate file from `settings.json`**, created automatically by VS Code in your user config folder. Populate it with:
+
+```json
+[
+  {
+    "name": "Phi-4 Mini (Foundry Local)",
+    "vendor": "customendpoint",
+    "apiType": "chat-completions",
+    "models": [
+      {
+        "id": "phi-4-mini",
+        "name": "Phi-4 Mini (Foundry Local)",
+        "url": "http://localhost:5101/v1/chat/completions",
+        "toolCalling": true,
+        "maxInputTokens": 131072,
+        "maxOutputTokens": 4096
+      },
+      {
+        "id": "copilot-utility-small",
+        "name": "Phi-4 Mini Utility (Foundry Local)",
+        "url": "http://localhost:5101/v1/chat/completions",
+        "toolCalling": false,
+        "maxInputTokens": 131072,
+        "maxOutputTokens": 4096
+      }
+    ]
+  }
+]
+```
+
+Then add the utility model reference to your **`settings.json`** (this setting stays in settings.json):
 
 ```json
 {
-  "github.copilot.chat.customModels": [
-    {
-      "id": "phi-4-mini",
-      "name": "Phi-4 Mini (Foundry Local)",
-      "url": "http://localhost:5101/v1/chat/completions",
-      "modelListUrl": "http://localhost:5101/v1/models",
-      "authType": "none"
-    },
-    {
-      "id": "copilot-utility-small",
-      "name": "Phi-4 Mini Utility (Foundry Local)",
-      "url": "http://localhost:5101/v1/chat/completions",
-      "modelListUrl": "http://localhost:5101/v1/models",
-      "authType": "none"
-    }
-  ],
   "chat.utilitySmallModel": "copilot-utility-small"
 }
 ```
 
-A ready-to-paste version of this snippet is at `proxies/FoundryLocalProxy/vscode-settings.json`.
+A ready-to-use `chatLanguageModels.json` template is at `proxies/FoundryLocalProxy/chatLanguageModels.json`.
 
 ### Step 2 — Start the proxy
 
@@ -174,7 +194,7 @@ Edit `proxies/FoundryLocalProxy/appsettings.json`:
 ```
 
 Restart the proxy — all models are downloaded (if needed) and loaded.
-Add corresponding entries to `github.copilot.chat.customModels` for each alias you want
+Add corresponding model entries to `chatLanguageModels.json` for each alias you want
 to be able to select in VS Code.
 
 ---
@@ -233,7 +253,7 @@ harness status
     ├── harness-launch.agent.md
     ├── harness-github.agent.md
     └── harness-debug.agent.md
-copilot-harness-settings.json   ← paste into VS Code settings.json
+copilot-harness-settings.json   ← rename to chatLanguageModels.json and place in your VS Code user config folder
 ```
 
 ### Alternative: GitHub Template

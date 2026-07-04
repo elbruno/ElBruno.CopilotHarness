@@ -79,8 +79,15 @@ browser. It starts automatically with `aspire start`.
 | Page | URL | What it does |
 |---|---|---|
 | Health Dashboard | `/` | Live status cards for all three proxies, auto-refreshes every 5 s |
-| Chat | `/chat` | Streaming chat — pick a proxy, a model, and an optional system prompt |
+| Chat | `/chat` | Streaming or non-streaming chat — pick a proxy, model, and optional system prompt. Shows tok/s and active model. |
 | Compare | `/compare` | Same prompt sent to all three proxies at once, token-by-token side-by-side |
+| Models | `/models` | **FoundryLocalProxy only** — live model catalog with cached/loaded status, Load/Unload/Delete actions, SSE progress during model loading |
+| History | `/history` | Request log — every chat request recorded with proxy, model, latency, token count |
+| Setup | `/setup` | VS Code BYOK config generator — correct `chatLanguageModels.json` snippets for each proxy, official doc links |
+
+> **FoundryLocalProxy model management:** if a model is not yet loaded, chat requests return a clear error
+> indicating the model is unavailable. Use the **Models** page to download and load the model before chatting.
+> Unloading a model frees GPU/RAM immediately; deleting it removes the cached weights from disk entirely.
 
 To run the test app on its own (while the proxies are already running):
 

@@ -23,22 +23,42 @@ unreachable and VS Code shows the error above.
 
 ### Fix
 
-Add to your VS Code **settings.json** (Ctrl+Shift+P -> Preferences: Open User Settings JSON):
+**Step 1 — Register phi-4-mini via the Language Models editor:**
+Open VS Code → Copilot Chat model picker → **Manage Models** → **Add Models** → **Custom Endpoint**  
+_(or Command Palette: `Chat: Manage Language Models`)_
+
+This opens/creates `chatLanguageModels.json`. Add or merge:
 
 ```json
-"github.copilot.chat.customModels": [
-    {
+[
+  {
+    "name": "Phi-4 Mini (Foundry Local)",
+    "vendor": "customendpoint",
+    "apiType": "chat-completions",
+    "models": [
+      {
         "id": "phi-4-mini",
         "name": "Phi-4 Mini (Foundry Local)",
         "url": "http://localhost:5101/v1/chat/completions",
-        "authType": "none"
-    }
-],
-"chat.utilityModel": "phi-4-mini",
-"chat.utilitySmallModel": "phi-4-mini"
+        "toolCalling": true,
+        "maxInputTokens": 131072,
+        "maxOutputTokens": 4096
+      }
+    ]
+  }
+]
 ```
 
-Then reload VS Code (Ctrl+Shift+P -> Reload Window).
+**Step 2 — Set the utility model** in `settings.json` (Ctrl+Shift+P → Preferences: Open User Settings JSON):
+
+```json
+{
+  "chat.utilityModel": "phi-4-mini",
+  "chat.utilitySmallModel": "phi-4-mini"
+}
+```
+
+Then reload VS Code (Ctrl+Shift+P → Reload Window).
 
 ### Why phi-4-mini, not copilot-utility-small?
 
@@ -80,8 +100,8 @@ Fix: already fixed in current proxy. Restart after git pull.
 ## Ask mode works, Agent mode fails
 
 chatLanguageModels.json covers Ask mode and vscode.lm API (agent .md files).
-Agent mode additionally requires github.copilot.chat.customModels + utility model
-settings in settings.json. See the fix above.
+Agent mode additionally requires `chatLanguageModels.json` (for model registration) + utility model
+settings in `settings.json`. See the fix above.
 
 | File | Covers |
 |---|---|

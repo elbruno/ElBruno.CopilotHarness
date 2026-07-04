@@ -63,8 +63,8 @@ public sealed class InitCommand : Command
 
         AnsiConsole.Write(new Panel(
             "[bold]Next steps:[/]\n\n" +
-            "1. Merge [cyan]copilot-harness-settings.json[/] into your VS Code [cyan]settings.json[/]\n" +
-            "   ([grey]Ctrl+Shift+P → Open User Settings JSON[/])\n\n" +
+            "1. Open VS Code → Copilot Chat → model picker → Manage Models → Add Models → Custom Endpoint\n" +
+            "   OR rename [cyan]copilot-harness-settings.json[/] → [cyan]chatLanguageModels.json[/] and place in your VS Code user config folder\n\n" +
             "2. Start the local proxy:\n" +
             "   [yellow]harness start[/]\n\n" +
             "3. In VS Code Copilot Chat, try:\n" +
