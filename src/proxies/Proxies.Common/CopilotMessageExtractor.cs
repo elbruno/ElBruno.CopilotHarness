@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace FoundryProxy;
+namespace Proxies.Common;
 
 /// <summary>
 /// Extracts the real user-typed message from a raw GitHub Copilot Chat request payload.
@@ -29,7 +29,7 @@ namespace FoundryProxy;
 ///
 /// <para><b>Source</b><br/>
 /// Ported from <c>ElBruno.CopilotHarness.Router.Api/ModelRouter.cs</c> — same logic,
-/// extracted into a self-contained file so this sample has zero dependency on the main project.
+/// extracted into a self-contained shared library so all three proxies use one copy.
 /// </para>
 /// </summary>
 public static class CopilotMessageExtractor

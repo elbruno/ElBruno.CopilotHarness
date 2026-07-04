@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Shared utility library for all three local proxies (OllamaProxy, FoundryProxy,
+      FoundryLocalProxy). Holds code that is identical across all three so it lives
+      in exactly one place.
+
+      This is a class library, NOT a web app — no ASP.NET Core dependency here.
+      net10.0 matches the proxy projects so the assembly is compatible.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Proxies.Common</RootNamespace>
+    <AssemblyName>Proxies.Common</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    No NuGet packages needed.
+    System.Text.Json ships with the .NET SDK — no extra reference required.
+  -->
+
+</Project>

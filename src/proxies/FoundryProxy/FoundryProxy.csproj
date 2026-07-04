@@ -43,6 +43,8 @@
   <ItemGroup>
     <!-- Shared OTEL wiring + LlmActivity spans → Aspire traces/metrics/logs -->
     <ProjectReference Include="..\Proxies.ServiceDefaults\Proxies.ServiceDefaults.csproj" />
+    <!-- Shared proxy utilities: CopilotMessageExtractor and friends -->
+    <ProjectReference Include="..\Proxies.Common\Proxies.Common.csproj" />
   </ItemGroup>
 
 </Project>

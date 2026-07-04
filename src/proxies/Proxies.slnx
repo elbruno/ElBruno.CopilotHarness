@@ -3,6 +3,7 @@
   <Project Path="FoundryLocalProxy/FoundryLocalProxy.csproj" />
   <Project Path="FoundryProxy/FoundryProxy.csproj" />
   <Project Path="OllamaProxy/OllamaProxy.csproj" />
+  <Project Path="Proxies.Common/Proxies.Common.csproj" />
   <Project Path="Proxies.ServiceDefaults/Proxies.ServiceDefaults.csproj" />
   <Project Path="ProxiesTestApp/ProxiesTestApp.csproj" />
 </Solution>

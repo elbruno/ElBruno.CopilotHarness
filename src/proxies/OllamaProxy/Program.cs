@@ -21,7 +21,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using OllamaProxy;
+using Proxies.Common;
 using Proxies.ServiceDefaults;
 
 // ---------------------------------------------------------------------------

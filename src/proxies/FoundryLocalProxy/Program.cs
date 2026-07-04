@@ -62,8 +62,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
-using FoundryLocalProxy;
 using Microsoft.AI.Foundry.Local;
+using Proxies.Common;
 using Proxies.ServiceDefaults;
 
 // ---------------------------------------------------------------------------
