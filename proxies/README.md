@@ -20,12 +20,17 @@ dotnet run
 ## Quick start — all three via Aspire
 
 ```bash
-cd proxies/AppHost
-dotnet run
+cd proxies
+aspire start
 ```
 
 Opens the Aspire dashboard with live logs, health, and request timings for all
-three proxies in one view. Aspire workload required (`dotnet workload install aspire`).
+three proxies — plus the **ProxiesTestApp** web UI — in one view.
+
+> **Requires the Aspire CLI** (`dotnet workload install aspire`).  
+> The `aspire.config.json` in this folder already points at `AppHost/AppHost.csproj`,
+> so `aspire start` (and `aspire stop`) work from the `proxies/` directory without
+> any extra flags.
 
 ---
 
@@ -41,15 +46,23 @@ All three can run simultaneously. The Aspire AppHost (`AppHost/`) launches all t
 
 ---
 
-## Test client
+## Test client — ProxiesTestApp (Blazor)
 
-`FoundryLocalProxy.TestClient/` is a console app that exercises all FoundryLocalProxy
-endpoints (health, models, non-streaming, streaming, multi-turn, system prompt).
-Run it while FoundryLocalProxy (or the AppHost) is running:
+`ProxiesTestApp/` is a Blazor Server web app that tests all three proxies from a browser UI.
+It launches automatically when you use `aspire start` (see above).
+
+| Page | Path | What it does |
+|---|---|---|
+| Health Dashboard | `/` | Live status cards for all three proxies, auto-refreshes every 5 s |
+| Chat | `/chat` | Streaming chat — choose proxy, model, and system prompt |
+| Compare | `/compare` | Same prompt sent to all three proxies simultaneously, side-by-side |
+
+To run the test app standalone (without Aspire):
 
 ```bash
-cd proxies/FoundryLocalProxy.TestClient
+cd proxies/ProxiesTestApp
 dotnet run
+# opens at http://localhost:5102
 ```
 
 ---
