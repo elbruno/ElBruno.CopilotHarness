@@ -1,6 +1,7 @@
 @page "/compare"
 @rendermode InteractiveServer
 @inject ProxyClient Client
+@inject RequestHistoryService History
 
 <PageTitle>Compare — Proxies Test App</PageTitle>
 
@@ -82,9 +83,10 @@
     private bool   _showSys;
     private bool   _busy;
 
-    private readonly Dictionary<string, string> _responses = ProxyConfig.All.ToDictionary(p => p.Name, _ => "");
-    private readonly Dictionary<string, long>   _latencies = ProxyConfig.All.ToDictionary(p => p.Name, _ => 0L);
-    private readonly Dictionary<string, string?> _errors   = ProxyConfig.All.ToDictionary(p => p.Name, _ => (string?)null);
+    private readonly Dictionary<string, string>  _responses = ProxyConfig.All.ToDictionary(p => p.Name, _ => "");
+    private readonly Dictionary<string, long>    _latencies = ProxyConfig.All.ToDictionary(p => p.Name, _ => 0L);
+    private readonly Dictionary<string, string?> _errors    = ProxyConfig.All.ToDictionary(p => p.Name, _ => (string?)null);
+    private readonly Dictionary<string, string>  _models    = ProxyConfig.All.ToDictionary(p => p.Name, _ => "");
     private readonly HashSet<string> _inFlight = [];
     private CancellationTokenSource _cts = new();
 
@@ -125,6 +127,7 @@
             // Discover first available model for this proxy
             var models = await Client.GetModelsAsync(proxy.Name, _cts.Token);
             var model  = models.Models.FirstOrDefault() ?? "phi-4-mini";
+            _models[proxy.Name] = model;
 
             await foreach (var token in Client.StreamChatAsync(proxy.Name, model, msgs, _cts.Token))
             {
@@ -143,6 +146,20 @@
             sw.Stop();
             _latencies[proxy.Name] = sw.ElapsedMilliseconds;
             _inFlight.Remove(proxy.Name);
+
+            var tokenCount = _responses.TryGetValue(proxy.Name, out var resp)
+                ? resp.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length : 0;
+            History.Add(new RequestHistoryEntry(
+                Proxy:          proxy.Name,
+                Model:          _models.TryGetValue(proxy.Name, out var m) ? m : proxy.Name,
+                PromptPreview:  _prompt.Length > 80 ? _prompt[..80] + "…" : _prompt,
+                Streaming:      true,
+                LatencyMs:      sw.ElapsedMilliseconds,
+                TokensEstimate: tokenCount,
+                Error:          _errors.TryGetValue(proxy.Name, out var e) ? e : null,
+                Timestamp:      DateTimeOffset.Now
+            ));
+
             await InvokeAsync(StateHasChanged);
         }
     }

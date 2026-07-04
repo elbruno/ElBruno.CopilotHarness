@@ -2,6 +2,10 @@ using ProxiesTestApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// OTEL → Aspire dashboard (traces, metrics, structured logs).
+// Works standalone too — OTLP is skipped when the Aspire env var is absent.
+builder.AddProxiesServiceDefaults();
+
 // Blazor Server with interactive components
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -19,6 +23,8 @@ foreach (var proxy in ProxyConfig.All)
 }
 
 builder.Services.AddScoped<ProxyClient>();
+// Singleton: stores request history across all Blazor connections / pages.
+builder.Services.AddSingleton<RequestHistoryService>();
 
 var app = builder.Build();
 

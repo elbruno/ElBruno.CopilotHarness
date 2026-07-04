@@ -15,4 +15,9 @@
     env-var injection — no service discovery package required.
   -->
 
+  <ItemGroup>
+    <!-- Shared OTEL wiring + LlmActivity spans → Aspire traces/metrics/logs -->
+    <ProjectReference Include="..\Proxies.ServiceDefaults\Proxies.ServiceDefaults.csproj" />
+  </ItemGroup>
+
 </Project>

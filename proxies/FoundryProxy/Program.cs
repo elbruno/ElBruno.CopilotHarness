@@ -40,11 +40,16 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FoundryProxy;
+using Proxies.ServiceDefaults;
 
 // ---------------------------------------------------------------------------
 // 1. BUILDER — wire up services before building the app
 // ---------------------------------------------------------------------------
 var builder = WebApplication.CreateBuilder(args);
+
+// AddProxiesServiceDefaults wires OpenTelemetry (traces + metrics + logs) and
+// sends data to Aspire via OTLP when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+builder.AddProxiesServiceDefaults();
 
 // ---------------------------------------------------------------------------
 // USER SECRETS — explicitly add them so they load regardless of ASPNETCORE_ENVIRONMENT.
@@ -518,6 +523,11 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
         // Malformed JSON — skip all parsing and let Azure return the error.
     }
 
+    // LLM activity span — shows in the Aspire Traces tab as "llm.chat" with
+    // tags: llm.proxy=FoundryProxy, llm.model, llm.streaming, llm.latency_ms.
+    var llmSw   = System.Diagnostics.Stopwatch.StartNew();
+    using var llmSpan = LlmActivity.StartChat("FoundryProxy", resolvedDeployment, isStreaming);
+
     // ------------------------------------------------------------------
     // STEP 3: FORWARD TO AZURE OPENAI
     //
@@ -559,6 +569,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     catch (TaskCanceledException)
     {
         // Timeout exceeded (>5 minutes) — very unusual but surface a clear message.
+        LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds, error: "timeout");
         response.StatusCode = 504;
         await response.WriteAsync("{\"error\":\"Azure OpenAI request timed out after 5 minutes.\"}");
         return;
@@ -566,6 +577,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     catch (HttpRequestException ex)
     {
         // Network failure — Azure endpoint unreachable.
+        LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds, error: ex.Message);
         response.StatusCode = 502;
         await response.WriteAsync($"{{\"error\":\"Could not reach Azure OpenAI at {targetHost}: {ex.Message}\"}}");
         return;
@@ -616,6 +628,9 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
         var json = await foundryResponse.Content.ReadAsStringAsync();
         await response.WriteAsync(json);
     }
+
+    llmSw.Stop();
+    LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds);
 });
 
 // ---------------------------------------------------------------------------

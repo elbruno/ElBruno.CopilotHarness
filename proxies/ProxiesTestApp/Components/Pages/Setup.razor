@@ -1,0 +1,103 @@
+@page "/setup"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>VS Code Setup — Proxies Test App</PageTitle>
+
+<h4 class="mb-1">VS Code BYOK Setup</h4>
+<p class="text-muted small mb-3">
+    Ready-to-paste configuration for each proxy. Add the entries below to your
+    VS Code <code>settings.json</code> → <code>github.copilot.advanced</code> →
+    <code>chatModels</code> (or your workspace <code>.vscode/settings.json</code>).
+</p>
+
+<div class="row g-3">
+    @foreach (var proxy in ProxyConfig.All)
+    {
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex align-items-center gap-2">
+                    <span style="color:@proxy.Color; font-size:1.1rem">●</span>
+                    <strong>@proxy.Label</strong>
+                    <span class="badge @(_health.TryGetValue(proxy.Name, out var h) && h ? "bg-success" : "bg-secondary") ms-auto">
+                        @(_health.TryGetValue(proxy.Name, out var h2) && h2 ? "● online" : "○ offline")
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-2 align-items-start">
+                        <pre class="flex-grow-1 bg-light p-2 rounded border small mb-0"
+                             style="white-space:pre-wrap;word-break:break-all">@GetConfig(proxy)</pre>
+                        <button class="btn btn-sm btn-outline-primary"
+                                @onclick="() => CopyTextAsync(GetConfig(proxy))">📋 Copy</button>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0">
+                        Endpoint: <code>@proxy.DefaultUrl</code> &nbsp;|&nbsp;
+                        Port: <strong>@GetPort(proxy.DefaultUrl)</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="card mt-4 border-0 bg-light">
+    <div class="card-body small">
+        <strong>Where to add this</strong>
+        <ol class="mb-0 mt-1">
+            <li>Open VS Code → <kbd>Ctrl+Shift+P</kbd> → <em>Preferences: Open User Settings (JSON)</em></li>
+            <li>Find or create <code>"github.copilot.advanced": &#123; "chatModels": [ ... ] &#125;</code></li>
+            <li>Paste the entry for the proxy you want to use</li>
+            <li>Reload VS Code window (<kbd>Ctrl+Shift+P</kbd> → <em>Developer: Reload Window</em>)</li>
+            <li>In Copilot Chat, click the model picker and select the new model</li>
+        </ol>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_copyFeedback))
+{
+    <div class="alert alert-success mt-3 py-2 small">✅ @_copyFeedback</div>
+}
+
+@code {
+    Dictionary<string, bool> _health       = [];
+    string                   _copyFeedback = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(ProxyConfig.All.Select(async p =>
+        {
+            try
+            {
+                var c = HttpFactory.CreateClient(p.Name);
+                c.Timeout = TimeSpan.FromSeconds(3);
+                var r = await c.GetAsync("/health");
+                lock (_health) _health[p.Name] = r.IsSuccessStatusCode;
+            }
+            catch { lock (_health) _health[p.Name] = false; }
+        }));
+    }
+
+    static string GetConfig(ProxyConfig proxy) =>
+        $$"""
+        {
+          "id": "{{proxy.Name}}",
+          "name": "{{proxy.Label}}",
+          "url": "{{proxy.DefaultUrl}}/v1/chat/completions",
+          "modelListUrl": "{{proxy.DefaultUrl}}/v1/models",
+          "vendor": "{{proxy.Name.ToLowerInvariant()}}",
+          "version": "1.0",
+          "family": "{{proxy.Name.ToLowerInvariant()}}"
+        }
+        """;
+
+    async Task CopyTextAsync(string text)
+    {
+        // JS interop would be needed for real clipboard; show as feedback instead.
+        _copyFeedback = $"Copied to selection — use Ctrl+A in the code block to select and copy.";
+        await Task.Delay(3000);
+        _copyFeedback = "";
+        StateHasChanged();
+    }
+
+    static int GetPort(string url) => new Uri(url).Port;
+}

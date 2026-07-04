@@ -1,6 +1,7 @@
 @page "/chat"
 @rendermode InteractiveServer
 @inject ProxyClient Client
+@inject RequestHistoryService History
 
 <PageTitle>Chat — Proxies Test App</PageTitle>
 
@@ -83,7 +84,13 @@
 </div>
 @if (_latency > 0)
 {
-    <p class="text-muted small mt-1">Last response: @_latency ms</p>
+    <p class="text-muted small mt-1">
+        Last response: @_latency ms
+        @if (_lastTokens > 0 && _latency > 0)
+        {
+            <span class="ms-2 badge bg-light text-dark border">~@_lastTokens tokens · @((_lastTokens * 1000.0 / _latency).ToString("F1")) tok/s</span>
+        }
+    </p>
 }
 
 @code {
@@ -98,6 +105,7 @@
     private bool   _busy;
     private bool   _typing;
     private long   _latency;
+    private int    _lastTokens;  // estimated token count for last response
     private readonly List<ChatMessage> _messages = [];
     private List<string> _models = ["phi-4-mini"];
     private CancellationTokenSource _cts = new();
@@ -146,6 +154,8 @@
         _messages.Add(new ChatMessage("user", text));
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        string? historyError = null;
+        _lastTokens = 0;
 
         if (_streaming)
         {
@@ -159,6 +169,7 @@
             await foreach (var token in Client.StreamChatAsync(_proxy, _model, contextMessages, _cts.Token))
             {
                 assistantMsg.Content += token;
+                _lastTokens++;
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -167,6 +178,7 @@
             _typing = true;
             StateHasChanged();
             var (reply, _, error) = await Client.ChatAsync(_proxy, _model, contextMessages);
+            historyError = error;
             _typing = false;
             _messages.Add(new ChatMessage("assistant", reply ?? $"⚠ {error}"));
         }
@@ -174,6 +186,18 @@
         sw.Stop();
         _latency = sw.ElapsedMilliseconds;
         _busy    = false;
+
+        History.Add(new RequestHistoryEntry(
+            Proxy:         _proxy,
+            Model:         _model,
+            PromptPreview: text.Length > 80 ? text[..80] + "…" : text,
+            Streaming:     _streaming,
+            LatencyMs:     _latency,
+            TokensEstimate:_lastTokens,
+            Error:         historyError,
+            Timestamp:     DateTimeOffset.Now
+        ));
+
         StateHasChanged();
     }
 

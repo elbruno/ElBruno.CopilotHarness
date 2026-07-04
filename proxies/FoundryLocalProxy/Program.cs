@@ -63,11 +63,16 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FoundryLocalProxy;
 using Microsoft.AI.Foundry.Local;
+using Proxies.ServiceDefaults;
 
 // ---------------------------------------------------------------------------
 // 1. BUILDER — wire up services before building the app
 // ---------------------------------------------------------------------------
 var builder = WebApplication.CreateBuilder(args);
+
+// AddProxiesServiceDefaults wires OpenTelemetry (traces + metrics + logs) and
+// sends data to Aspire via OTLP when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+builder.AddProxiesServiceDefaults();
 
 // Read settings from appsettings.json (or environment overrides).
 var defaultModelAlias = builder.Configuration["FoundryLocal:DefaultModel"] ?? "phi-4-mini";
@@ -318,8 +323,7 @@ app.MapGet("/health", () => new
 // We advertise the ALIASES (e.g. "phi-4-mini") so VS Code finds them by name,
 // plus the utility alias.  Canonical SDK ids are included as well for completeness.
 app.MapGet("/v1/models", () =>
-{
-    var data = new List<object>();
+{    var data = new List<object>();
     long ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
     // Aliases first — these are the ids VS Code is configured with.
@@ -337,6 +341,32 @@ app.MapGet("/v1/models", () =>
     data.Add(new { id = utilityModelId, @object = "model", created = ts, owned_by = "foundry-local" });
 
     return Results.Json(new { @object = "list", data });
+});
+
+// --- 3b2. Known model catalog — all models the Foundry Local SDK can serve --
+//
+//  GET /v1/models/catalog  — ProxiesTestApp uses this to show the full catalog
+//  with size, RAM requirements, and a description so users can decide which
+//  models to add to FoundryLocal:AdditionalModels in appsettings.json.
+//
+//  "loaded" = currently running in memory (in loadedAliases)
+//  "available" = in the Foundry Local public catalog but not loaded here
+//
+//  To add a model: set FoundryLocal:AdditionalModels: [ "phi-4", ... ] and restart.
+app.MapGet("/v1/models/catalog", () =>
+{
+    var catalog = new[]
+    {
+        new { alias="phi-4-mini",         params_b=3.8,  size_gb=2.5, ram_gb=6,  description="Default. Fast, coding-focused, MIT license.",             status=loadedAliases.Contains("phi-4-mini",         StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+        new { alias="phi-4",              params_b=14.0, size_gb=9.0, ram_gb=16, description="Higher quality than phi-4-mini, needs more RAM.",           status=loadedAliases.Contains("phi-4",              StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+        new { alias="phi-3.5-mini",       params_b=3.8,  size_gb=2.4, ram_gb=6,  description="Previous Phi generation, similar size to phi-4-mini.",      status=loadedAliases.Contains("phi-3.5-mini",       StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+        new { alias="phi-3-mini",         params_b=3.8,  size_gb=2.2, ram_gb=6,  description="Older Phi, smallest in the Phi-3 family.",                  status=loadedAliases.Contains("phi-3-mini",         StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+        new { alias="llama-3.2-3b",       params_b=3.0,  size_gb=2.0, ram_gb=6,  description="Meta's fast 3B model, great for quick responses.",          status=loadedAliases.Contains("llama-3.2-3b",       StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+        new { alias="llama-3.2-1b",       params_b=1.0,  size_gb=1.0, ram_gb=4,  description="Smallest viable model, ultra-fast on CPU.",                 status=loadedAliases.Contains("llama-3.2-1b",       StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+        new { alias="mistral-7b-instruct",params_b=7.0,  size_gb=5.0, ram_gb=10, description="Strong coding and reasoning, needs ~8 GB RAM.",             status=loadedAliases.Contains("mistral-7b-instruct",StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+        new { alias="phi-3.5-moe",        params_b=42.0, size_gb=28.0,ram_gb=32, description="Mixture-of-Experts, best quality, needs high-end hardware.", status=loadedAliases.Contains("phi-3.5-moe",        StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
+    };
+    return Results.Json(new { loaded = loadedAliases, catalog });
 });
 
 // --- 3c. Chat completions — THE CORE PROXY --------------------------------
@@ -396,6 +426,11 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     }
     catch (JsonException) { /* malformed JSON — let the SDK return the error */ }
 
+    // LLM activity span — shows in the Aspire Traces tab as "llm.chat" with
+    // tags: llm.proxy=FoundryLocalProxy, llm.model, llm.streaming, llm.latency_ms.
+    var llmSw   = System.Diagnostics.Stopwatch.StartNew();
+    using var llmSpan = LlmActivity.StartChat("FoundryLocalProxy", requestedModel, isStreaming);
+
     // STEP 3: Forward to the SDK's internal REST server.
     var httpClient = clientFactory.CreateClient("foundrylocal");
 
@@ -416,16 +451,19 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     catch (TaskCanceledException ex) when (ex.CancellationToken == request.HttpContext.RequestAborted)
     {
         // Client disconnected or server shutting down — nothing to write back.
+        LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds, error: "client disconnected");
         return;
     }
     catch (TaskCanceledException)
     {
+        LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds, error: "timeout");
         response.StatusCode = 504;
         await response.WriteAsync("{\"error\":\"Foundry Local request timed out after 5 minutes.\"}");
         return;
     }
     catch (HttpRequestException ex)
     {
+        LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds, error: ex.Message);
         response.StatusCode = 502;
         await response.WriteAsync($"{{\"error\":\"Could not reach Foundry Local internal server at {internalBaseUrl}: {ex.Message}\"}}");
         return;
@@ -544,6 +582,9 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
         catch (JsonException) { /* leave as-is */ }
         await response.WriteAsync(rawJson);
     }
+
+    llmSw.Stop();
+    LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds);
 });
 
 // ---------------------------------------------------------------------------

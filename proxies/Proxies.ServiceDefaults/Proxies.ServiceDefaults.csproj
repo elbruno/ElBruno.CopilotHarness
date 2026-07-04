@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Shared service defaults for the BYOK proxy samples (proxies/ folder).
+
+      This is a class library — not a web project.  It is referenced by every
+      proxy project (OllamaProxy, FoundryProxy, FoundryLocalProxy, ProxiesTestApp)
+      to get consistent OpenTelemetry wiring without repeating boilerplate.
+
+      IsAspireSharedProject=true tells the Aspire AppHost tooling that this
+      is a shared library, NOT a launched service — it will not appear as a
+      resource in the Aspire dashboard.
+
+      Same OTEL package versions as ElBruno.CopilotHarness.ServiceDefaults so
+      the whole workspace resolves to a consistent set of assemblies.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAspireSharedProject>true</IsAspireSharedProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting"             Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore"     Version="1.15.2" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http"           Version="1.15.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime"        Version="1.15.1" />
+  </ItemGroup>
+
+</Project>

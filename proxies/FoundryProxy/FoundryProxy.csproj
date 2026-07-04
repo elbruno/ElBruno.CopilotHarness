@@ -40,4 +40,9 @@
     simpler to teach and matches the approach in the main project's ChatCompletionsProvider.
   -->
 
+  <ItemGroup>
+    <!-- Shared OTEL wiring + LlmActivity spans → Aspire traces/metrics/logs -->
+    <ProjectReference Include="..\Proxies.ServiceDefaults\Proxies.ServiceDefaults.csproj" />
+  </ItemGroup>
+
 </Project>
