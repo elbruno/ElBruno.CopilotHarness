@@ -105,25 +105,39 @@ builder.Services.AddHttpClient("foundrylocal", client =>
 var app = builder.Build();
 var logger = app.Logger;
 
-// DEBUG MIDDLEWARE — logs every incoming request (headers + body snapshot).
-// Helps diagnose VS Code BYOK format issues. Remove in production.
+// REQUEST MIDDLEWARE — logs each incoming request with timing.
+// Shows method, path, caller, body snippet, and response time.
 app.Use(async (ctx, next) =>
 {
     ctx.Request.EnableBuffering();
-    var headers = string.Join(" | ", ctx.Request.Headers.Select(h => $"{h.Key}: {h.Value}"));
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+
+    // Capture a readable body snippet (POST only).
     string bodySnippet = "";
     if (ctx.Request.ContentLength > 0)
     {
         using var sr = new StreamReader(ctx.Request.Body, leaveOpen: true);
         var raw = await sr.ReadToEndAsync();
-        bodySnippet = raw.Length > 300 ? raw[..300] + "…" : raw;
+        bodySnippet = raw.Length > 200 ? raw[..200] + "…" : raw;
         ctx.Request.Body.Position = 0;
     }
-    Console.WriteLine($"\n[DEBUG] {ctx.Request.Method} {ctx.Request.Path}");
-    Console.WriteLine($"[DEBUG] Headers: {headers}");
-    if (!string.IsNullOrEmpty(bodySnippet))
-        Console.WriteLine($"[DEBUG] Body: {bodySnippet}");
+
+    // Show caller identity: prefer User-Agent app name, fall back to IP.
+    var ua      = ctx.Request.Headers.UserAgent.ToString();
+    var caller  = ua.Length > 0 ? ua.Split('/')[0].Trim() : ctx.Connection.RemoteIpAddress?.ToString() ?? "?";
+
+    if (string.IsNullOrEmpty(bodySnippet))
+        logger.LogInformation("→ {Method} {Path}  ({Caller})",
+            ctx.Request.Method, ctx.Request.Path, caller);
+    else
+        logger.LogInformation("→ {Method} {Path}  ({Caller})  body: {Body}",
+            ctx.Request.Method, ctx.Request.Path, caller, bodySnippet);
+
     await next();
+
+    sw.Stop();
+    logger.LogInformation("← {Method} {Path}  {Status}  {ElapsedMs}ms",
+        ctx.Request.Method, ctx.Request.Path, ctx.Response.StatusCode, sw.ElapsedMilliseconds);
 });
 
 // ---------------------------------------------------------------------------
@@ -352,8 +366,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
         {
             // Log what the user actually typed (unwrap Copilot Chat XML envelope).
             var typedAsk = CopilotMessageExtractor.GetLastUserMessageText(jsonBody);
-            reqLogger.LogInformation("[copilot ask] {TypedAsk}", typedAsk);
-            Console.WriteLine($"[copilot ask] {typedAsk}");
+            reqLogger.LogInformation("[ask] {TypedAsk}", typedAsk);
 
             isStreaming    = jsonBody["stream"]?.GetValue<bool>() ?? false;
             requestedModel = jsonBody["model"]?.GetValue<string>() ?? defaultModel;
@@ -362,20 +375,20 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             // The internal server only understands canonical ids.
             if (aliasToCanonical.TryGetValue(requestedModel, out var canonicalId))
             {
-                Console.WriteLine($"[model alias→canonical] '{requestedModel}' → '{canonicalId}'");
+                reqLogger.LogDebug("[model] alias '{Alias}' → canonical '{Canonical}'", requestedModel, canonicalId);
                 jsonBody["model"] = canonicalId;
                 bodyText = jsonBody.ToJsonString();
             }
             else if (loadedModelSet.Contains(requestedModel))
             {
                 // Already a canonical id — pass through unchanged.
-                Console.WriteLine($"[model passthrough] '{requestedModel}'");
+                reqLogger.LogDebug("[model] passthrough '{Model}'", requestedModel);
             }
             else
             {
                 // Unknown id (e.g. utility alias) — remap to first loaded canonical id.
                 var fallbackCanonical = loadedModels.FirstOrDefault() ?? defaultModelAlias;
-                Console.WriteLine($"[model rewrite] '{requestedModel}' → '{fallbackCanonical}'");
+                reqLogger.LogInformation("[model] unknown '{Requested}' → fallback '{Fallback}'", requestedModel, fallbackCanonical);
                 jsonBody["model"] = fallbackCanonical;
                 bodyText = jsonBody.ToJsonString();
             }
