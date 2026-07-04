@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="AppHost/AppHost.csproj" />
+  <Project Path="FoundryLocalProxy.TestClient/FoundryLocalProxy.TestClient.csproj" />
+  <Project Path="FoundryLocalProxy/FoundryLocalProxy.csproj" />
+  <Project Path="FoundryProxy/FoundryProxy.csproj" />
+  <Project Path="OllamaProxy/OllamaProxy.csproj" />
+</Solution>
