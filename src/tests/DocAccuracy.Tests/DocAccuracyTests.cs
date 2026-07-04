@@ -332,6 +332,255 @@ public class DocAccuracyTests
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Phase A — Tool DX
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Tool_Has_DoctorCommand()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Commands", "DoctorCommand.cs");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("doctor", StringComparison.OrdinalIgnoreCase) || content.Contains("Doctor"),
+            $"DoctorCommand.cs should contain 'doctor' or 'Doctor' but does not. File: {filePath}");
+    }
+
+    [Fact]
+    public void Tool_Has_UpdateCommand()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Commands", "UpdateCommand.cs");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("Update") || content.Contains("update"),
+            $"UpdateCommand.cs should contain 'Update' or 'update' but does not. File: {filePath}");
+    }
+
+    [Fact]
+    public void Tool_README_Mentions_Doctor_And_Update()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "README.md");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("harness doctor"),
+            $"Tool README.md should contain 'harness doctor' but does not. File: {filePath}");
+
+        Assert.True(content.Contains("harness update"),
+            $"Tool README.md should contain 'harness update' but does not. File: {filePath}");
+    }
+
+    [Fact]
+    public void Tool_InitCommand_Detects_VSCode_UserDir()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Commands", "InitCommand.cs");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("Code"),
+            $"InitCommand.cs should contain 'Code' (VS Code path detection) but does not. File: {filePath}");
+
+        Assert.True(content.Contains("chatLanguageModels.json"),
+            $"InitCommand.cs should contain 'chatLanguageModels.json' but does not. File: {filePath}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Phase B — Agent templates
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void AllFourNewAgentTemplates_ExistIn_GithubAgents()
+    {
+        var root = GetRepoRoot();
+        var agentsDir = Path.Combine(root, ".github", "agents");
+
+        var expected = new[]
+        {
+            "harness-db.agent.md",
+            "harness-test.agent.md",
+            "harness-docs.agent.md",
+            "harness-deploy.agent.md"
+        };
+
+        var missing = expected.Where(f => !File.Exists(Path.Combine(agentsDir, f))).ToList();
+
+        Assert.True(missing.Count == 0,
+            $"Missing agent file(s) in .github/agents/:\n{string.Join("\n", missing)}");
+    }
+
+    [Fact]
+    public void AllFourNewAgentTemplates_ExistIn_ToolTemplates()
+    {
+        var root = GetRepoRoot();
+        var templatesDir = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Templates", "agents");
+
+        var expected = new[]
+        {
+            "harness-db.agent.md",
+            "harness-test.agent.md",
+            "harness-docs.agent.md",
+            "harness-deploy.agent.md"
+        };
+
+        var missing = expected.Where(f => !File.Exists(Path.Combine(templatesDir, f))).ToList();
+
+        Assert.True(missing.Count == 0,
+            $"Missing agent template(s) in src/tools/CopilotHarness.Tool/Templates/agents/:\n{string.Join("\n", missing)}");
+    }
+
+    [Fact]
+    public void HarnessGeneral_RoutesTo_AllFourNewAgents()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, ".github", "agents", "harness-general.agent.md");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("harness-db"),
+            $"harness-general.agent.md should contain 'harness-db' but does not. File: {filePath}");
+
+        Assert.True(content.Contains("harness-test"),
+            $"harness-general.agent.md should contain 'harness-test' but does not. File: {filePath}");
+
+        Assert.True(content.Contains("harness-docs"),
+            $"harness-general.agent.md should contain 'harness-docs' but does not. File: {filePath}");
+
+        Assert.True(content.Contains("harness-deploy"),
+            $"harness-general.agent.md should contain 'harness-deploy' but does not. File: {filePath}");
+    }
+
+    [Fact]
+    public void AllNewAgents_HavePhiFourMiniModel()
+    {
+        var root = GetRepoRoot();
+        var agentsDir = Path.Combine(root, ".github", "agents");
+
+        var agentFiles = new[]
+        {
+            "harness-db.agent.md",
+            "harness-test.agent.md",
+            "harness-docs.agent.md",
+            "harness-deploy.agent.md"
+        };
+
+        var violations = new List<string>();
+        foreach (var file in agentFiles)
+        {
+            var fullPath = Path.Combine(agentsDir, file);
+            if (!File.Exists(fullPath))
+            {
+                violations.Add($"{file}: file not found");
+                continue;
+            }
+            var content = File.ReadAllText(fullPath);
+            if (!content.Contains("phi-4-mini"))
+                violations.Add($"{file}: missing 'phi-4-mini'");
+        }
+
+        Assert.True(violations.Count == 0,
+            $"Agent file(s) missing 'phi-4-mini' model:\n{string.Join("\n", violations)}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Phase C — Presentation
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Presentation_HasSpeakerNotes()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "presentation", "harness-layers.html");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("notes"),
+            $"harness-layers.html should contain 'notes' (speaker notes class/attribute) but does not. File: {filePath}");
+
+        Assert.True(content.Contains("data-notes"),
+            $"harness-layers.html should contain 'data-notes' attribute but does not. File: {filePath}");
+    }
+
+    [Fact]
+    public void Presentation_HasClipboardFunctionality()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "presentation", "harness-layers.html");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("clipboard") || content.Contains("copy-btn"),
+            $"harness-layers.html should contain 'clipboard' or 'copy-btn' but does not. File: {filePath}");
+    }
+
+    [Fact]
+    public void Index_Links_To_Presentation()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "docs", "index.html");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("harness-layers.html"),
+            $"docs/index.html should link to 'harness-layers.html' but does not. File: {filePath}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Phase D — Aspire detection
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void InitCommand_HasAspireAppHostDetection()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Commands", "InitCommand.cs");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("AppHost"),
+            $"InitCommand.cs should contain 'AppHost' (Aspire detection) but does not. File: {filePath}");
+
+        Assert.True(content.Contains("FindAspireAppHost") || content.Contains("appHost"),
+            $"InitCommand.cs should contain 'FindAspireAppHost' or 'appHost' but does not. File: {filePath}");
+    }
+
+    [Fact]
+    public void ToolReadme_MentionsAspireDetection()
+    {
+        var root = GetRepoRoot();
+        var filePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "README.md");
+
+        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+
+        var content = File.ReadAllText(filePath);
+
+        Assert.True(content.Contains("AppHost") || content.Contains("Aspire"),
+            $"Tool README.md should contain 'AppHost' or 'Aspire' (Aspire detection note) but does not. File: {filePath}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────
     private static int CountOccurrences(string source, string pattern)

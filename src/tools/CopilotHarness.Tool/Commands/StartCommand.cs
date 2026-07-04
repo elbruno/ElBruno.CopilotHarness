@@ -45,6 +45,8 @@ public sealed class StartCommand : Command<StartSettings>
             return 1;
         }
 
+        var proxyHealthy = false;
+
         // Wait up to 30 seconds for the proxy to become healthy
         AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
@@ -60,6 +62,7 @@ public sealed class StartCommand : Command<StartSettings>
                         if (response.IsSuccessStatusCode)
                         {
                             ctx.Status("[green]Proxy is healthy![/]");
+                            proxyHealthy = true;
                             return;
                         }
                     }
@@ -70,7 +73,23 @@ public sealed class StartCommand : Command<StartSettings>
             });
 
         AnsiConsole.MarkupLine($"\n[green]✓ Proxy started (PID {process.Id}).[/] Health: [cyan]{HealthUrl}[/]");
-        AnsiConsole.MarkupLine("[grey]Run [yellow]harness status[/] to check at any time.[/]");
+
+        if (proxyHealthy)
+        {
+            AnsiConsole.Write(new Panel(
+                "[green]✓[/] FoundryLocalProxy running  →  [cyan]http://localhost:5101[/]\n" +
+                "[green]✓[/] phi-4-mini loaded (check [cyan]/v1/models[/] for status)\n\n" +
+                "[bold]Next steps:[/]\n" +
+                "  1. Open VS Code → Copilot Chat → type [yellow]@harness-general[/]\n" +
+                "  2. Try: [yellow]@harness-general start the web API[/]\n" +
+                "  3. Run [yellow]harness doctor[/] to validate the full setup")
+                .Header("[bold green]Ready[/]")
+                .BorderColor(Color.Green));
+        }
+        else
+        {
+            AnsiConsole.MarkupLine("[grey]Run [yellow]harness status[/] to check at any time.[/]");
+        }
 
         return 0;
     }

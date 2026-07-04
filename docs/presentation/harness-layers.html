@@ -482,6 +482,8 @@
     border-radius: 8px;
     padding: 8px 14px;
     font-size: 0.84em;
+    opacity: 0;
+    transform: translateX(-20px);
   }
 
   .agent-glyph { color: var(--arrow); font-family: monospace; flex-shrink: 0; }
@@ -585,6 +587,109 @@
     align-self: flex-start;
   }
 
+  /* ── Agent branch animation ──────────────────────────────── */
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateX(-20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .agent-branch.animate-in {
+    animation: fadeSlideIn 0.4s ease forwards;
+  }
+
+  .agent-branches .agent-branch:nth-child(1).animate-in { animation-delay: 0.2s; }
+  .agent-branches .agent-branch:nth-child(2).animate-in { animation-delay: 0.5s; }
+  .agent-branches .agent-branch:nth-child(3).animate-in { animation-delay: 0.8s; }
+
+  /* ── Notes overlay ────────────────────────────────────────── */
+  .notes-overlay {
+    display: none;
+    position: fixed;
+    bottom: 82px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(var(--slide-w), 96vw);
+    background: rgba(13,17,23,0.96);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 22px;
+    z-index: 150;
+    backdrop-filter: blur(10px);
+  }
+
+  .notes-overlay.visible { display: block; }
+
+  .notes-heading {
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent1);
+    margin-bottom: 10px;
+  }
+
+  .notes-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .notes-list li {
+    font-size: 0.84em;
+    color: var(--text);
+    line-height: 1.55;
+    padding-left: 16px;
+    position: relative;
+  }
+
+  .notes-list li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: var(--accent1);
+  }
+
+  .notes-hint {
+    position: fixed;
+    bottom: 74px;
+    right: 24px;
+    font-size: 0.68em;
+    color: var(--muted);
+    opacity: 0.55;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 101;
+  }
+
+  /* ── Copy-config button ───────────────────────────────────── */
+  .copy-btn {
+    align-self: flex-start;
+    margin-top: 8px;
+    padding: 4px 12px;
+    font-size: 0.72em;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.05);
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    white-space: nowrap;
+  }
+
+  .copy-btn:hover {
+    background: rgba(88,166,255,0.12);
+    border-color: var(--accent1);
+    color: var(--accent1);
+  }
+
+  .copy-btn.copied {
+    color: var(--l3);
+    border-color: var(--l3);
+    background: rgba(63,185,80,0.12);
+  }
+
   /* ── No-JS fallback ──────────────────────────────────────── */
   noscript .no-js-deck {
     padding: 40px;
@@ -611,7 +716,8 @@
 <div class="deck" id="deck" role="main" aria-label="Slide deck">
 
   <!-- Slide 0 — Title -->
-  <div class="slide active" id="slide-0" role="region" aria-label="Title slide">
+  <div class="slide active" id="slide-0" role="region" aria-label="Title slide"
+    data-notes="The CopilotHarness turns GitHub Copilot into a fully-routable inference system you own|Zero changes to VS Code or the IDE — just a single BYOK endpoint swap|MIT licensed, built with .NET 10 and .NET Aspire — clone to first routed request in minutes">
     <div class="kicker">GitHub Copilot · BYOK · Routing</div>
     <h1>ElBruno.CopilotHarness</h1>
     <p class="subtitle">
@@ -629,7 +735,8 @@
   </div>
 
   <!-- Slide 1 — Typical Copilot prompts (intro) -->
-  <div class="slide" id="slide-1" role="region" aria-label="Typical Copilot prompts">
+  <div class="slide" id="slide-1" role="region" aria-label="Typical Copilot prompts"
+    data-notes="Every developer uses Copilot for tasks that span a huge range of complexity|Simple actions like launching an app require almost no reasoning power from the model|The question is: should all three prompts cost the same cloud tokens?">
     <div class="kicker">A day with GitHub Copilot</div>
     <h2>Three prompts you use all the time</h2>
     <div class="prompt-list">
@@ -641,7 +748,8 @@
   </div>
 
   <!-- Slide 2 — Same prompts, now routed LOCAL / CLOUD (animated from slide 1) -->
-  <div class="slide" id="slide-2" role="region" aria-label="Local versus cloud routing">
+  <div class="slide" id="slide-2" role="region" aria-label="Local versus cloud routing"
+    data-notes="The harness automatically routes based on the nature and complexity of each prompt|Local LLMs handle well-scoped repetitive tasks with zero token cost and no latency|Cloud models are reserved for high-complexity prompts where frontier intelligence genuinely matters">
     <div class="kicker">Right model for the job</div>
     <h2>Many tasks run great on a <span style="color:var(--l3);">LOCAL</span> model</h2>
     <div class="prompt-list">
@@ -653,7 +761,8 @@
   </div>
 
   <!-- Slide 3 — The hook: the question that opens the door to the harness -->
-  <div class="slide" id="slide-3" role="region" aria-label="The question">
+  <div class="slide" id="slide-3" role="region" aria-label="The question"
+    data-notes="Right now, Copilot has zero routing logic — every prompt hits the same cloud model regardless of complexity|The harness is the answer: a rules-based router you own, control, and inspect|No changes needed in VS Code — the model selection happens transparently inside the harness">
     <div class="kicker">Here's the thing…</div>
     <div class="big-q">Who decides <em>which</em> model runs your prompt?</div>
     <p class="subtitle" style="max-width:660px;">
@@ -665,7 +774,8 @@
   </div>
 
   <!-- Slide 4 — Layer diagram (builds step by step) -->
-  <div class="slide" id="slide-4" role="region" aria-label="The 5 layers">
+  <div class="slide" id="slide-4" role="region" aria-label="The 5 layers"
+    data-notes="Five discrete layers — click Next to walk through each one individually|Every request enters as a standard OpenAI API call, making the harness fully compatible with any Copilot client|The router and selector are open source — fork and customize the rules to fit your team's workflow">
     <div class="kicker" style="margin-bottom:10px;">The 5 Layers of the Harness</div>
 
     <div class="diagram" id="diagram">
@@ -772,7 +882,8 @@
   </div>
 
   <!-- Slide 5 — Why it matters -->
-  <div class="slide" id="slide-5" role="region" aria-label="Why it matters">
+  <div class="slide" id="slide-5" role="region" aria-label="Why it matters"
+    data-notes="Privacy: sensitive proprietary code never leaves your machine when handled by a local LLM|Cost: local inference is essentially free after hardware — slash your monthly token spend significantly|The Admin dashboard shows every routing decision with a plain-language explanation you can audit">
     <div class="kicker">Why it matters</div>
     <h2>Your Copilot, Your Rules</h2>
     <p class="subtitle">
@@ -790,7 +901,8 @@
   </div>
 
   <!-- Slide 6 — How to get started -->
-  <div class="slide" id="slide-6" role="region" aria-label="Get started">
+  <div class="slide" id="slide-6" role="region" aria-label="Get started"
+    data-notes="Three commands from clone to first routed request — typically under 10 minutes total|aspire run launches the complete stack: Router API, Admin dashboard, and telemetry in one shot|The BYOK URL is a single string — paste it into VS Code's Manage Language Models and you're live">
     <div class="kicker">Getting Started</div>
     <h2>Three commands, then you're routing</h2>
     <div style="margin-top:24px; text-align:left; max-width:560px; width:100%;">
@@ -818,7 +930,8 @@
   </div>
 
   <!-- Slide 7 — Closing / CTA -->
-  <div class="slide" id="slide-7" role="region" aria-label="Call to action">
+  <div class="slide" id="slide-7" role="region" aria-label="Call to action"
+    data-notes="The full repo is MIT licensed and actively accepting contributions and community rule sets|Everything runs on commodity hardware — an NPU or dedicated GPU is optional, not required|Star the repo, then share your custom routing rules with the community to help others get started">
     <div class="kicker">Open Source · MIT License</div>
     <h1>Start Routing Today</h1>
     <p class="one-liner">
@@ -838,7 +951,8 @@
 
 
   <!-- Slide 8 — Smart Agents with local models -->
-  <div class="slide" id="slide-8" role="region" aria-label="Smart Agents with local models">
+  <div class="slide" id="slide-8" role="region" aria-label="Smart Agents with local models"
+    data-notes="The cloud orchestrator handles reasoning and task delegation; sub-agents run entirely on local phi-4-mini|Each sub-agent specialises: harness-launch for lifecycle, harness-github for PRs and issues, harness-debug for errors|A typical 10-task session burns roughly 80% fewer cloud tokens compared to a cloud-only agent setup">
     <div class="kicker">Copilot Agents · Local Models</div>
     <h2>Option 2 — Smart Agents</h2>
     <p class="subtitle" style="margin-top:8px;">
@@ -902,7 +1016,8 @@
   </div>
 
   <!-- Slide 9 — Local Proxies -->
-  <div class="slide" id="slide-9" role="region" aria-label="Local Proxies">
+  <div class="slide" id="slide-9" role="region" aria-label="Local Proxies"
+    data-notes="Each proxy speaks the OpenAI REST protocol — any tool that understands OpenAI can connect|Test your BYOK chatLanguageModels.json config against OllamaProxy or FoundryLocalProxy before committing|FoundryLocalProxy runs phi-4-mini fully offline — works on CPU or NPU with no internet connection needed">
     <div class="kicker">OpenAI-Compatible · Test Before Commit</div>
     <h2>Local Proxies</h2>
     <p class="subtitle" style="margin-top:8px;">
@@ -915,18 +1030,21 @@
         <div class="proxy-card-port">Port 5099</div>
         <div class="proxy-card-desc">Any Ollama model<br>llama3.1, qwen2.5…</div>
         <span class="proxy-card-badge" style="color:var(--l3);border-color:var(--l3);background:rgba(63,185,80,0.1);">No API key</span>
+        <button class="copy-btn" data-proxy="ollama">Copy config</button>
       </div>
       <div class="proxy-card" style="border-color:var(--l1);">
         <div class="proxy-card-name" style="color:var(--l1);">☁️ FoundryProxy</div>
         <div class="proxy-card-port">Port 5100</div>
         <div class="proxy-card-desc">Azure OpenAI / Foundry cloud</div>
         <span class="proxy-card-badge" style="color:var(--l1);border-color:var(--l1);background:rgba(88,166,255,0.1);">Your API key</span>
+        <button class="copy-btn" data-proxy="foundry">Copy config</button>
       </div>
       <div class="proxy-card" style="border-color:var(--l5);">
         <div class="proxy-card-name" style="color:var(--l5);">⚡ FoundryLocalProxy</div>
         <div class="proxy-card-port">Port 5101</div>
         <div class="proxy-card-desc">phi-4-mini offline, NPU-capable</div>
         <span class="proxy-card-badge" style="color:var(--l5);border-color:var(--l5);background:rgba(255,166,87,0.1);">No key, no cloud</span>
+        <button class="copy-btn" data-proxy="foundrylocal">Copy config</button>
       </div>
     </div>
 
@@ -939,6 +1057,15 @@
   </div>
 
 </div><!-- /deck -->
+
+<!-- Notes overlay (toggle with N key) -->
+<div class="notes-overlay" id="notesOverlay" role="complementary" aria-label="Speaker notes">
+  <div class="notes-heading">📝 Speaker Notes</div>
+  <ul class="notes-list" id="notesList"></ul>
+</div>
+
+<!-- Notes keyboard hint -->
+<div class="notes-hint" aria-hidden="true">📝 N for notes</div>
 
 <!-- Navigation bar -->
 <nav class="nav-bar" aria-label="Slide navigation">
@@ -987,9 +1114,10 @@
 <script>
 /* ── State ──────────────────────────────────────────────────── */
 const TOTAL_SLIDES = 10;
-const DIAGRAM_SLIDE = 4;  // index of the layer-diagram slide (builds over sub-steps)
-let currentSlide = 0;     // 0-based index into slides[]
-let layerStep = 0;        // for the diagram slide: how many layers revealed (0 = none, 5 = all)
+const DIAGRAM_SLIDE = 4;   // index of the layer-diagram slide (builds over sub-steps)
+const AGENTS_SLIDE  = 8;   // index of the Smart Agents slide (branch animation)
+let currentSlide = 0;      // 0-based index into slides[]
+let layerStep = 0;         // for the diagram slide: how many layers revealed (0 = none, 5 = all)
 const LAYER_COUNT = 5;
 
 /* ── DOM refs ───────────────────────────────────────────────── */
@@ -999,6 +1127,8 @@ const btnNext      = document.getElementById('btnNext');
 const counter      = document.getElementById('counter');
 const progressBar  = document.getElementById('progressBar');
 const hintEl       = document.getElementById('hint');
+const notesOverlay = document.getElementById('notesOverlay');
+const notesList    = document.getElementById('notesList');
 
 /* ── Init ───────────────────────────────────────────────────── */
 function init() {
@@ -1033,12 +1163,32 @@ function navigate(dir) {
 }
 
 function goToSlide(idx) {
+  // Reset agent branches when leaving the agents slide
+  if (currentSlide === AGENTS_SLIDE) {
+    document.querySelectorAll('#slide-8 .agent-branch').forEach(b => b.classList.remove('animate-in'));
+  }
+
   slides[currentSlide].classList.remove('active');
   currentSlide = idx;
   slides[currentSlide].classList.add('active');
+
   if (currentSlide === DIAGRAM_SLIDE && layerStep === 0) {
     showCaption(0);
   }
+
+  // Trigger agent branch animations when entering the agents slide
+  if (currentSlide === AGENTS_SLIDE) {
+    // Small delay to allow CSS transition to settle before animating in
+    setTimeout(() => {
+      document.querySelectorAll('#slide-8 .agent-branch').forEach(b => b.classList.add('animate-in'));
+    }, 80);
+  }
+
+  // Refresh notes if visible
+  if (notesOverlay.classList.contains('visible')) {
+    renderNotes(currentSlide);
+  }
+
   updateNav();
   updateProgress();
 }
@@ -1138,12 +1288,53 @@ function updateProgress() {
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); navigate(1); }
   if (e.key === 'ArrowLeft')                   { e.preventDefault(); navigate(-1); }
+  if (e.key === 'n' || e.key === 'N')          { e.preventDefault(); toggleNotes(); }
 });
 
-/* ── Click on slide to advance ──────────────────────────────── */
+/* ── Notes ──────────────────────────────────────────────────── */
+function renderNotes(slideIdx) {
+  const slide = slides[slideIdx];
+  const raw   = (slide ? slide.dataset.notes : '') || '';
+  notesList.innerHTML = raw
+    .split('|')
+    .filter(s => s.trim())
+    .map(s => `<li>${s.trim()}</li>`)
+    .join('');
+}
+
+function toggleNotes() {
+  const visible = notesOverlay.classList.toggle('visible');
+  if (visible) renderNotes(currentSlide);
+}
+
+/* ── Copy-config snippets ───────────────────────────────────── */
+const PROXY_CONFIGS = {
+  ollama: '[{"name":"OllamaProxy","vendor":"customendpoint","apiType":"chat-completions","models":[{"id":"llama3.1:8b","name":"Llama 3.1 (Ollama)","url":"http://localhost:5099/v1/chat/completions","toolCalling":true,"maxInputTokens":131072,"maxOutputTokens":4096}]}]',
+  foundry: '[{"name":"FoundryProxy","vendor":"customendpoint","apiType":"chat-completions","models":[{"id":"gpt-4o","name":"GPT-4o (Foundry)","url":"http://localhost:5100/v1/chat/completions","toolCalling":true,"maxInputTokens":128000,"maxOutputTokens":16000}]}]',
+  foundrylocal: '[{"name":"FoundryLocalProxy","vendor":"customendpoint","apiType":"chat-completions","models":[{"id":"phi-4-mini","name":"Phi-4 Mini (local)","url":"http://localhost:5101/v1/chat/completions","toolCalling":true,"maxInputTokens":131072,"maxOutputTokens":4096},{"id":"copilot-utility-small","name":"Phi-4 Mini Utility","url":"http://localhost:5101/v1/chat/completions","toolCalling":false,"maxInputTokens":131072,"maxOutputTokens":4096}]}]'
+};
+
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation(); // prevent slide advance
+    const key     = btn.dataset.proxy;
+    const snippet = PROXY_CONFIGS[key];
+    if (!snippet || !navigator.clipboard) return;
+    navigator.clipboard.writeText(snippet).then(() => {
+      btn.textContent = '✓ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy config';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+});
+
+/* ── Go ─────────────────────────────────────────────────────── */
 document.getElementById('deck').addEventListener('click', e => {
-  // Don't advance when clicking a link
-  if (e.target.tagName === 'A') return;
+  // Don't advance when clicking a link or button
+  if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
   navigate(1);
 });
 

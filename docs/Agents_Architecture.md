@@ -44,6 +44,10 @@ All agents live in `.github/agents/` and are picked up automatically by VS Code 
 | `harness-launch.agent.md` | `@harness-launch` | `phi-4-mini` | ❌ Sub-agent | App lifecycle: start, stop, port conflicts |
 | `harness-github.agent.md` | `@harness-github` | `phi-4-mini` | ❌ Sub-agent | GitHub: issues, PRs, Actions, releases |
 | `harness-debug.agent.md` | `@harness-debug` | `phi-4-mini` | ❌ Sub-agent | Error analysis, stack traces, test failures |
+| `harness-db.agent.md` | `@harness-db` | `phi-4-mini` | ❌ Sub-agent | SQL queries, EF Core migrations, schema inspection |
+| `harness-test.agent.md` | `@harness-test` | `phi-4-mini` | ❌ Sub-agent | xUnit/NUnit/Pytest scaffolding, coverage gaps, test failure analysis |
+| `harness-docs.agent.md` | `@harness-docs` | `phi-4-mini` | ❌ Sub-agent | XML docstrings, CHANGELOG entries, README section updates |
+| `harness-deploy.agent.md` | `@harness-deploy` | `phi-4-mini` | ❌ Sub-agent | Dockerfile, docker-compose, GitHub Actions, Bicep stubs |
 
 The `model: phi-4-mini` field in sub-agent frontmatter tells VS Code to use that BYOK
 model for those agents. `phi-4-mini` must be registered in VS Code settings (see below).
@@ -243,7 +247,20 @@ harness start
 
 # Check if the proxy is healthy
 harness status
+
+# Check setup (Aspire CLI, proxy health, agent files, VS Code config)
+harness doctor
+
+# Update agent templates to latest version
+harness update
 ```
+
+`harness doctor` validates the complete setup in one pass: Aspire CLI installed,
+FoundryLocalProxy reachable at `:5101`, agent files present in `.github/agents/`,
+and `chatLanguageModels.json` written to the VS Code user config folder.
+
+`harness update` re-extracts the latest agent templates into `.github/agents/` and
+reports which files were **Added**, **Updated**, or already **Up to date**.
 
 `harness init` creates:
 ```
@@ -272,8 +289,13 @@ Add new specialized sub-agents by:
 2. Adding a routing row to the table in `harness-general.agent.md`
 3. No proxy changes needed — the new agent inherits the FoundryLocalProxy backend
 
-Candidate domains:
-- `harness-db` — SQL queries, migration generation, schema inspection
-- `harness-test` — test scaffold generation, coverage gaps, mutation testing
-- `harness-deploy` — IaC, Docker, deployment scripts, CI pipeline generation
-- `harness-docs` — docstring generation, changelog drafting, README updates
+All four originally planned candidate domains are now available as shipped agents
+(see the Agent files table above):
+
+- `harness-db` — SQL queries, EF Core migrations, schema inspection
+- `harness-test` — xUnit/NUnit/Pytest scaffolding, coverage gaps, test failure analysis
+- `harness-deploy` — Dockerfile, docker-compose, GitHub Actions, Bicep stubs
+- `harness-docs` — XML docstrings, CHANGELOG entries, README section updates
+
+To add your own domain, follow the same pattern: create the agent file, add a
+routing row to `harness-general.agent.md`, and run `harness update` in target repos.

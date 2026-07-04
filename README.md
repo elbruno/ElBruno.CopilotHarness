@@ -157,6 +157,10 @@ The **agents pattern** is a second way to use this repo. Instead of routing ever
 | `@harness-launch` | ❌ Sub-agent | phi-4-mini (local) | Start/stop apps, resolve port conflicts |
 | `@harness-github` | ❌ Sub-agent | phi-4-mini (local) | Issues, PRs, GitHub Actions, releases |
 | `@harness-debug` | ❌ Sub-agent | phi-4-mini (local) | Error analysis, stack traces, test failures |
+| `@harness-db` | ❌ Sub-agent | phi-4-mini (local) | SQL queries, EF Core migrations, schema inspection |
+| `@harness-test` | ❌ Sub-agent | phi-4-mini (local) | xUnit/NUnit/Pytest scaffolding, coverage gaps, test failure analysis |
+| `@harness-docs` | ❌ Sub-agent | phi-4-mini (local) | XML docstrings, CHANGELOG entries, README section updates |
+| `@harness-deploy` | ❌ Sub-agent | phi-4-mini (local) | Dockerfile, docker-compose, GitHub Actions, Bicep stubs |
 
 ### Cost comparison
 
@@ -170,17 +174,17 @@ The **agents pattern** is a second way to use this repo. Instead of routing ever
 ### Quick start (3 steps)
 
 ```powershell
-# Step 1 — Start FoundryLocalProxy (serves phi-4-mini locally)
+# Step 1 — Install agent templates and VS Code config (skip if you're already in this repo)
+harness init   # copies .github/agents/ into your repo AND auto-writes chatLanguageModels.json
+               # to your VS Code user config folder — no manual file placement needed
+
+# Step 2 — Start FoundryLocalProxy (serves phi-4-mini locally)
 cd src/proxies/FoundryLocalProxy && dotnet run
 # Easiest alternative: aspire start from src/proxies/
 cd proxies && aspire start
 
-# Step 2 — Register phi-4-mini as a BYOK model in VS Code
-# Open the model picker → Manage Models → Add Models → Custom Endpoint
-# See docs/Agents_Architecture.md for the full chatLanguageModels.json snippet
-
-# Step 3 — Install agent templates (skip if you're already in this repo)
-harness init   # copies .github/agents/ and chatLanguageModels.json into your repo
+# Step 3 — Validate the full setup
+harness doctor
 ```
 
 ### Usage examples
@@ -191,6 +195,8 @@ harness init   # copies .github/agents/ and chatLanguageModels.json into your re
 @harness-general why is AuthController throwing a NullReferenceException?
 @harness-general review the architecture of the Router service
 ```
+
+Run `harness doctor` to validate the full setup (Aspire CLI, proxy health, agent files, VS Code config).
 
 📖 Full details: [docs/Agents_Architecture.md](docs/Agents_Architecture.md)
 

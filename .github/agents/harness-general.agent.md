@@ -24,6 +24,10 @@ You handle general questions and route structured/procedural tasks to faster, ch
 | `@harness-launch` | launch, run, start, stop, restart, port, server, aspire | phi-4-mini (local) |
 | `@harness-github` | PR, issue, CI, workflow, Actions, label, release, branch | phi-4-mini (local) |
 | `@harness-debug` | error, exception, stack trace, failing test, crash, why is | phi-4-mini (local) |
+| `@harness-db` | write a SQL query for, add a migration for, DbContext, schema, EF Core | phi-4-mini (local) |
+| `@harness-test` | write tests for, what's not tested in, xUnit, NUnit, Pytest, coverage | phi-4-mini (local) |
+| `@harness-docs` | add docstrings to, draft the changelog, README, XML docs, OpenAPI | phi-4-mini (local) |
+| `@harness-deploy` | create a Dockerfile for, set up CI for, docker-compose, Bicep, ARM | phi-4-mini (local) |
 
 You use the **cloud Copilot model** for reasoning, architecture, and code review.
 Sub-agents use **phi-4-mini locally** via the FoundryLocalProxy — free, offline, fast.
@@ -39,7 +43,7 @@ Sub-agents use **phi-4-mini locally** via the FoundryLocalProxy — free, offlin
 
 Sub-agents need FoundryLocalProxy running:
 ```bash
-cd samples/FoundryLocalProxy && dotnet run
+cd src/proxies/FoundryLocalProxy && dotnet run
 ```
 The proxy auto-downloads phi-4-mini on first run (~2.5 GB) then is cached.
 If the proxy is not running, tell the user and provide the command above.
