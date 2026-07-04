@@ -139,4 +139,114 @@ public sealed class ProxyClient(IHttpClientFactory factory)
         var json = JsonSerializer.Serialize(new { model, stream, messages = msgs });
         return new StringContent(json, Encoding.UTF8, "application/json");
     }
+
+    // -----------------------------------------------------------------------
+    // Foundry Local model management
+    // -----------------------------------------------------------------------
+
+    public sealed record ModelStatusEntry(
+        string Alias, bool Loaded, bool Cached,
+        double ParamsB, double SizeGb, int RamGb, string Description);
+
+    public sealed record ModelStatusResult(bool Ok, IReadOnlyList<ModelStatusEntry> Models, string? Error);
+
+    public sealed record LoadProgress(
+        string Stage, int Progress, string Message,
+        string? Alias = null, string? ModelId = null);
+
+    public async Task<ModelStatusResult> GetModelStatusAsync(string proxyName, CancellationToken ct = default)
+    {
+        try
+        {
+            var client = factory.CreateClient(proxyName);
+            var json   = await client.GetFromJsonAsync<JsonObject>("/v1/models/status", ct);
+            var models = json?["models"]?.AsArray().Select(m => new ModelStatusEntry(
+                Alias:       m?["alias"]?.GetValue<string>()       ?? "",
+                Loaded:      m?["loaded"]?.GetValue<bool>()        ?? false,
+                Cached:      m?["cached"]?.GetValue<bool>()        ?? false,
+                ParamsB:     m?["params_b"]?.GetValue<double>()    ?? 0,
+                SizeGb:      m?["size_gb"]?.GetValue<double>()     ?? 0,
+                RamGb:       m?["ram_gb"]?.GetValue<int>()         ?? 0,
+                Description: m?["description"]?.GetValue<string>() ?? ""
+            )).ToList() ?? [];
+            return new ModelStatusResult(true, models, null);
+        }
+        catch (Exception ex) { return new ModelStatusResult(false, [], ex.Message); }
+    }
+
+    public async IAsyncEnumerable<LoadProgress> LoadModelAsync(
+        string proxyName, string alias,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var client = factory.CreateClient(proxyName);
+        string? connectError = null;
+        HttpResponseMessage? resp = null;
+        try
+        {
+            resp = await client.PostAsync($"/v1/models/{Uri.EscapeDataString(alias)}/load",
+                new StringContent("", Encoding.UTF8, "application/json"), ct);
+        }
+        catch (Exception ex) { connectError = ex.Message; }
+
+        if (connectError is not null)
+        {
+            yield return new LoadProgress("error", 0, connectError);
+            yield break;
+        }
+
+        if (resp!.StatusCode == System.Net.HttpStatusCode.Conflict ||
+            resp.StatusCode  == System.Net.HttpStatusCode.NotFound  ||
+            resp.StatusCode  == System.Net.HttpStatusCode.BadRequest)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            var msg  = JsonNode.Parse(body)?["error"]?.GetValue<string>() ?? body;
+            yield return new LoadProgress("error", 0, msg);
+            yield break;
+        }
+
+        using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new System.IO.StreamReader(stream);
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct)) is not null && !ct.IsCancellationRequested)
+        {
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
+            var json = JsonNode.Parse(line[6..]);
+            if (json is null) continue;
+            yield return new LoadProgress(
+                Stage:    json["stage"]?.GetValue<string>()    ?? "",
+                Progress: json["progress"]?.GetValue<int>()    ?? 0,
+                Message:  json["message"]?.GetValue<string>()  ?? "",
+                Alias:    json["alias"]?.GetValue<string>(),
+                ModelId:  json["model_id"]?.GetValue<string>());
+        }
+    }
+
+    public async Task<(bool Ok, string Message)> UnloadModelAsync(string proxyName, string alias, CancellationToken ct = default)
+    {
+        try
+        {
+            var client = factory.CreateClient(proxyName);
+            var resp   = await client.PostAsync($"/v1/models/{Uri.EscapeDataString(alias)}/unload",
+                new StringContent("", Encoding.UTF8, "application/json"), ct);
+            var json   = JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct));
+            if (resp.IsSuccessStatusCode)
+                return (true, json?["message"]?.GetValue<string>() ?? "Unloaded.");
+            return (false, json?["error"]?.GetValue<string>() ?? resp.ReasonPhrase ?? "Error");
+        }
+        catch (Exception ex) { return (false, ex.Message); }
+    }
+
+    public async Task<(bool Ok, string Message)> DeleteModelAsync(string proxyName, string alias, CancellationToken ct = default)
+    {
+        try
+        {
+            var client = factory.CreateClient(proxyName);
+            var resp   = await client.DeleteAsync($"/v1/models/{Uri.EscapeDataString(alias)}", ct);
+            var json   = JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct));
+            if (resp.IsSuccessStatusCode)
+                return (true, json?["message"]?.GetValue<string>() ?? "Deleted.");
+            return (false, json?["error"]?.GetValue<string>() ?? resp.ReasonPhrase ?? "Error");
+        }
+        catch (Exception ex) { return (false, ex.Message); }
+    }
 }

@@ -61,6 +61,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using FoundryLocalProxy;
 using Microsoft.AI.Foundry.Local;
 using Proxies.ServiceDefaults;
@@ -287,6 +288,39 @@ var loadedModelSet = new HashSet<string>(loadedModels, StringComparer.OrdinalIgn
 loadedModelSet.UnionWith(loadedAliases); // add e.g. "phi-4-mini"
 var defaultModel   = loadedAliases.FirstOrDefault() ?? loadedModels.FirstOrDefault() ?? defaultModelAlias;
 
+// ---------------------------------------------------------------------------
+// MUTABLE MODEL STATE — thread-safety helpers
+//
+// Models can be loaded/unloaded at runtime via the management endpoints.
+// stateLock protects reads + writes to loadedModels/loadedAliases/
+//   aliasToCanonical/loadedModelSet (all captured in endpoint closures).
+// modelOpLock ensures only one slow SDK operation (download/load/unload)
+//   runs at a time — prevents interleaved model state.
+// ---------------------------------------------------------------------------
+var stateLock  = new object();          // guards all mutable model state
+var modelOpLock = new SemaphoreSlim(1, 1); // serialises load/unload/delete
+
+void RebuildLoadedModelSet()
+{
+    // Must be called while holding stateLock.
+    loadedModelSet.Clear();
+    loadedModelSet.UnionWith(loadedModels);
+    loadedModelSet.UnionWith(loadedAliases);
+}
+
+// Static catalog metadata (size/RAM/description) keyed by alias.
+var catalogMeta = new Dictionary<string, (double ParamsB, double SizeGb, int RamGb, string Desc)>(StringComparer.OrdinalIgnoreCase)
+{
+    ["phi-4-mini"]          = (3.8,  2.5,  6,  "Default. Fast, coding-focused, MIT license."),
+    ["phi-4"]               = (14.0, 9.0,  16, "Higher quality than phi-4-mini, needs more RAM."),
+    ["phi-3.5-mini"]        = (3.8,  2.4,  6,  "Previous Phi generation, similar size to phi-4-mini."),
+    ["phi-3-mini"]          = (3.8,  2.2,  6,  "Older Phi, smallest in the Phi-3 family."),
+    ["llama-3.2-3b"]        = (3.0,  2.0,  6,  "Meta's fast 3B model, great for quick responses."),
+    ["llama-3.2-1b"]        = (1.0,  1.0,  4,  "Smallest viable model, ultra-fast on CPU."),
+    ["mistral-7b-instruct"] = (7.0,  5.0,  10, "Strong coding and reasoning, needs ~8 GB RAM."),
+    ["phi-3.5-moe"]         = (42.0, 28.0, 32, "Mixture-of-Experts, best quality, needs high-end hardware."),
+};
+
 logger.LogInformation(
     "Proxy ready. Loaded models: {Models}. Fallback: {Default}",
     loadedModels.Count > 0 ? string.Join(", ", loadedModels) : "(none)",
@@ -368,30 +402,242 @@ app.MapGet("/v1/models", () =>
     return Results.Json(new { @object = "list", data });
 });
 
-// --- 3b2. Known model catalog — all models the Foundry Local SDK can serve --
+// --- 3b2. Live model status — catalog + cached + loaded from SDK ----------
 //
-//  GET /v1/models/catalog  — ProxiesTestApp uses this to show the full catalog
-//  with size, RAM requirements, and a description so users can decide which
-//  models to add to FoundryLocal:AdditionalModels in appsettings.json.
+//  GET /v1/models/status — ProxiesTestApp uses this for the Models page.
+//  Returns all catalog aliases with real-time cached (on disk) and loaded
+//  (in memory) status, plus static metadata (size, RAM, description).
 //
-//  "loaded" = currently running in memory (in loadedAliases)
-//  "available" = in the Foundry Local public catalog but not loaded here
-//
-//  To add a model: set FoundryLocal:AdditionalModels: [ "phi-4", ... ] and restart.
-app.MapGet("/v1/models/catalog", () =>
+//  Replaces the old /v1/models/catalog endpoint.
+app.MapGet("/v1/models/status", async () =>
 {
-    var catalog = new[]
+    var models = new List<object>();
+    foreach (var alias in catalogAliases)
     {
-        new { alias="phi-4-mini",         params_b=3.8,  size_gb=2.5, ram_gb=6,  description="Default. Fast, coding-focused, MIT license.",             status=loadedAliases.Contains("phi-4-mini",         StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-        new { alias="phi-4",              params_b=14.0, size_gb=9.0, ram_gb=16, description="Higher quality than phi-4-mini, needs more RAM.",           status=loadedAliases.Contains("phi-4",              StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-        new { alias="phi-3.5-mini",       params_b=3.8,  size_gb=2.4, ram_gb=6,  description="Previous Phi generation, similar size to phi-4-mini.",      status=loadedAliases.Contains("phi-3.5-mini",       StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-        new { alias="phi-3-mini",         params_b=3.8,  size_gb=2.2, ram_gb=6,  description="Older Phi, smallest in the Phi-3 family.",                  status=loadedAliases.Contains("phi-3-mini",         StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-        new { alias="llama-3.2-3b",       params_b=3.0,  size_gb=2.0, ram_gb=6,  description="Meta's fast 3B model, great for quick responses.",          status=loadedAliases.Contains("llama-3.2-3b",       StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-        new { alias="llama-3.2-1b",       params_b=1.0,  size_gb=1.0, ram_gb=4,  description="Smallest viable model, ultra-fast on CPU.",                 status=loadedAliases.Contains("llama-3.2-1b",       StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-        new { alias="mistral-7b-instruct",params_b=7.0,  size_gb=5.0, ram_gb=10, description="Strong coding and reasoning, needs ~8 GB RAM.",             status=loadedAliases.Contains("mistral-7b-instruct",StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-        new { alias="phi-3.5-moe",        params_b=42.0, size_gb=28.0,ram_gb=32, description="Mixture-of-Experts, best quality, needs high-end hardware.", status=loadedAliases.Contains("phi-3.5-moe",        StringComparer.OrdinalIgnoreCase) ? "loaded" : "available" },
-    };
-    return Results.Json(new { loaded = loadedAliases, catalog });
+        bool isLoaded, isCached;
+        lock (stateLock)
+            isLoaded = loadedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var m = await catalog.GetModelAsync(alias);
+            isCached = m is not null && await m.IsCachedAsync();
+        }
+        catch { isCached = isLoaded; } // if SDK fails, assume cached when loaded
+
+        var (paramsB, sizeGb, ramGb, desc) =
+            catalogMeta.TryGetValue(alias, out var meta) ? meta : (0.0, 0.0, 0, "");
+
+        models.Add(new { alias, loaded = isLoaded, cached = isCached,
+                          params_b = paramsB, size_gb = sizeGb, ram_gb = ramGb, description = desc });
+    }
+    List<string> loaded;
+    lock (stateLock) loaded = [.. loadedAliases];
+    return Results.Json(new { models, loaded_aliases = loaded });
+});
+
+// Keep the old /v1/models/catalog path as an alias for backward compatibility.
+app.MapGet("/v1/models/catalog", async (HttpContext ctx) =>
+{
+    ctx.Response.Redirect("/v1/models/status", permanent: false);
+});
+
+// --- 3b3. Load a model on demand — download + load with SSE progress -------
+//
+//  POST /v1/models/{alias}/load
+//
+//  Returns a text/event-stream with JSON progress events:
+//    { "stage": "download"|"load"|"done"|"error", "progress": 0-100, "message": "..." }
+//  On success the final event includes "alias" and "model_id".
+//  If the model is already loaded, emits a single "done" event immediately.
+app.MapPost("/v1/models/{alias}/load", async (string alias, HttpResponse resp, CancellationToken ct) =>
+{
+    // Already loaded? Return immediately.
+    bool alreadyLoaded;
+    lock (stateLock)
+        alreadyLoaded = loadedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase);
+
+    if (alreadyLoaded)
+    {
+        resp.ContentType = "text/event-stream; charset=utf-8";
+        resp.Headers["Cache-Control"] = "no-cache";
+        await resp.WriteAsync($"data: {{\"stage\":\"done\",\"progress\":100,\"message\":\"{alias} is already loaded.\",\"alias\":\"{alias}\"}}\n\n", ct);
+        return;
+    }
+
+    var sdkModel = await catalog.GetModelAsync(alias, ct);
+    if (sdkModel is null)
+    {
+        resp.StatusCode = 404;
+        await resp.WriteAsJsonAsync(new { error = $"'{alias}' not found in Foundry Local catalog." }, ct);
+        return;
+    }
+
+    // Only one model operation at a time.
+    if (!await modelOpLock.WaitAsync(TimeSpan.Zero, ct))
+    {
+        resp.StatusCode = 409;
+        await resp.WriteAsJsonAsync(new { error = "Another model operation is already running. Wait and retry." }, ct);
+        return;
+    }
+
+    resp.ContentType = "text/event-stream; charset=utf-8";
+    resp.Headers["Cache-Control"]     = "no-cache";
+    resp.Headers["X-Accel-Buffering"] = "no";
+
+    // Channel decouples the sync download callback from async SSE writing.
+    var ch = Channel.CreateBounded<string>(200);
+
+    void Enqueue(object evt)
+        => ch.Writer.TryWrite($"data: {JsonSerializer.Serialize(evt)}\n\n");
+
+    var bgTask = Task.Run(async () =>
+    {
+        try
+        {
+            bool alreadyCached = await sdkModel.IsCachedAsync(ct);
+            if (!alreadyCached)
+            {
+                Enqueue(new { stage = "download", progress = 0, message = $"Downloading {alias}…" });
+                float lastReported = -5f;
+                await sdkModel.DownloadAsync(pct =>
+                {
+                    if (pct - lastReported >= 2f || pct >= 100f)
+                    {
+                        lastReported = pct;
+                        Enqueue(new { stage = "download", progress = (int)pct,
+                                      message = $"Downloading {alias} — {pct:F0}%" });
+                    }
+                }, ct);
+            }
+            else
+            {
+                Enqueue(new { stage = "download", progress = 100, message = $"{alias} already in local cache." });
+            }
+
+            Enqueue(new { stage = "load", progress = 0, message = $"Loading {alias} into memory…" });
+            await sdkModel.LoadAsync(ct);
+
+            lock (stateLock)
+            {
+                if (!loadedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase))
+                {
+                    loadedModels.Add(sdkModel.Id);
+                    loadedAliases.Add(alias);
+                    aliasToCanonical[alias] = sdkModel.Id;
+                    RebuildLoadedModelSet();
+                }
+            }
+
+            logger.LogInformation("[load] '{Alias}' ready (id: {Id}).", alias, sdkModel.Id);
+            Enqueue(new { stage = "done", progress = 100,
+                          message = $"{alias} is ready.", alias, model_id = sdkModel.Id });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[load] Failed to load '{Alias}'.", alias);
+            Enqueue(new { stage = "error", progress = 0, message = ex.Message });
+        }
+        finally
+        {
+            ch.Writer.Complete();
+            modelOpLock.Release();
+        }
+    }, CancellationToken.None); // don't cancel bg task on client disconnect
+
+    await foreach (var line in ch.Reader.ReadAllAsync(ct))
+    {
+        await resp.WriteAsync(line, ct);
+        await resp.Body.FlushAsync(ct);
+    }
+    await bgTask;
+});
+
+// --- 3b4. Unload a model from memory ---------------------------------------
+//
+//  POST /v1/models/{alias}/unload
+//  Frees GPU/RAM — model weights remain on disk; subsequent LoadAsync is instant.
+app.MapPost("/v1/models/{alias}/unload", async (string alias) =>
+{
+    bool isLoaded;
+    lock (stateLock)
+        isLoaded = loadedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase);
+    if (!isLoaded)
+        return Results.BadRequest(new { error = $"'{alias}' is not currently loaded." });
+
+    if (!await modelOpLock.WaitAsync(TimeSpan.Zero))
+        return Results.Conflict(new { error = "Another model operation is already running." });
+    try
+    {
+        var sdkModel = await catalog.GetModelAsync(alias);
+        if (sdkModel is not null) await sdkModel.UnloadAsync();
+
+        lock (stateLock)
+        {
+            loadedAliases.RemoveAll(a => a.Equals(alias, StringComparison.OrdinalIgnoreCase));
+            if (aliasToCanonical.TryGetValue(alias, out var canonical))
+                loadedModels.RemoveAll(m => m == canonical);
+            aliasToCanonical.Remove(alias);
+            RebuildLoadedModelSet();
+        }
+
+        logger.LogInformation("[unload] '{Alias}' unloaded from memory.", alias);
+        return Results.Ok(new { success = true, message = $"'{alias}' unloaded from memory. Weights remain on disk." });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "[unload] Failed to unload '{Alias}'.", alias);
+        return Results.Problem(ex.Message);
+    }
+    finally { modelOpLock.Release(); }
+});
+
+// --- 3b5. Delete a model from local cache ----------------------------------
+//
+//  DELETE /v1/models/{alias}
+//  Unloads (if loaded) then removes weights from disk (~%USERPROFILE%/.foundry/cache).
+app.MapDelete("/v1/models/{alias}", async (string alias) =>
+{
+    var sdkModel = await catalog.GetModelAsync(alias);
+    if (sdkModel is null)
+        return Results.NotFound(new { error = $"'{alias}' not found in Foundry Local catalog." });
+
+    if (!await modelOpLock.WaitAsync(TimeSpan.Zero))
+        return Results.Conflict(new { error = "Another model operation is already running." });
+    try
+    {
+        bool isLoaded;
+        lock (stateLock)
+            isLoaded = loadedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase);
+
+        if (isLoaded)
+        {
+            await sdkModel.UnloadAsync();
+            lock (stateLock)
+            {
+                loadedAliases.RemoveAll(a => a.Equals(alias, StringComparison.OrdinalIgnoreCase));
+                if (aliasToCanonical.TryGetValue(alias, out var canonical))
+                    loadedModels.RemoveAll(m => m == canonical);
+                aliasToCanonical.Remove(alias);
+                RebuildLoadedModelSet();
+            }
+        }
+
+        bool isCached = await sdkModel.IsCachedAsync();
+        if (!isCached)
+            return Results.BadRequest(new { error = $"'{alias}' is not cached locally — nothing to delete." });
+
+        await sdkModel.RemoveFromCacheAsync();
+        logger.LogInformation("[delete] '{Alias}' removed from local cache.", alias);
+        return Results.Ok(new { success = true,
+            message = $"'{alias}' removed from local cache. Use Load to download again." });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "[delete] Failed to delete '{Alias}'.", alias);
+        return Results.Problem(ex.Message);
+    }
+    finally { modelOpLock.Release(); }
 });
 
 // --- 3c. Chat completions — THE CORE PROXY --------------------------------
@@ -428,20 +674,34 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
 
             // Resolve alias → canonical SDK id for the SDK's internal server.
             // The internal server only understands canonical ids.
-            if (aliasToCanonical.TryGetValue(requestedModel, out var canonicalId))
+            // Take stateLock briefly to read mutable model state (may change if a Load/Unload
+            // is happening concurrently via the management endpoints).
+            string? canonicalId;
+            bool inLoadedSet, inCatalog;
+            string fallbackCanonical;
+            lock (stateLock)
+            {
+                aliasToCanonical.TryGetValue(requestedModel, out canonicalId);
+                inLoadedSet = loadedModelSet.Contains(requestedModel);
+                inCatalog   = catalogAliases.Contains(requestedModel, StringComparer.OrdinalIgnoreCase);
+                fallbackCanonical = loadedModels.FirstOrDefault() ?? defaultModelAlias;
+            }
+
+            if (canonicalId is not null)
             {
                 reqLogger.LogDebug("[model] alias '{Alias}' → canonical '{Canonical}'", requestedModel, canonicalId);
                 jsonBody["model"] = canonicalId;
                 bodyText = jsonBody.ToJsonString();
             }
-            else if (loadedModelSet.Contains(requestedModel))
+            else if (inLoadedSet)
             {
                 // Already a canonical id — pass through unchanged.
                 reqLogger.LogDebug("[model] passthrough '{Model}'", requestedModel);
             }
-            else if (catalogAliases.Contains(requestedModel, StringComparer.OrdinalIgnoreCase))
+            else if (inCatalog)
             {
-                // Model is in the catalog but not loaded — return a helpful error.
+                // Model is in the catalog but not loaded — return a clear error so the
+                // UI can offer a "Load model" button.
                 reqLogger.LogWarning("[model] '{Requested}' is in the catalog but not loaded", requestedModel);
                 response.StatusCode = 503;
                 response.ContentType = "application/json";
@@ -450,7 +710,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
                     error = new
                     {
                         message = $"Model '{requestedModel}' is available but not loaded. " +
-                                  $"Add it to FoundryLocal:AdditionalModels in appsettings.json and restart the proxy.",
+                                  $"Use POST /v1/models/{requestedModel}/load to load it on demand.",
                         type    = "model_not_loaded",
                         model   = requestedModel
                     }
@@ -460,7 +720,6 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             else
             {
                 // Unknown id (e.g. utility alias) — remap to first loaded canonical id.
-                var fallbackCanonical = loadedModels.FirstOrDefault() ?? defaultModelAlias;
                 reqLogger.LogInformation("[model] unknown '{Requested}' → fallback '{Fallback}'", requestedModel, fallbackCanonical);
                 jsonBody["model"] = fallbackCanonical;
                 bodyText = jsonBody.ToJsonString();

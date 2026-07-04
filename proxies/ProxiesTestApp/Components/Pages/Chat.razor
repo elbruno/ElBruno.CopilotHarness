@@ -17,7 +17,7 @@
     </div>
     <div class="col-sm-4">
         <label class="form-label small fw-semibold">Model</label>
-        <select class="form-select form-select-sm" @bind="_model">
+        <select class="form-select form-select-sm" @bind="_model" @bind:after="OnModelChanged">
             @foreach (var m in _modelInfos)
             {
                 <option value="@m.Id">@(m.Loaded ? m.Id : $"{m.Id} (not loaded)")</option>
@@ -35,6 +35,28 @@
         <button class="btn btn-sm btn-outline-secondary w-100" @onclick="ClearChat">🗑 Clear</button>
     </div>
 </div>
+
+@* Model-not-loaded banner (FoundryLocalProxy only) *@
+@if (_modelNotLoaded && _proxy == ProxyConfig.FoundryLocal.Name)
+{
+    <div class="alert alert-warning py-2 small d-flex align-items-center gap-3 mb-2" role="alert">
+        <span>⚠ <strong>@_model</strong> is not loaded into memory.</span>
+        @if (_loadingModel)
+        {
+            <div class="d-flex align-items-center gap-2">
+                <div class="progress flex-grow-1" style="height:8px;min-width:120px">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                         style="width:@_loadProgress%"></div>
+                </div>
+                <span class="text-muted">@_loadMessage</span>
+            </div>
+        }
+        else
+        {
+            <button class="btn btn-sm btn-success ms-auto" @onclick="LoadCurrentModelAsync">⬇ Load model</button>
+        }
+    </div>
+}
 
 <!-- System prompt (collapsible) -->
 <div class="mb-2">
@@ -85,7 +107,7 @@
 @if (_latency > 0)
 {
     <p class="text-muted small mt-1">
-        Last response: @_latency ms
+        Last response: @_latency ms · using <code>@_model</code>
         @if (_lastTokens > 0 && _latency > 0)
         {
             <span class="ms-2 badge bg-light text-dark border">~@_lastTokens tokens · @((_lastTokens * 1000.0 / _latency).ToString("F1")) tok/s</span>
@@ -105,10 +127,16 @@
     private bool   _busy;
     private bool   _typing;
     private long   _latency;
-    private int    _lastTokens;  // estimated token count for last response
+    private int    _lastTokens;
     private readonly List<ChatMessage> _messages = [];
     private List<ModelInfo> _modelInfos = [new ModelInfo("phi-4-mini", true)];
     private CancellationTokenSource _cts = new();
+
+    // Model-not-loaded / inline load state
+    private bool   _modelNotLoaded;
+    private bool   _loadingModel;
+    private int    _loadProgress;
+    private string _loadMessage = "";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -120,7 +148,15 @@
     private async Task OnProxyChangedAsync(ChangeEventArgs e)
     {
         _proxy = e.Value?.ToString() ?? _proxy;
+        _modelNotLoaded = false;
         await LoadModelsAsync();
+    }
+
+    private void OnModelChanged()
+    {
+        // Update "not loaded" banner whenever user switches model.
+        var info = _modelInfos.FirstOrDefault(m => m.Id == _model);
+        _modelNotLoaded = info is { Loaded: false } && _proxy == ProxyConfig.FoundryLocal.Name;
     }
 
     private async Task LoadModelsAsync()
@@ -129,10 +165,31 @@
         if (result.Ok && result.ModelInfos is { Count: > 0 })
         {
             _modelInfos = result.ModelInfos.ToList();
-            // Auto-select first loaded model, or first model if none loaded
             _model = _modelInfos.FirstOrDefault(m => m.Loaded)?.Id
                   ?? _modelInfos[0].Id;
+            OnModelChanged();
         }
+    }
+
+    private async Task LoadCurrentModelAsync()
+    {
+        _loadingModel = true;
+        _loadProgress = 0;
+        _loadMessage  = $"Starting…";
+        StateHasChanged();
+
+        await foreach (var evt in Client.LoadModelAsync(ProxyConfig.FoundryLocal.Name, _model))
+        {
+            _loadProgress = evt.Progress;
+            _loadMessage  = evt.Message;
+            await InvokeAsync(StateHasChanged);
+            if (evt.Stage is "done" or "error") break;
+        }
+
+        _loadingModel   = false;
+        _modelNotLoaded = false;
+        _loadProgress   = 0;
+        await LoadModelsAsync(); // refresh model list — model is now loaded
     }
 
     private async Task OnKeyDownAsync(KeyboardEventArgs e)
