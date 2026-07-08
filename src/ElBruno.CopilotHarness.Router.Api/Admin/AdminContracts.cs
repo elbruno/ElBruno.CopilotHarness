@@ -47,6 +47,18 @@ public sealed record ModelConnectionTestResponse(
     string Message,
     double LatencyMs);
 
+/// <summary>
+/// Lightweight availability status for a local model endpoint (Foundry Local / Ollama).
+/// Unlike the full test (which fires a chat completion), the status check just probes
+/// <c>GET /v1/models</c> and verifies the model name appears in the response.
+/// </summary>
+public sealed record ModelStatusDto(
+    /// <summary>"healthy" | "unreachable" | "model-not-found" | "unavailable"</summary>
+    string Status,
+    bool IsEndpointReachable,
+    bool IsModelAvailable,
+    string Details);
+
 // ── Condition-based routing rules ────────────────────────────────────────────
 
 public sealed record RoutingRuleDto(

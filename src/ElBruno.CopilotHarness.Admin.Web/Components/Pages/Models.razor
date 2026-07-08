@@ -44,11 +44,12 @@ else
                     <th>Type</th>
                     <th>Endpoint</th>
                     <th>Model / Deployment</th>
+                    <th>Status</th>
                     <th>API key</th>
+                    <th>Enabled</th>
                     <th>Processor</th>
                     <th>Custom temp</th>
                     <th>Tools</th>
-                    <th>Enabled</th>
                     <th></th>
                 </tr>
             </thead>
@@ -60,6 +61,25 @@ else
                         <td>@FriendlyType(model.Type)</td>
                         <td class="muted">@(string.IsNullOrWhiteSpace(model.Endpoint) ? "(shared Foundry)" : model.Endpoint)</td>
                         <td>@model.ModelName</td>
+                        <td>
+                            @if (model.Type is "ollama" or "foundry-local")
+                            {
+                                @if (_modelStatuses.TryGetValue(model.Id, out var st))
+                                {
+                                    <span class="status-pill @StatusCss(st.Status)" title="@st.Details">
+                                        @StatusEmoji(st.Status) @StatusLabel(st.Status)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="muted status-pill">checking…</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="muted">—</span>
+                            }
+                        </td>
                         <td>
                             @if (model.Type == "ollama" || model.Type == "foundry-local")
                             {
@@ -212,6 +232,9 @@ else
     private string _editorName = string.Empty;
     private string? _confirmDeleteId;
 
+    // Live availability status for local models (loaded in background after page renders).
+    private Dictionary<string, ModelStatusDto> _modelStatuses = new();
+
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
@@ -220,7 +243,53 @@ else
         _models = (await Api.GetModelsAsync()).ToList();
         _defaultModel = (await Api.GetDefaultModelAsync()).ModelName;
         _loading = false;
+        // Trigger status checks in background after the page renders.
+        _ = LoadStatusesAsync();
     }
+
+    private async Task LoadStatusesAsync()
+    {
+        var localModels = _models.Where(m => m.Type is "ollama" or "foundry-local").ToList();
+        if (localModels.Count == 0) return;
+
+        var tasks = localModels.Select(async m =>
+        {
+            var status = await Api.GetModelStatusAsync(m.Id);
+            if (status is not null)
+            {
+                lock (_modelStatuses)
+                {
+                    _modelStatuses[m.Id] = status;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+        await Task.WhenAll(tasks);
+    }
+
+    private static string StatusCss(string status) => status switch
+    {
+        "healthy" => "status-good",
+        "unreachable" => "status-bad",
+        "model-not-found" => "status-warn",
+        _ => "status-neutral"
+    };
+
+    private static string StatusEmoji(string status) => status switch
+    {
+        "healthy" => "✅",
+        "unreachable" => "❌",
+        "model-not-found" => "📥",
+        _ => "—"
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "healthy" => "Running",
+        "unreachable" => "Not running",
+        "model-not-found" => "Not downloaded",
+        _ => status
+    };
 
     private void StartCreate()
     {

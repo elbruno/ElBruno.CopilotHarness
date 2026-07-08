@@ -380,4 +380,107 @@ public static partial class AdminEndpoints
 
         return new AdminProjectProfileDto(p.ProjectId, p.TeamId, tags, p.DefaultProfile);
     }
+
+    /// <summary>
+    /// Lightweight availability check for local model endpoints (Foundry Local, Ollama).
+    /// Probes GET /v1/models to verify reachability and confirms the model name appears in the list.
+    /// Azure OpenAI models always return "unavailable" (model list requires auth — use /test instead).
+    /// </summary>
+    internal static async Task<ModelStatusDto> CheckModelStatusAsync(
+        ModelConnectionRecord model,
+        IHttpClientFactory httpClientFactory,
+        CancellationToken cancellationToken)
+    {
+        // Azure models: model list not easily queryable without deployment context — skip probe.
+        if (model.ProviderType == ModelProviderType.AzureOpenAI)
+        {
+            return new ModelStatusDto("unavailable", false, false,
+                "Status check not supported for Azure OpenAI models. Use 'Test connection' instead.");
+        }
+
+        var endpoint = string.IsNullOrWhiteSpace(model.Endpoint)
+            ? (model.ProviderType == ModelProviderType.FoundryLocal ? "http://localhost:5101" : "http://localhost:11434")
+            : model.Endpoint;
+
+        var modelsUrl = $"{endpoint.TrimEnd('/')}/v1/models";
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            using var client = httpClientFactory.CreateClient();
+            using var response = await client.GetAsync(modelsUrl, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ModelStatusDto("unreachable", true, false,
+                    $"Endpoint reachable but returned {(int)response.StatusCode}. Service may be starting.");
+            }
+
+            // Parse the /v1/models response and look for the model name.
+            var body = await response.Content.ReadAsStringAsync(cts.Token);
+            var modelFound = IsModelInList(body, model.ModelName);
+
+            return modelFound
+                ? new ModelStatusDto("healthy", true, true,
+                    $"'{model.ModelName}' is loaded and ready at {endpoint}.")
+                : new ModelStatusDto("model-not-found", true, false,
+                    $"Endpoint is running but '{model.ModelName}' was not found in the model list. " +
+                    $"Run: foundry model run {model.ModelName}");
+        }
+        catch (OperationCanceledException)
+        {
+            return new ModelStatusDto("unreachable", false, false,
+                $"Connection to {endpoint} timed out after 5s. Is the service running?");
+        }
+        catch (Exception ex)
+        {
+            return new ModelStatusDto("unreachable", false, false,
+                $"Cannot reach {endpoint}: {ex.Message}");
+        }
+    }
+
+    private static bool IsModelInList(string modelsJson, string modelName)
+    {
+        if (string.IsNullOrWhiteSpace(modelsJson) || string.IsNullOrWhiteSpace(modelName))
+        {
+            return false;
+        }
+
+        try
+        {
+            // OpenAI /v1/models response: { "data": [{ "id": "phi-4-mini" }, ...] }
+            using var doc = JsonDocument.Parse(modelsJson);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in data.EnumerateArray())
+                {
+                    if (item.TryGetProperty("id", out var id) &&
+                        string.Equals(id.GetString(), modelName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // Some implementations put models at the root array level.
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in root.EnumerateArray())
+                {
+                    if (item.TryGetProperty("id", out var id) &&
+                        string.Equals(id.GetString(), modelName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (JsonException) { /* malformed response — treat as not found */ }
+
+        return false;
+    }
 }

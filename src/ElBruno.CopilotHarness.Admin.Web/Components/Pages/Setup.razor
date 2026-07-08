@@ -66,10 +66,43 @@ else
         <div class="processor-info">
             <span class="processor-name">@processor.Name</span>
             <span class="processor-type-badge">@FriendlyProviderType(processor.Type)</span>
+            @if (_processorStatus is not null)
+            {
+                <span class="processor-status-badge processor-status-@_processorStatus.Status"
+                      title="@_processorStatus.Details">
+                    @(StatusEmoji(_processorStatus.Status)) @(StatusLabel(_processorStatus.Status))
+                </span>
+            }
         </div>
         <p class="muted" style="margin-top:0.5rem">
             Model: <code>@processor.ModelName</code> · Endpoint: <code>@processor.Endpoint</code>
         </p>
+        @if (_processorStatus?.Status is "unreachable" or "model-not-found")
+        {
+            <details class="setup-guidance">
+                <summary>⚙ Get it running</summary>
+                @if (processor.Type == "foundry-local")
+                {
+                    <div class="guidance-body">
+                        <p><strong>Option 1 — Foundry Local CLI</strong></p>
+                        <pre><code>winget install Microsoft.FoundryLocal
+foundry model run @processor.ModelName</code></pre>
+                        <p><strong>Option 2 — FoundryLocalProxy (from this repo)</strong></p>
+                        <pre><code>cd samples/FoundryLocalProxy
+dotnet run</code></pre>
+                        <p class="muted">Verify: <code>curl @(processor.Endpoint ?? "http://localhost:5101")/v1/models</code></p>
+                    </div>
+                }
+                else if (processor.Type == "ollama")
+                {
+                    <div class="guidance-body">
+                        <pre><code>winget install Ollama.Ollama
+ollama pull @processor.ModelName</code></pre>
+                        <p class="muted">Verify: <code>curl @(processor.Endpoint ?? "http://localhost:11434")/v1/models</code></p>
+                    </div>
+                }
+            </details>
+        }
     }
     else
     {
@@ -80,7 +113,8 @@ else
     <a href="/models"><button type="button">Change processor model</button></a>
 </div>
 
-
+<div class="card">
+    <h2>🔗 GitHub Copilot Config</h2>
     <p class="muted">
         Generate the <code>chatLanguageModels.json</code> entry for GitHub Copilot's custom endpoint. Confirm the
         Router URL you reach the harness on, copy the config, then paste it into VS Code via
@@ -178,7 +212,35 @@ else
             ? state.DefaultProfile
             : _models.FirstOrDefault()?.Name ?? string.Empty;
         _loading = false;
+        // Load processor status in background without blocking page render.
+        _ = LoadProcessorStatusAsync();
     }
+
+    private async Task LoadProcessorStatusAsync()
+    {
+        var processor = _models.FirstOrDefault(m => m.IsProcessor && m.Enabled);
+        if (processor is null || processor.Type is not ("foundry-local" or "ollama")) return;
+        _processorStatus = await Api.GetModelStatusAsync(processor.Id);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private ModelStatusDto? _processorStatus;
+
+    private static string StatusEmoji(string status) => status switch
+    {
+        "healthy" => "✅",
+        "unreachable" => "❌",
+        "model-not-found" => "📥",
+        _ => "—"
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "healthy" => "Running",
+        "unreachable" => "Not running",
+        "model-not-found" => "Not downloaded",
+        _ => status
+    };
 
     private async Task SaveAsync()
     {

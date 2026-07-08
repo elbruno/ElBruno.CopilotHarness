@@ -47,6 +47,12 @@ public sealed record ModelConnectionTestResponse(
     string Message,
     double LatencyMs);
 
+public sealed record ModelStatusDto(
+    string Status,
+    bool IsEndpointReachable,
+    bool IsModelAvailable,
+    string Details);
+
 // ── Condition-based routing rules ────────────────────────────────────────────
 
 public sealed record RoutingRuleDto(

@@ -71,6 +71,20 @@ public sealed class AdminApiClient(HttpClient httpClient)
             ?? new ModelConnectionTestResponse(false, "No response.", 0);
     }
 
+    public async Task<ModelStatusDto?> GetModelStatusAsync(string id, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"/admin/models/{Uri.EscapeDataString(id)}/status", cancellationToken);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<ModelStatusDto>(cancellationToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // ── Condition-based routing rules ─────────────────────────────────────────
 
     public async Task<IReadOnlyList<RoutingRuleDto>> GetRulesAsync(CancellationToken cancellationToken = default) =>

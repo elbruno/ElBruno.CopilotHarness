@@ -82,5 +82,21 @@ public static partial class AdminEndpoints
             var result = await ProbeModelAsync(providerFactory, profile, cancellationToken);
             return Results.Ok(new ModelConnectionTestResponse(result.Success, result.Message, result.LatencyMs));
         });
+
+        group.MapGet("/models/{id}/status", async (
+            string id,
+            IRoutingConfigurationStore store,
+            IHttpClientFactory httpClientFactory,
+            CancellationToken cancellationToken) =>
+        {
+            var model = await store.GetModelAsync(id, cancellationToken);
+            if (model is null)
+            {
+                return Results.NotFound();
+            }
+
+            var status = await CheckModelStatusAsync(model, httpClientFactory, cancellationToken);
+            return Results.Ok(status);
+        });
     }
 }
