@@ -331,11 +331,11 @@ public sealed class RoutingConfigurationStore(
 
         // Prefer provider type for the local/cloud split (robust even when a cloud model name
         // contains hints like "mini"), then fall back to keyword hints, then to positional
-        // defaults. Local = an Ollama-hosted model; cloud = anything else (Azure OpenAI/Foundry).
-        var smallModel = models.FirstOrDefault(model => model.ProviderType == (int)ModelProviderType.Ollama)
+        // defaults. Local = Ollama or Foundry Local; cloud = anything else (Azure OpenAI/Foundry).
+        var smallModel = models.FirstOrDefault(model => ((ModelProviderType)model.ProviderType).IsLocalProvider())
             ?? PickModel(models, "ollama", "llama", "phi", "qwen", "local")
             ?? models[0];
-        var largeModel = models.FirstOrDefault(model => model.ProviderType != (int)ModelProviderType.Ollama)
+        var largeModel = models.FirstOrDefault(model => !((ModelProviderType)model.ProviderType).IsLocalProvider())
             ?? PickModel(models, "gpt", "foundry", "azure", "large", "big")
             ?? models[^1];
         var now = DateTimeOffset.UtcNow;

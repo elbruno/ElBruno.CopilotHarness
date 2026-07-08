@@ -13,10 +13,12 @@ public sealed class ChatCompletionsProviderTests
     {
         var azure = new AzureFoundryChatCompletionsProvider(new StubHttpClientFactory(new CapturingHandler()), CreateFoundryOptions());
         var ollama = new OllamaChatCompletionsProvider(new StubHttpClientFactory(new CapturingHandler()));
-        var factory = new ChatCompletionsProviderFactory(new IChatCompletionsProvider[] { azure, ollama });
+        var foundryLocal = new FoundryLocalChatCompletionsProvider(new StubHttpClientFactory(new CapturingHandler()));
+        var factory = new ChatCompletionsProviderFactory(new IChatCompletionsProvider[] { azure, ollama, foundryLocal });
 
         Assert.Same(azure, factory.GetProvider(new ModelProfileOptions { Type = ModelProviderType.AzureOpenAI }));
         Assert.Same(ollama, factory.GetProvider(new ModelProfileOptions { Type = ModelProviderType.Ollama }));
+        Assert.Same(foundryLocal, factory.GetProvider(new ModelProfileOptions { Type = ModelProviderType.FoundryLocal }));
     }
 
     [Fact]
@@ -116,6 +118,41 @@ public sealed class ChatCompletionsProviderTests
         var body = JsonNode.Parse(handler.LastBody!)!.AsObject();
         Assert.Equal("llama3.1:8b", (string?)body["model"]);
         Assert.True((bool)body["stream"]!);
+    }
+
+    [Fact]
+    public async Task FoundryLocalProvider_BuildsOpenAiCompatibleRequest_NoApiKey()
+    {
+        var handler = new CapturingHandler();
+        var provider = new FoundryLocalChatCompletionsProvider(new StubHttpClientFactory(handler));
+        var model = new ModelProfileOptions
+        {
+            Type = ModelProviderType.FoundryLocal,
+            Endpoint = "http://localhost:5101",
+            Deployment = "phi-4-mini"
+        };
+
+        await provider.SendChatCompletionsAsync(Payload(), model, stream: false, CancellationToken.None);
+
+        Assert.NotNull(handler.LastRequest);
+        var uri = handler.LastRequest!.RequestUri!;
+        Assert.Equal("localhost", uri.Host);
+        Assert.Equal(5101, uri.Port);
+        Assert.Contains("v1/chat/completions", uri.AbsolutePath);
+        Assert.False(handler.LastRequest.Headers.Contains("api-key"));
+
+        var body = JsonNode.Parse(handler.LastBody!)!.AsObject();
+        Assert.Equal("phi-4-mini", (string?)body["model"]);
+        Assert.False((bool)body["stream"]!);
+    }
+
+    [Theory]
+    [InlineData(ModelProviderType.Ollama, true)]
+    [InlineData(ModelProviderType.FoundryLocal, true)]
+    [InlineData(ModelProviderType.AzureOpenAI, false)]
+    public void IsLocalProvider_ReturnsExpected(ModelProviderType type, bool expected)
+    {
+        Assert.Equal(expected, type.IsLocalProvider());
     }
 
     private static JsonObject Payload() =>

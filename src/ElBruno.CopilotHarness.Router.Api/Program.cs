@@ -43,6 +43,10 @@ builder.Services
     .ValidateOnStart();
 
 builder.Services
+    .AddOptions<FoundryLocalOptions>()
+    .Bind(builder.Configuration.GetSection(FoundryLocalOptions.SectionName));
+
+builder.Services
     .AddOptions<RoutingOptions>()
     .Bind(builder.Configuration.GetSection(RoutingOptions.SectionName))
     .ValidateDataAnnotations()
@@ -196,6 +200,7 @@ builder.Services.AddHttpClient("model-provider", client =>
 
 builder.Services.AddSingleton<IChatCompletionsProvider, AzureFoundryChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProvider, OllamaChatCompletionsProvider>();
+builder.Services.AddSingleton<IChatCompletionsProvider, FoundryLocalChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProviderFactory, ChatCompletionsProviderFactory>();
 
 builder.Services.AddHttpClient("foundry-health", (_, client) =>

@@ -124,5 +124,6 @@ public sealed class GenAiTelemetryTests
     {
         Assert.Equal("ollama", GenAiTelemetry.SystemFor(Router.Core.ModelProviderType.Ollama));
         Assert.Equal("azure.ai.openai", GenAiTelemetry.SystemFor(Router.Core.ModelProviderType.AzureOpenAI));
+        Assert.Equal("microsoft.foundry.local", GenAiTelemetry.SystemFor(Router.Core.ModelProviderType.FoundryLocal));
     }
 }
