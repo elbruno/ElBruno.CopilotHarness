@@ -96,6 +96,7 @@ public static partial class AdminEndpoints
                     var classifierSource = GetContextValue(trace, "classifier.source")
                         ?? (string.IsNullOrWhiteSpace(trace.Classification.Source) ? "deterministic" : trace.Classification.Source);
                     var processorModel = GetContextValue(trace, "classifier.processorModel") ?? trace.Classification.ProcessorModel;
+                    var processorModelType = GetContextValue(trace, "classifier.processorModelType");
                     var userAgent = GetContextValue(trace, "request.client.userAgent");
                     int? upstreamStatusCode = int.TryParse(GetContextValue(trace, "upstream.status"), out var statusCode) ? statusCode : null;
                     double? upstreamLatencyMs = double.TryParse(
@@ -133,6 +134,7 @@ public static partial class AdminEndpoints
                         ClassificationComplexity: trace.Classification.Complexity,
                         ClassifierSource: classifierSource,
                         ProcessorModel: processorModel,
+                        ProcessorModelType: processorModelType,
                         ClassificationConfidence: trace.Classification.Confidence,
                         TotalPromptCharacters: totalPromptChars,
                         HasSystemMessage: hasSystemMessage,

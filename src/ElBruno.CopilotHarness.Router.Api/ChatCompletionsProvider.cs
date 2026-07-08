@@ -114,3 +114,40 @@ public sealed class OllamaChatCompletionsProvider(IHttpClientFactory httpClientF
         return client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
     }
 }
+
+/// <summary>
+/// Microsoft Foundry Local provider. Targets the OpenAI-compatible chat completions endpoint
+/// exposed by the Foundry Local SDK's REST server or the FoundryLocalProxy sample
+/// (<c>{endpoint}/v1/chat/completions</c>). No API key required.
+/// <para>
+/// Default endpoint: <c>http://localhost:5101</c> (FoundryLocalProxy) or
+/// <c>http://localhost:55588</c> (SDK-direct). Configure via <c>FoundryLocal__Endpoint</c>.
+/// </para>
+/// </summary>
+public sealed class FoundryLocalChatCompletionsProvider(IHttpClientFactory httpClientFactory) : IChatCompletionsProvider
+{
+    public ModelProviderType ProviderType => ModelProviderType.FoundryLocal;
+
+    public Task<HttpResponseMessage> SendChatCompletionsAsync(
+        JsonObject payload,
+        ModelProfileOptions model,
+        bool stream,
+        CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient("model-provider");
+        client.BaseAddress = FoundryOptions.GetNormalizedEndpoint(model.Endpoint);
+
+        var body = (JsonObject)PayloadSanitizer.Sanitize(payload, model).DeepClone();
+        body["model"] = model.Deployment;
+        body["stream"] = stream;
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "v1/chat/completions")
+        {
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
+        };
+
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(stream ? "text/event-stream" : "application/json"));
+
+        return client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+    }
+}

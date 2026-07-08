@@ -53,7 +53,34 @@ else
 }
 
 <div class="card">
-    <h2>Connect to VS Code (BYOK)</h2>
+    <h2>🧠 Processor Model</h2>
+    <p class="muted">
+        The processor model is the local AI that evaluates your routing rules. It classifies each
+        incoming prompt and selects the best rule match before routing to the cloud model.
+    </p>
+    @{
+        var processor = _models.FirstOrDefault(m => m.IsProcessor && m.Enabled);
+    }
+    @if (processor is not null)
+    {
+        <div class="processor-info">
+            <span class="processor-name">@processor.Name</span>
+            <span class="processor-type-badge">@FriendlyProviderType(processor.Type)</span>
+        </div>
+        <p class="muted" style="margin-top:0.5rem">
+            Model: <code>@processor.ModelName</code> · Endpoint: <code>@processor.Endpoint</code>
+        </p>
+    }
+    else
+    {
+        <p class="status-bad-text">
+            ⚠ No processor model is enabled. Routing will fall back to keyword heuristics.
+        </p>
+    }
+    <a href="/models"><button type="button">Change processor model</button></a>
+</div>
+
+
     <p class="muted">
         Generate the <code>chatLanguageModels.json</code> entry for GitHub Copilot's custom endpoint. Confirm the
         Router URL you reach the harness on, copy the config, then paste it into VS Code via
@@ -171,6 +198,14 @@ else
             _status = $"Setup failed: {ex.Message}";
         }
     }
+
+    private static string FriendlyProviderType(string type) => type switch
+    {
+        "foundry-local" => "Foundry Local",
+        "ollama" => "Ollama",
+        "azure-openai" => "Azure OpenAI",
+        _ => type
+    };
 
     private sealed class SetupModel
     {

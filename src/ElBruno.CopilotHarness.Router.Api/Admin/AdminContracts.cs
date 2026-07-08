@@ -183,6 +183,7 @@ public sealed record RoutedRequestView(
     string ClassificationComplexity,
     string ClassifierSource,
     string? ProcessorModel,
+    string? ProcessorModelType,
     double ClassificationConfidence,
     int TotalPromptCharacters,
     bool HasSystemMessage,

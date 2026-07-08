@@ -297,8 +297,8 @@ public static class OpenAiApiUtilities
                 entry.Value.SupportsToolCalling &&
                 !string.Equals(entry.Key, excludeProfileName, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(entry => preferLocal
-                ? entry.Value.Type == ModelProviderType.Ollama
-                : entry.Value.Type != ModelProviderType.Ollama)
+                ? entry.Value.Type.IsLocalProvider()
+                : !entry.Value.Type.IsLocalProvider())
             .ThenBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
             .Select(entry => ((string ProfileName, ModelProfileOptions Profile)?)(entry.Key, entry.Value))
             .FirstOrDefault();

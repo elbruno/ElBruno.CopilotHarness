@@ -38,6 +38,7 @@ public static class GenAiTelemetry
     {
         ModelProviderType.Ollama => "ollama",
         ModelProviderType.AzureOpenAI => "azure.ai.openai",
+        ModelProviderType.FoundryLocal => "microsoft.foundry.local",
         _ => "openai"
     };
 

@@ -51,7 +51,7 @@ public static class ToolRoutingGuard
             var totalPromptChars = BasicModelRouter.GetPromptCharacterCount(requestPayload);
             var localMax = routingOptions.Rules.LocalToolCallingMaxPromptCharacters;
             var payloadWithinLocalLimit = localMax <= 0 || totalPromptChars <= localMax;
-            var selectedIsLocal = selectedProfile.Type == ModelProviderType.Ollama;
+            var selectedIsLocal = selectedProfile.Type.IsLocalProvider();
 
             var modelCannotDoTools = !selectedProfile.SupportsToolCalling;
             var localPayloadTooLarge = selectedIsLocal && !payloadWithinLocalLimit;
@@ -89,9 +89,9 @@ public static class ToolRoutingGuard
             }
         }
 
-        // Safety net: cap output tokens for LOCAL (Ollama) routes so a small local model cannot run away
-        // and produce an oversized response (which the client rejects as "Response too long").
-        if (selectedProfile.Type == ModelProviderType.Ollama &&
+        // Safety net: cap output tokens for LOCAL (Ollama / Foundry Local) routes so a small local
+        // model cannot run away and produce an oversized response (which the client rejects as "Response too long").
+        if (selectedProfile.Type.IsLocalProvider() &&
             routingOptions.Rules.LocalRouteMaxTokens > 0)
         {
             OpenAiApiUtilities.ClampMaxTokens(requestPayload, routingOptions.Rules.LocalRouteMaxTokens);

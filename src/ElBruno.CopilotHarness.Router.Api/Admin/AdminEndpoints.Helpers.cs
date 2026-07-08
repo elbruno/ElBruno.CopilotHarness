@@ -54,6 +54,7 @@ public static partial class AdminEndpoints
         {
             ModelProviderType.Ollama => "ollama",
             ModelProviderType.AzureOpenAI => "azure-openai",
+            ModelProviderType.FoundryLocal => "foundry-local",
             _ => type.ToString().ToLowerInvariant()
         };
 
@@ -65,6 +66,8 @@ public static partial class AdminEndpoints
             "azureopenai" => ModelProviderType.AzureOpenAI,
             "azure" => ModelProviderType.AzureOpenAI,
             "foundry" => ModelProviderType.AzureOpenAI,
+            "foundry-local" => ModelProviderType.FoundryLocal,
+            "foundrylocal" => ModelProviderType.FoundryLocal,
             _ => ModelProviderType.AzureOpenAI
         };
 

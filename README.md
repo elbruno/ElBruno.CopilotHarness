@@ -4,7 +4,7 @@
 [![Aspire](https://img.shields.io/badge/Aspire-13.4-blueviolet?logo=microsoft)](https://aspire.dev)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-189%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-201%20passing-brightgreen)]()
 [![Website](https://img.shields.io/badge/website-live-blue?logo=github)](https://elbruno.github.io/ElBruno.CopilotHarness/)
 
 > **Intelligent BYOK harness for GitHub Copilot** — built with .NET 10, .NET Aspire, and Microsoft Agent Framework.
@@ -52,6 +52,25 @@ flowchart TB
 | **OpenTelemetry** | Full distributed tracing across all services via the Aspire dashboard |
 
 ---
+
+---
+
+## Processor Model — pluggable local AI classifier
+
+Before routing a request to a cloud model, the harness runs the prompt through a **processor model**
+— a local AI that classifies the intent and picks the best routing rule. Any model in the registry
+can be the processor; just set `IsProcessor = true` on it in the Admin UI.
+
+| Option | Provider | Default endpoint | Install |
+|---|---|---|---|
+| **phi-4-mini** *(default)* | [Foundry Local](https://learn.microsoft.com/azure/foundry-local) | `http://localhost:5101` | `winget install Microsoft.FoundryLocal` |
+| **llama3.1:8b** | [Ollama](https://ollama.com) | `http://localhost:11434` | `winget install Ollama.Ollama` |
+| **gpt-5-mini** | Azure OpenAI | cloud | Azure portal |
+
+> **No local model required.** If no processor is running the harness falls back to fast built-in
+> keyword heuristics — routing still works, just without AI-based intent classification.
+
+See [Processor Model Setup guide →](docs/Processor_Model_Setup.md)
 
 ---
 
@@ -208,6 +227,8 @@ Run `harness doctor` to validate the full setup (Aspire CLI, proxy health, agent
 |---|---|
 | [User Manual](docs/User_Manual.md) | Full setup and feature walkthrough |
 | [Model Registry](docs/Model_Registry.md) | Multi-provider model connections and API-key encryption |
+| [Processor Model Setup](docs/Processor_Model_Setup.md) | Configure Foundry Local, Ollama, or Azure as the routing classifier |
+| [Migration: Ollama → Foundry Local](docs/Migration_Ollama_To_FoundryLocal.md) | Switch the processor model without breaking existing setups |
 | [Rules Engine](docs/Rules_Engine.md) | Condition-based routing rules, wizard, and rule testing |
 | [Live Routing](docs/Live_Routing.md) | Visual prompt → model → rule → explanation feed (dashboard + VS Code) |
 | [Architecture](docs/Architecture.md) | System design and component boundaries |

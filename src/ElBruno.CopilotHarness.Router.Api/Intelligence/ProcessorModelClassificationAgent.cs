@@ -98,7 +98,7 @@ public sealed class ProcessorModelClassificationAgent(
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(_options.TimeoutMs <= 0 ? 4000 : _options.TimeoutMs);
 
-            var payload = BuildClassificationPayload(processor.Deployment, preview);
+            var payload = BuildClassificationPayload(processor.Deployment, preview, processor.SupportsCustomTemperature);
             var provider = providerFactory.GetProvider(processor);
 
             using var response = await provider.SendChatCompletionsAsync(payload, processor, stream: false, timeoutCts.Token);
@@ -158,7 +158,7 @@ public sealed class ProcessorModelClassificationAgent(
         return false;
     }
 
-    private static JsonObject BuildClassificationPayload(string model, string preview)
+    private static JsonObject BuildClassificationPayload(string model, string preview, bool supportsCustomTemperature = true)
     {
         var systemPrompt =
             "You are a routing classifier. Read the start of a user request and classify it into exactly one intent. " +
@@ -168,16 +168,24 @@ public sealed class ProcessorModelClassificationAgent(
             "Respond ONLY with compact JSON: {\"intent\":\"<one-of-the-allowed>\",\"complexity\":\"low|medium|high\"," +
             "\"confidence\":0.0-1.0,\"reasoning\":\"short\"}.";
 
-        return new JsonObject
+        var payload = new JsonObject
         {
             ["model"] = model,
-            ["temperature"] = 0,
             ["messages"] = new JsonArray
             {
                 new JsonObject { ["role"] = "system", ["content"] = systemPrompt },
                 new JsonObject { ["role"] = "user", ["content"] = preview }
             }
         };
+
+        // Models that do not support custom temperature (e.g. gpt-5.x o-series) reject any
+        // non-default temperature value with a 400. Only include the parameter when safe to do so.
+        if (supportsCustomTemperature)
+        {
+            payload["temperature"] = 0;
+        }
+
+        return payload;
     }
 
     private static bool TryParseClassification(

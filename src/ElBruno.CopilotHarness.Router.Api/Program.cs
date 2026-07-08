@@ -43,6 +43,10 @@ builder.Services
     .ValidateOnStart();
 
 builder.Services
+    .AddOptions<FoundryLocalOptions>()
+    .Bind(builder.Configuration.GetSection(FoundryLocalOptions.SectionName));
+
+builder.Services
     .AddOptions<RoutingOptions>()
     .Bind(builder.Configuration.GetSection(RoutingOptions.SectionName))
     .ValidateDataAnnotations()
@@ -196,6 +200,7 @@ builder.Services.AddHttpClient("model-provider", client =>
 
 builder.Services.AddSingleton<IChatCompletionsProvider, AzureFoundryChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProvider, OllamaChatCompletionsProvider>();
+builder.Services.AddSingleton<IChatCompletionsProvider, FoundryLocalChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProviderFactory, ChatCompletionsProviderFactory>();
 
 builder.Services.AddHttpClient("foundry-health", (_, client) =>
@@ -203,8 +208,14 @@ builder.Services.AddHttpClient("foundry-health", (_, client) =>
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 
+builder.Services.AddHttpClient("foundry-local-health", (_, client) =>
+{
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+
 builder.Services.AddHealthChecks()
-    .AddCheck<FoundryEndpointHealthCheck>("foundry-endpoint", HealthStatus.Degraded, ["ready"]);
+    .AddCheck<FoundryEndpointHealthCheck>("foundry-endpoint", HealthStatus.Degraded, ["ready"])
+    .AddCheck<FoundryLocalEndpointHealthCheck>("foundry-local-endpoint", HealthStatus.Degraded, ["ready"]);
 builder.Services.AddSingleton<IBackgroundJobQueue, ChannelBackgroundJobQueue>();
 builder.Services.AddSingleton<BackendWarmupJob>();
 builder.Services.AddHostedService<QueuedBackgroundJobProcessor>();

@@ -13,11 +13,30 @@ public sealed class SqliteRoutingStoreInitializer(
     private const string SeedLocalModelName = "ollama llama3.1";
     private const string SeedLocalModelDeployment = "llama3.1:8b";
     private const string SeedLocalModelEndpoint = "http://localhost:11434";
+    private const string SeedFoundryLocalModelName = "foundry local phi-4-mini";
+    private const string SeedFoundryLocalModelDeployment = "phi-4-mini";
+    private const string SeedFoundryLocalModelEndpoint = "http://localhost:5101";
 
     private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled, bool IsProcessor, bool SupportsCustomTemperature, bool SupportsToolCalling)> SeedModels()
     {
-        // Single local model: llama3.1:8b serves as the classifier (processor), the local rule target, and the
-        // local tool-caller. It streams structured tool_calls with valid args (run: ollama pull llama3.1:8b).
+        // Default processor model: phi-4-mini via Foundry Local (FoundryLocalProxy on port 5101).
+        // No Ollama install required. Override endpoint via FoundryLocal__Endpoint env var.
+        // phi-4-mini handles temperature=0, structured JSON, and is tool-call capable.
+        yield return (
+            "seed-foundry-local-phi4mini",
+            SeedFoundryLocalModelName,
+            (int)ModelProviderType.FoundryLocal,
+            SeedFoundryLocalModelEndpoint,
+            SeedFoundryLocalModelDeployment,
+            "2024-10-21",
+            true,
+            true,   // processor model (classifier + semantic rule analyzer)
+            true,   // supports custom temperature
+            true);  // tool-calling capable
+
+        // Ollama llama3.1:8b — kept as an alternative local model (local rule target + tool-caller).
+        // IsProcessor=false by default; user can promote it via Admin UI if preferred over Foundry Local.
+        // Requires: ollama pull llama3.1:8b (run: ollama serve).
         yield return (
             "seed-ollama-llama31",
             SeedLocalModelName,
@@ -26,7 +45,7 @@ public sealed class SqliteRoutingStoreInitializer(
             SeedLocalModelDeployment,
             "2024-10-21",
             true,
-            true,   // processor model (classifier)
+            false,  // not processor by default; promote via Admin UI if Foundry Local is unavailable
             true,   // supports custom temperature
             true);  // tool-calling capable
 
@@ -139,6 +158,24 @@ public sealed class SqliteRoutingStoreInitializer(
                  """,
                 cancellationToken);
         }
+
+        // Upgrade fixup: on existing databases the Ollama model may still be IsProcessor=1 (set before
+        // phi-4-mini was introduced). If phi-4-mini (FoundryLocal) is now the active processor, demote
+        // Ollama so there is exactly one processor. Safe and idempotent: only runs when both the
+        // seed-foundry-local-phi4mini row exists with IsProcessor=1 AND seed-ollama-llama31 is still marked
+        // as processor. User-created models are not affected.
+        await dbContext.Database.ExecuteSqlRawAsync(
+            $"""
+             UPDATE Models
+             SET IsProcessor = 0, UpdatedAtUtc = '{DateTimeOffset.UtcNow:O}'
+             WHERE Id = 'seed-ollama-llama31'
+               AND IsProcessor = 1
+               AND EXISTS (
+                   SELECT 1 FROM Models
+                   WHERE Id = 'seed-foundry-local-phi4mini' AND IsProcessor = 1 AND Enabled = 1
+               );
+             """,
+            cancellationToken);
 
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""

@@ -7,13 +7,13 @@ namespace ElBruno.CopilotHarness.Router.Api.Tests;
 /// <summary>
 /// Endpoint-level tests for the tool-calling capability guard + size-aware routing (C), the
 /// <c>SupportsToolCalling</c> persistence round-trip (D), upstream outcome capture (E) and the Live feed
-/// projection (F). The single seeded local model (<c>ollama llama3.1</c> = llama3.1:8b) is tool-capable, so
+/// projection (F). The seeded local processor model (<c>foundry local phi-4-mini</c>) is tool-capable, so
 /// tests that need a non-capable model create one on the fly.
 /// </summary>
 public sealed class ToolGuardAndUpstreamOutcomeEndpointTests
 {
-    private const string LocalModel = "ollama llama3.1";        // seeded: local tool-caller (SupportsToolCalling = true)
-    private const string FoundryModel = "foundry gpt-5-mini";  // seeded: cloud tool-caller (SupportsToolCalling = true)
+    private const string LocalModel = "foundry local phi-4-mini"; // seeded: local processor + tool-caller (SupportsToolCalling = true)
+    private const string FoundryModel = "foundry gpt-5-mini";     // seeded: cloud tool-caller (SupportsToolCalling = true)
 
     private static object ToolsPayload(string content) => new
     {

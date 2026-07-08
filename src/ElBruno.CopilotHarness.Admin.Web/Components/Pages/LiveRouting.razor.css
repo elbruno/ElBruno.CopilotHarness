@@ -195,6 +195,37 @@
     color: #57606a;
 }
 
+/* Provider type badge shown next to processor model name in the pipeline card. */
+.provider-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 0.03rem 0.45rem;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+    border: 1px solid transparent;
+    cursor: help;
+}
+
+.provider-badge-foundrylocal {
+    background: #e8f4fd;
+    border-color: #0078d4;
+    color: #003a8c;
+}
+
+.provider-badge-ollama {
+    background: #f0fdf4;
+    border-color: #2ea44f;
+    color: #166534;
+}
+
+.provider-badge-azureopenai {
+    background: #fff8e1;
+    border-color: #f0a500;
+    color: #7d4700;
+}
+
 .stage-context {
     display: inline-block;
     margin-top: 0.2rem;
