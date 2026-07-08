@@ -320,4 +320,53 @@ public sealed class AdminApiClient(HttpClient httpClient)
             return new RulesConfidenceResponse([]);
         }
     }
+
+    // ── Foundry Local SDK catalog ─────────────────────────────────────────────
+
+    public async Task<FoundryLocalSdkStatusDto> GetFoundryLocalStatusAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<FoundryLocalSdkStatusDto>("/admin/foundrylocal/status", cancellationToken)
+                ?? new FoundryLocalSdkStatusDto(false, null, "No response");
+        }
+        catch (Exception ex)
+        {
+            return new FoundryLocalSdkStatusDto(false, null, ex.Message);
+        }
+    }
+
+    public async Task<FoundryLocalSdkStatusDto> InitFoundryLocalAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync("/admin/foundrylocal/init", null, cancellationToken);
+            return await response.Content.ReadFromJsonAsync<FoundryLocalSdkStatusDto>(cancellationToken)
+                ?? new FoundryLocalSdkStatusDto(false, null, "No response");
+        }
+        catch (Exception ex)
+        {
+            return new FoundryLocalSdkStatusDto(false, null, ex.Message);
+        }
+    }
+
+    public async Task<IReadOnlyList<FoundryCatalogModelDto>> GetFoundryCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<IReadOnlyList<FoundryCatalogModelDto>>("/admin/foundrylocal/catalog", cancellationToken)
+                ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public async Task StartFoundryModelDownloadAsync(string alias, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsync(
+            $"/admin/foundrylocal/catalog/{Uri.EscapeDataString(alias)}/download", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
 }

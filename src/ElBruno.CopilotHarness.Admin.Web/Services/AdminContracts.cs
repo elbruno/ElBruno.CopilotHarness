@@ -345,3 +345,19 @@ public sealed record AbClassifierSummaryResponse(
     int DisagreementCount,
     double? AgreementRate,
     IReadOnlyList<AbIntentPairDto> IntentBreakdown);
+
+// ── Foundry Local SDK catalog ──────────────────────────────────────────────
+
+public sealed record FoundryLocalSdkStatusDto(
+    bool IsInitialized,
+    string? WebServiceUrl,
+    string? InitError);
+
+public sealed record FoundryCatalogModelDto(
+    string Alias,
+    string DisplayName,
+    string? Description,
+    string ModelId,
+    bool IsCached,
+    bool IsLoaded,
+    float? DownloadProgress);

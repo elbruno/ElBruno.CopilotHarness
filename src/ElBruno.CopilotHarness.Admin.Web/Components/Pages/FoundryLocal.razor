@@ -1,0 +1,225 @@
+@page "/foundrylocal"
+@using ElBruno.CopilotHarness.Admin.Web.Services
+@inject AdminApiClient Api
+
+<PageTitle>Foundry Local Catalog</PageTitle>
+
+<h1>🧠 Foundry Local Catalog</h1>
+<p class="muted">
+    Browse and download models available via the Microsoft Foundry Local SDK.
+    Once downloaded, models can be used as the local processor (rules engine) or as chat providers
+    without requiring Ollama or an external proxy.
+</p>
+
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="card">
+        <div class="sdk-status-row">
+            <span class="sdk-label">SDK status:</span>
+            @if (_status?.IsInitialized == true)
+            {
+                <span class="status-badge status-healthy">✅ Running</span>
+                @if (_status.WebServiceUrl is not null)
+                {
+                    <span class="sdk-url">@_status.WebServiceUrl</span>
+                }
+            }
+            else
+            {
+                <span class="status-badge status-unavailable">⚠ Not initialized</span>
+                @if (_status?.InitError is not null)
+                {
+                    <span class="sdk-error">@_status.InitError</span>
+                }
+                <button class="btn-small" @onclick="InitSdkAsync" disabled="@_initializing">
+                    @(_initializing ? "Initializing…" : "Initialize SDK")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (_status?.IsInitialized == true)
+    {
+        <div class="card">
+            <div class="card-toolbar">
+                <h3>Available Models</h3>
+                <button class="btn-small" @onclick="LoadCatalogAsync" disabled="@_catalogLoading">
+                    @(_catalogLoading ? "Refreshing…" : "🔄 Refresh")
+                </button>
+            </div>
+
+            @if (_catalogLoading)
+            {
+                <p>Loading catalog…</p>
+            }
+            else if (_catalog.Count == 0)
+            {
+                <p class="muted">No models found in the catalog. Ensure Foundry Local is installed and running.</p>
+            }
+            else
+            {
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Alias</th>
+                            <th>Display Name</th>
+                            <th>Model ID</th>
+                            <th>Cached</th>
+                            <th>Loaded</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var model in _catalog)
+                        {
+                            <tr>
+                                <td><code>@model.Alias</code></td>
+                                <td>
+                                    @model.DisplayName
+                                    @if (model.Description is not null)
+                                    {
+                                        <span class="model-desc" title="@model.Description"> ℹ</span>
+                                    }
+                                </td>
+                                <td class="model-id-cell"><code>@model.ModelId</code></td>
+                                <td>
+                                    @if (model.IsCached)
+                                    {
+                                        <span class="pill pill-green">✓ cached</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pill pill-grey">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (model.IsLoaded)
+                                    {
+                                        <span class="pill pill-blue">✓ loaded</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pill pill-grey">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (model.DownloadProgress is not null)
+                                    {
+                                        <div class="progress-bar-wrap">
+                                            <div class="progress-bar" style="width: @((int)model.DownloadProgress.Value)%"></div>
+                                            <span class="progress-label">@((int)model.DownloadProgress.Value)%</span>
+                                        </div>
+                                    }
+                                    else if (!model.IsCached)
+                                    {
+                                        <button class="btn-small" @onclick="() => DownloadAsync(model.Alias)">
+                                            ⬇ Download
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="card">
+            <h3>Use Foundry Local as Processor</h3>
+            <p class="muted">
+                After downloading a model, go to the <a href="/models">Model Registry</a> and create a connection
+                of type <strong>foundrylocal</strong>. Set the endpoint to
+                <code>@(_status.WebServiceUrl ?? "http://localhost:55588")</code> and mark it as the
+                <strong>Processor</strong> model to use it as the rules engine — no Ollama required.
+            </p>
+        </div>
+    }
+}
+
+@if (_error is not null)
+{
+    <div class="alert-error">@_error</div>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _initializing;
+    private bool _catalogLoading;
+    private FoundryLocalSdkStatusDto? _status;
+    private IReadOnlyList<FoundryCatalogModelDto> _catalog = [];
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _status = await Api.GetFoundryLocalStatusAsync();
+        if (_status.IsInitialized)
+        {
+            await LoadCatalogAsync();
+        }
+        _loading = false;
+    }
+
+    private async Task InitSdkAsync()
+    {
+        _initializing = true;
+        _error = null;
+        try
+        {
+            _status = await Api.InitFoundryLocalAsync();
+            if (_status.IsInitialized)
+            {
+                await LoadCatalogAsync();
+            }
+            else if (_status.InitError is not null)
+            {
+                _error = $"Initialization failed: {_status.InitError}";
+            }
+        }
+        finally
+        {
+            _initializing = false;
+        }
+    }
+
+    private async Task LoadCatalogAsync()
+    {
+        _catalogLoading = true;
+        _error = null;
+        try
+        {
+            _catalog = await Api.GetFoundryCatalogAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load catalog: {ex.Message}";
+        }
+        finally
+        {
+            _catalogLoading = false;
+        }
+    }
+
+    private async Task DownloadAsync(string alias)
+    {
+        _error = null;
+        try
+        {
+            await Api.StartFoundryModelDownloadAsync(alias);
+            // Refresh catalog after a short delay to pick up the in-progress state
+            await Task.Delay(500);
+            await LoadCatalogAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Download failed: {ex.Message}";
+        }
+    }
+}

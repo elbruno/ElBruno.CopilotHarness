@@ -203,6 +203,9 @@ builder.Services.AddSingleton<IChatCompletionsProvider, OllamaChatCompletionsPro
 builder.Services.AddSingleton<IChatCompletionsProvider, FoundryLocalChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProviderFactory, ChatCompletionsProviderFactory>();
 
+// Foundry Local SDK service — lazy-initialized singleton for catalog management
+builder.Services.AddSingleton<FoundryLocalSdkService>();
+
 builder.Services.AddHttpClient("foundry-health", (_, client) =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);

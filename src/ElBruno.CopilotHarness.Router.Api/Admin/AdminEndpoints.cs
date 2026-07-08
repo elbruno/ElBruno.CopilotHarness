@@ -29,6 +29,7 @@ public static partial class AdminEndpoints
         MapDashboardEndpoints(group);
         MapProfileEndpoints(group);
         MapBenchmarkEndpoints(group);
+        MapFoundryLocalEndpoints(group);
 
         return endpoints;
     }
