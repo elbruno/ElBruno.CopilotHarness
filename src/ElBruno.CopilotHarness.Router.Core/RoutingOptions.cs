@@ -52,6 +52,12 @@ public sealed class ModelProfileOptions
     public bool IsProcessor { get; init; }
 
     /// <summary>
+    /// True when this model is the shadow processor: it classifies prompts in parallel with the primary
+    /// processor and its result is stored for A/B comparison, but it never influences routing decisions.
+    /// </summary>
+    public bool IsShadowProcessor { get; init; }
+
+    /// <summary>
     /// When false, non-default sampling parameters (temperature, top_p) are stripped before the request is
     /// forwarded upstream. Set false for models that only accept the default temperature (e.g. gpt-5 family).
     /// </summary>

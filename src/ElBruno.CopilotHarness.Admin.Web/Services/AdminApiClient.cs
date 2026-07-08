@@ -85,7 +85,19 @@ public sealed class AdminApiClient(HttpClient httpClient)
         }
     }
 
-    // ── Condition-based routing rules ─────────────────────────────────────────
+    public async Task<AbClassifierSummaryResponse?> GetAbClassifierSummaryAsync(int limit = 200, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<AbClassifierSummaryResponse>(
+                $"/admin/benchmarks/ab-classifier?limit={limit}", cancellationToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
 
     public async Task<IReadOnlyList<RoutingRuleDto>> GetRulesAsync(CancellationToken cancellationToken = default) =>
         await _httpClient.GetFromJsonAsync<IReadOnlyList<RoutingRuleDto>>("/admin/rules", cancellationToken)

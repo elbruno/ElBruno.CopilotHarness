@@ -113,6 +113,8 @@ public sealed class SqliteRoutingStoreInitializer(
         // default model (llama3.1:8b) is a capable tool-caller, so we no longer force Ollama rows to 0 on
         // upgrade — the tool-calling size guard reroutes oversized agentic payloads to the cloud regardless.
         await AddColumnIfMissingAsync("Models", "SupportsToolCalling", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
+        // Shadow processor: runs in parallel with the primary processor for A/B classifier comparison.
+        await AddColumnIfMissingAsync("Models", "IsShadowProcessor", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
 
         await dbContext.Database.ExecuteSqlRawAsync(
             """

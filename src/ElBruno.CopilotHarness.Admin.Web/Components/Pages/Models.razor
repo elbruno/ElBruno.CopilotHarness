@@ -102,6 +102,10 @@ else
                             {
                                 <span class="status-pill status-good" title="Classifier model that reads the first chars of each prompt">🧠 processor</span>
                             }
+                            else if (model.IsShadowProcessor)
+                            {
+                                <span class="status-pill status-neutral" title="Runs in parallel with primary processor for A/B comparison — does not influence routing">🔬 shadow</span>
+                            }
                             else
                             {
                                 <span class="muted">—</span>
@@ -195,6 +199,10 @@ else
                     <label class="checkbox span-2">
                         <InputCheckbox @bind-Value="_editor.IsProcessor" /> Processor model (classifier)
                         <span class="field-hint">— reads the first chars of each prompt to decide intent. Only one model can be the processor.</span>
+                    </label>
+                    <label class="checkbox span-2">
+                        <InputCheckbox @bind-Value="_editor.IsShadowProcessor" /> Shadow processor (A/B evaluation)
+                        <span class="field-hint">— runs in parallel with the primary processor and records its classification for comparison. Never influences routing. Only one model can be the shadow processor.</span>
                     </label>
                     <label class="checkbox span-2">
                         <InputCheckbox @bind-Value="_editor.SupportsCustomTemperature" /> Supports custom temperature
@@ -316,6 +324,7 @@ else
             ApiKey = null,
             Enabled = model.Enabled,
             IsProcessor = model.IsProcessor,
+            IsShadowProcessor = model.IsShadowProcessor,
             SupportsCustomTemperature = model.SupportsCustomTemperature,
             SupportsToolCalling = model.SupportsToolCalling
         };
@@ -341,6 +350,7 @@ else
                 _editor.ApiKey,
                 _editor.Enabled,
                 _editor.IsProcessor,
+                _editor.IsShadowProcessor,
                 _editor.SupportsCustomTemperature,
                 _editor.SupportsToolCalling);
 
@@ -424,6 +434,7 @@ else
         public string? ApiKey { get; set; }
         public bool Enabled { get; set; } = true;
         public bool IsProcessor { get; set; }
+        public bool IsShadowProcessor { get; set; }
         public bool SupportsCustomTemperature { get; set; } = true;
         public bool SupportsToolCalling { get; set; } = true;
     }

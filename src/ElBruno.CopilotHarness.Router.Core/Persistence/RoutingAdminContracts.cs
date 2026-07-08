@@ -57,6 +57,7 @@ public sealed record ModelConnectionRecord(
     bool HasApiKey,
     bool Enabled,
     bool IsProcessor,
+    bool IsShadowProcessor,
     bool SupportsCustomTemperature,
     bool SupportsToolCalling,
     DateTimeOffset UpdatedAtUtc);
@@ -74,6 +75,7 @@ public sealed record UpsertModelConnectionRequest(
     string? ApiKey,
     bool Enabled,
     bool IsProcessor,
+    bool IsShadowProcessor,
     bool SupportsCustomTemperature,
     bool SupportsToolCalling);
 

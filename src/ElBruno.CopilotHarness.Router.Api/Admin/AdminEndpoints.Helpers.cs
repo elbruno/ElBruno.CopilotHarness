@@ -20,6 +20,7 @@ public static partial class AdminEndpoints
             model.HasApiKey,
             model.Enabled,
             model.IsProcessor,
+            model.IsShadowProcessor,
             model.SupportsCustomTemperature,
             model.SupportsToolCalling,
             model.UpdatedAtUtc);
@@ -34,6 +35,7 @@ public static partial class AdminEndpoints
             request.ApiKey,
             request.Enabled,
             request.IsProcessor,
+            request.IsShadowProcessor,
             request.SupportsCustomTemperature,
             request.SupportsToolCalling);
 

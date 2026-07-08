@@ -220,6 +220,14 @@ else
                                     @(request.ClassifierSource == "processor-model" ? "intent (guess): " : "intent: ")@request.ClassificationIntent
                                 </span>
                             }
+                            @if (!string.IsNullOrWhiteSpace(request.ShadowIntent))
+                            {
+                                var agree = request.ShadowAgreement ?? false;
+                                <span class="shadow-badge @(agree ? "shadow-agree" : "shadow-disagree")"
+                                      title="Shadow processor (@request.ShadowProcessorModel) classified: @request.ShadowIntent">
+                                    🔬 @(agree ? "✓" : "✗") shadow: @request.ShadowIntent
+                                </span>
+                            }
                         </div>
                         <span class="arrow">→</span>
                         <div class="stage stage-rule stage-primary">

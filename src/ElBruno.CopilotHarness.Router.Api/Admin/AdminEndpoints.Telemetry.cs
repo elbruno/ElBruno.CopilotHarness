@@ -115,6 +115,10 @@ public static partial class AdminEndpoints
                     long? tokensOut = long.TryParse(GetContextValue(trace, "gen_ai.usage.output_tokens"), out var tout) ? tout : null;
                     long? tokensTotal = long.TryParse(GetContextValue(trace, "gen_ai.usage.total_tokens"), out var ttot) ? ttot : null;
                     var responseModel = GetContextValue(trace, "gen_ai.response.model");
+                    // Shadow processor A/B facts.
+                    var shadowIntent = GetContextValue(trace, "shadow.intent");
+                    var shadowProcessorModel = GetContextValue(trace, "shadow.processorModel");
+                    bool? shadowAgreement = bool.TryParse(GetContextValue(trace, "shadow.agreement"), out var agree) ? agree : null;
                     return new RoutedRequestView(
                         TraceId: trace.TraceId,
                         CreatedAtUtc: trace.CreatedAtUtc,
@@ -150,7 +154,10 @@ public static partial class AdminEndpoints
                         TokensIn: tokensIn,
                         TokensOut: tokensOut,
                         TokensTotal: tokensTotal,
-                        ResponseModel: responseModel);
+                        ResponseModel: responseModel,
+                        ShadowIntent: shadowIntent,
+                        ShadowProcessorModel: shadowProcessorModel,
+                        ShadowAgreement: shadowAgreement);
                 })
                 .ToList();
 

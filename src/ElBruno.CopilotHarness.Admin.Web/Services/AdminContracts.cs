@@ -26,6 +26,7 @@ public sealed record ModelConnectionDto(
     bool HasApiKey,
     bool Enabled,
     bool IsProcessor,
+    bool IsShadowProcessor,
     bool SupportsCustomTemperature,
     bool SupportsToolCalling,
     DateTimeOffset UpdatedAtUtc);
@@ -39,7 +40,8 @@ public sealed record ModelConnectionUpsertRequest(
     string? ApiKey,
     bool Enabled,
     bool IsProcessor,
-    bool SupportsCustomTemperature,
+    bool IsShadowProcessor = false,
+    bool SupportsCustomTemperature = true,
     bool SupportsToolCalling = true);
 
 public sealed record ModelConnectionTestResponse(
@@ -203,7 +205,11 @@ public sealed record RoutedRequestView(
     long? TokensIn = null,
     long? TokensOut = null,
     long? TokensTotal = null,
-    string? ResponseModel = null);
+    string? ResponseModel = null,
+    // Shadow processor A/B fields
+    string? ShadowIntent = null,
+    string? ShadowProcessorModel = null,
+    bool? ShadowAgreement = null);
 
 public sealed record RoutingFeedResponse(
     DateTimeOffset GeneratedAtUtc,
@@ -323,3 +329,19 @@ public sealed record RuleConfidenceDto(
 
 public sealed record RulesConfidenceResponse(
     IReadOnlyList<RuleConfidenceDto> Items);
+
+// ── A/B Classifier comparison ──────────────────────────────────────────────
+
+public sealed record AbIntentPairDto(
+    string PrimaryIntent,
+    string ShadowIntent,
+    int Count,
+    bool Agrees);
+
+public sealed record AbClassifierSummaryResponse(
+    int TotalTracesInWindow,
+    int TracesWithShadow,
+    int AgreementCount,
+    int DisagreementCount,
+    double? AgreementRate,
+    IReadOnlyList<AbIntentPairDto> IntentBreakdown);
