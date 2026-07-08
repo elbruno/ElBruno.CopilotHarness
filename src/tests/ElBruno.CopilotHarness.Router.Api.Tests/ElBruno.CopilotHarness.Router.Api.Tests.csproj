@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\ElBruno.CopilotHarness.Router.Api\ElBruno.CopilotHarness.Router.Api.csproj" />
+    <ProjectReference Include="..\..\..\src\harness\ElBruno.CopilotHarness.Router.Api\ElBruno.CopilotHarness.Router.Api.csproj" />
   </ItemGroup>
 
 </Project>
