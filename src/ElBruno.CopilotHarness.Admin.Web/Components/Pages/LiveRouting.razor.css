@@ -220,6 +220,12 @@
     color: #166534;
 }
 
+.provider-badge-foundrylocalsdk {
+    background: #f3e8ff;
+    border-color: #7c3aed;
+    color: #4c1d95;
+}
+
 .provider-badge-azureopenai {
     background: #fff8e1;
     border-color: #f0a500;

@@ -87,6 +87,7 @@ public static partial class AdminEndpoints
             string id,
             IRoutingConfigurationStore store,
             IHttpClientFactory httpClientFactory,
+            FoundryLocalSdkService sdkService,
             CancellationToken cancellationToken) =>
         {
             var model = await store.GetModelAsync(id, cancellationToken);
@@ -95,7 +96,7 @@ public static partial class AdminEndpoints
                 return Results.NotFound();
             }
 
-            var status = await CheckModelStatusAsync(model, httpClientFactory, cancellationToken);
+            var status = await CheckModelStatusAsync(model, httpClientFactory, cancellationToken, sdkService);
             return Results.Ok(status);
         });
     }

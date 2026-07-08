@@ -201,6 +201,7 @@ builder.Services.AddHttpClient("model-provider", client =>
 builder.Services.AddSingleton<IChatCompletionsProvider, AzureFoundryChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProvider, OllamaChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProvider, FoundryLocalChatCompletionsProvider>();
+builder.Services.AddSingleton<IChatCompletionsProvider, FoundryLocalSdkChatCompletionsProvider>();
 builder.Services.AddSingleton<IChatCompletionsProviderFactory, ChatCompletionsProviderFactory>();
 
 // Foundry Local SDK service — lazy-initialized singleton for catalog management

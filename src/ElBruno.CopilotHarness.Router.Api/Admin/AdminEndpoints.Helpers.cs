@@ -57,6 +57,7 @@ public static partial class AdminEndpoints
             ModelProviderType.Ollama => "ollama",
             ModelProviderType.AzureOpenAI => "azure-openai",
             ModelProviderType.FoundryLocal => "foundry-local",
+            ModelProviderType.FoundryLocalSdk => "foundry-local-sdk",
             _ => type.ToString().ToLowerInvariant()
         };
 
@@ -70,6 +71,8 @@ public static partial class AdminEndpoints
             "foundry" => ModelProviderType.AzureOpenAI,
             "foundry-local" => ModelProviderType.FoundryLocal,
             "foundrylocal" => ModelProviderType.FoundryLocal,
+            "foundry-local-sdk" => ModelProviderType.FoundryLocalSdk,
+            "foundrylocalsdk" => ModelProviderType.FoundryLocalSdk,
             _ => ModelProviderType.AzureOpenAI
         };
 
@@ -391,7 +394,8 @@ public static partial class AdminEndpoints
     internal static async Task<ModelStatusDto> CheckModelStatusAsync(
         ModelConnectionRecord model,
         IHttpClientFactory httpClientFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        FoundryLocalSdkService? sdkService = null)
     {
         // Azure models: model list not easily queryable without deployment context — skip probe.
         if (model.ProviderType == ModelProviderType.AzureOpenAI)
@@ -400,9 +404,23 @@ public static partial class AdminEndpoints
                 "Status check not supported for Azure OpenAI models. Use 'Test connection' instead.");
         }
 
-        var endpoint = string.IsNullOrWhiteSpace(model.Endpoint)
-            ? (model.ProviderType == ModelProviderType.FoundryLocal ? "http://localhost:5101" : "http://localhost:11434")
-            : model.Endpoint;
+        // FoundryLocalSdk: use the SDK's auto-discovered endpoint if available.
+        string endpoint;
+        if (model.ProviderType == ModelProviderType.FoundryLocalSdk)
+        {
+            endpoint = sdkService?.WebServiceUrl ?? "http://localhost:55588";
+            if (!sdkService?.IsInitialized ?? true)
+            {
+                return new ModelStatusDto("unreachable", false, false,
+                    "Foundry Local SDK is not initialized. Go to Admin → Foundry Local to initialize it.");
+            }
+        }
+        else
+        {
+            endpoint = string.IsNullOrWhiteSpace(model.Endpoint)
+                ? (model.ProviderType == ModelProviderType.FoundryLocal ? "http://localhost:5101" : "http://localhost:11434")
+                : model.Endpoint;
+        }
 
         var modelsUrl = $"{endpoint.TrimEnd('/')}/v1/models";
 

@@ -62,7 +62,7 @@ else
                         <td class="muted">@(string.IsNullOrWhiteSpace(model.Endpoint) ? "(shared Foundry)" : model.Endpoint)</td>
                         <td>@model.ModelName</td>
                         <td>
-                            @if (model.Type is "ollama" or "foundry-local")
+                            @if (model.Type is "ollama" or "foundry-local" or "foundry-local-sdk")
                             {
                                 @if (_modelStatuses.TryGetValue(model.Id, out var st))
                                 {
@@ -81,7 +81,7 @@ else
                             }
                         </td>
                         <td>
-                            @if (model.Type == "ollama" || model.Type == "foundry-local")
+                            @if (model.Type == "ollama" || model.Type is "foundry-local" or "foundry-local-sdk")
                             {
                                 <span class="muted">n/a</span>
                             }
@@ -168,20 +168,21 @@ else
                         <InputSelect @bind-Value="_editor.Type">
                             <option value="azure-openai">Azure OpenAI / Foundry</option>
                             <option value="ollama">Ollama</option>
-                            <option value="foundry-local">Foundry Local</option>
+                            <option value="foundry-local">Foundry Local (HTTP)</option>
+                            <option value="foundry-local-sdk">Foundry Local SDK (auto-endpoint)</option>
                         </InputSelect>
                     </label>
                     <label class="span-2">
                         Endpoint
                         <InputText @bind-Value="_editor.Endpoint"
-                                   placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : _editor.Type == "foundry-local" ? "http://localhost:5101" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
+                                   placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : _editor.Type == "foundry-local" ? "http://localhost:5101" : _editor.Type == "foundry-local-sdk" ? "(auto-discovered from Foundry Local SDK)" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
                     </label>
                     <label>
-                        @(_editor.Type == "ollama" || _editor.Type == "foundry-local" ? "Model name" : "Deployment name")
+                        @(_editor.Type is "ollama" or "foundry-local" or "foundry-local-sdk" ? "Model name" : "Deployment name")
                         <InputText @bind-Value="_editor.ModelName"
-                                   placeholder="@(_editor.Type == "ollama" ? "llama3.1:8b" : _editor.Type == "foundry-local" ? "phi-4-mini" : "gpt-5-mini")" />
+                                   placeholder="@(_editor.Type == "ollama" ? "llama3.1:8b" : _editor.Type is "foundry-local" or "foundry-local-sdk" ? "phi-4-mini" : "gpt-5-mini")" />
                     </label>
-                    @if (_editor.Type != "ollama" && _editor.Type != "foundry-local")
+                    @if (_editor.Type is not ("ollama" or "foundry-local" or "foundry-local-sdk"))
                     {
                         <label>
                             API version
@@ -257,7 +258,7 @@ else
 
     private async Task LoadStatusesAsync()
     {
-        var localModels = _models.Where(m => m.Type is "ollama" or "foundry-local").ToList();
+        var localModels = _models.Where(m => m.Type is "ollama" or "foundry-local" or "foundry-local-sdk").ToList();
         if (localModels.Count == 0) return;
 
         var tasks = localModels.Select(async m =>
@@ -421,6 +422,7 @@ else
             "ollama" => "Ollama",
             "azure-openai" => "Azure OpenAI / Foundry",
             "foundry-local" => "Foundry Local",
+            "foundry-local-sdk" => "Foundry Local SDK",
             _ => type
         };
 

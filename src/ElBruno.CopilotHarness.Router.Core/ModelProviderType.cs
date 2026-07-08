@@ -16,7 +16,15 @@ public enum ModelProviderType
     /// Default endpoint: http://localhost:5101 (FoundryLocalProxy) or http://localhost:55588 (SDK-direct).
     /// No API key required. Supports phi-4-mini and other open-weight models via CPU/GPU/NPU.
     /// </summary>
-    FoundryLocal = 2
+    FoundryLocal = 2,
+
+    /// <summary>
+    /// Microsoft Foundry Local via the direct .NET SDK (<c>Microsoft.AI.Foundry.Local</c>).
+    /// Unlike <see cref="FoundryLocal"/>, no endpoint configuration is required — the SDK is
+    /// initialized on demand and its embedded OpenAI-compatible web service URL is auto-discovered
+    /// at runtime. Requires Foundry Local to be installed on the host machine.
+    /// </summary>
+    FoundryLocalSdk = 3
 }
 
 /// <summary>Extension helpers for <see cref="ModelProviderType"/>.</summary>
@@ -28,5 +36,5 @@ public static class ModelProviderTypeExtensions
     /// <see cref="ModelProviderType.FoundryLocal"/> are local providers.
     /// </summary>
     public static bool IsLocalProvider(this ModelProviderType type) =>
-        type is ModelProviderType.Ollama or ModelProviderType.FoundryLocal;
+        type is ModelProviderType.Ollama or ModelProviderType.FoundryLocal or ModelProviderType.FoundryLocalSdk;
 }
