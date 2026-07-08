@@ -1,12 +1,12 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/ElBruno.CopilotHarness.Admin.Web/ElBruno.CopilotHarness.Admin.Web.csproj" />
-    <Project Path="src/ElBruno.CopilotHarness.AppHost/ElBruno.CopilotHarness.AppHost.csproj" />
-    <Project Path="src/ElBruno.CopilotHarness.Evaluation.Worker/ElBruno.CopilotHarness.Evaluation.Worker.csproj" />
-    <Project Path="src/ElBruno.CopilotHarness.Judge.Web/ElBruno.CopilotHarness.Judge.Web.csproj" />
-    <Project Path="src/ElBruno.CopilotHarness.Router.Api/ElBruno.CopilotHarness.Router.Api.csproj" />
-    <Project Path="src/ElBruno.CopilotHarness.Router.Core/ElBruno.CopilotHarness.Router.Core.csproj" />
-    <Project Path="src/ElBruno.CopilotHarness.ServiceDefaults/ElBruno.CopilotHarness.ServiceDefaults.csproj" />
+  <Folder Name="/src/harness/">
+    <Project Path="src/harness/ElBruno.CopilotHarness.Admin.Web/ElBruno.CopilotHarness.Admin.Web.csproj" />
+    <Project Path="src/harness/ElBruno.CopilotHarness.AppHost/ElBruno.CopilotHarness.AppHost.csproj" />
+    <Project Path="src/harness/ElBruno.CopilotHarness.Evaluation.Worker/ElBruno.CopilotHarness.Evaluation.Worker.csproj" />
+    <Project Path="src/harness/ElBruno.CopilotHarness.Judge.Web/ElBruno.CopilotHarness.Judge.Web.csproj" />
+    <Project Path="src/harness/ElBruno.CopilotHarness.Router.Api/ElBruno.CopilotHarness.Router.Api.csproj" />
+    <Project Path="src/harness/ElBruno.CopilotHarness.Router.Core/ElBruno.CopilotHarness.Router.Core.csproj" />
+    <Project Path="src/harness/ElBruno.CopilotHarness.ServiceDefaults/ElBruno.CopilotHarness.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="src/tests/DocAccuracy.Tests/DocAccuracy.Tests.csproj" />
