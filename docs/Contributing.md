@@ -18,16 +18,16 @@ The full harness uses .NET Aspire to orchestrate multiple services. Run everythi
 aspire run
 ```
 
-**No Docker required by default.** The harness uses SQLite for persistence out of the box. Docker is only needed if you want PostgreSQL + Redis for a production-like setup — set `"UseContainers": "true"` in `src/ElBruno.CopilotHarness.AppHost/appsettings.json` to opt in.
+**No Docker required by default.** The harness uses SQLite for persistence out of the box. Docker is only needed if you want PostgreSQL + Redis for a production-like setup — set `"UseContainers": "true"` in `src/harness/ElBruno.CopilotHarness.AppHost/appsettings.json` to opt in.
 
 See [Runbook](Runbook.md) for a side-by-side comparison of both modes.
 
 ## Running just the router (no Docker)
 
-The Router API can run standalone without Docker or the full Aspire stack. It uses a local SQLite database by default (see `src/ElBruno.CopilotHarness.Router.Api/appsettings.json` — `Persistence.DatabasePath`):
+The Router API can run standalone without Docker or the full Aspire stack. It uses a local SQLite database by default (see `src/harness/ElBruno.CopilotHarness.Router.Api/appsettings.json` — `Persistence.DatabasePath`):
 
 ```powershell
-cd src\ElBruno.CopilotHarness.Router.Api
+cd src\harness\ElBruno.CopilotHarness.Router.Api
 dotnet run
 ```
 

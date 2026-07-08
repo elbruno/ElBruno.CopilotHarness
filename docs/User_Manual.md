@@ -24,7 +24,7 @@ Run these commands **once** inside the AppHost project folder before the first `
 Aspire saves them locally so you are never prompted again.
 
 ```powershell
-cd src/ElBruno.CopilotHarness.AppHost
+cd src/harness/ElBruno.CopilotHarness.AppHost
 
 aspire secret set FoundryEndpoint "https://<your-resource>.openai.azure.com/openai/v1"
 aspire secret set FoundryApiKey   "<your-azure-foundry-api-key>"

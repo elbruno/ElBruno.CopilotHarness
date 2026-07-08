@@ -23,7 +23,7 @@ aspire run
 ### Docker mode
 
 1. Start Docker Desktop (or Podman).
-2. Edit `src/ElBruno.CopilotHarness.AppHost/appsettings.json` — set `"UseContainers": "true"`.
+2. Edit `src/harness/ElBruno.CopilotHarness.AppHost/appsettings.json` — set `"UseContainers": "true"`.
 3. Run:
 
 ```powershell

@@ -14,7 +14,7 @@ cd samples/FoundryLocalProxy
 dotnet run
 
 # Terminal 2: Start harness
-cd src/ElBruno.CopilotHarness.AppHost
+cd src/harness/ElBruno.CopilotHarness.AppHost
 dotnet run
 ```
 

@@ -420,7 +420,7 @@ else
     ForwardToCloudModel(request);   // fine to use cloud
 ```
 
-The **ElBruno.CopilotHarness** project (`src/ElBruno.CopilotHarness.Router.Api`)
+The **ElBruno.CopilotHarness** project (`src/harness/ElBruno.CopilotHarness.Router.Api`)
 implements this with a full rule engine, priority ordering, regex matching,
 and semantic intent classification.
 

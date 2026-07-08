@@ -91,7 +91,7 @@ You can register as many model connections as you need. Each connection has its 
 
 ```powershell
 # 1 — Set your secrets once
-cd src/ElBruno.CopilotHarness.AppHost
+cd src/harness/ElBruno.CopilotHarness.AppHost
 aspire secret set FoundryEndpoint "https://<your-resource>.openai.azure.com/openai/v1"
 aspire secret set FoundryApiKey   "<your-azure-foundry-api-key>"
 aspire secret set AdminApiKey     "<any-password-you-choose>"

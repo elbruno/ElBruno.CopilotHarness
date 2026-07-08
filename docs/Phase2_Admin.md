@@ -1,6 +1,6 @@
 # Phase 2 Admin UI
 
-The Phase 2 admin surface is implemented in `src/ElBruno.CopilotHarness.Admin.Web` and backed by admin endpoints in `Router.Api`.
+The Phase 2 admin surface is implemented in `src/harness/ElBruno.CopilotHarness.Admin.Web` and backed by admin endpoints in `Router.Api`.
 
 ## What is included
 
@@ -13,7 +13,7 @@ The Phase 2 admin surface is implemented in `src/ElBruno.CopilotHarness.Admin.We
 
 ## Data/storage
 
-- SQLite via EF Core in `src/ElBruno.CopilotHarness.Router.Core` (`HarnessDbContext`).
+- SQLite via EF Core in `src/harness/ElBruno.CopilotHarness.Router.Core` (`HarnessDbContext`).
 - Local-first DB file (default):
   - `Persistence:DatabasePath = App_Data\copilotharness-admin.db`
 - Override with environment variable:
