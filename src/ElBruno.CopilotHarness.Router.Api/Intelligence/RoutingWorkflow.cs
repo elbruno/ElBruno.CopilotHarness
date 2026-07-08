@@ -672,6 +672,11 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
             if (!string.IsNullOrWhiteSpace(message.Classification.ProcessorModel))
             {
                 message.Facts.Add(new RoutingContextFact("classifier.processorModel", message.Classification.ProcessorModel!));
+                // Also record the provider type so the Live Routing UI can display a type badge.
+                if (message.RoutingOptions.Profiles.TryGetValue(message.Classification.ProcessorModel!, out var processorProfile))
+                {
+                    message.Facts.Add(new RoutingContextFact("classifier.processorModelType", processorProfile.Type.ToString()));
+                }
             }
             message.Facts.Add(new RoutingContextFact(
                 "classifier.confidence",

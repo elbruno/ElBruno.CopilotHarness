@@ -36,6 +36,17 @@ the default-model selector simply point at registry entries by `name`.
 
 ## Provider types
 
+### Microsoft Foundry Local (`type: foundry-local`)
+
+- Targets the OpenAI-compatible REST endpoint that Foundry Local (or FoundryLocalProxy) exposes
+  at `{endpoint}/v1/chat/completions`.
+- No API key required.
+- `modelName` is the Foundry Local model tag (e.g. `phi-4-mini`).
+- Typical `endpoint`: `http://localhost:5101` (FoundryLocalProxy) or `http://localhost:55588`
+  (Foundry Local SDK direct).
+- Recommended model: **phi-4-mini** — 3.8B parameters, strong JSON output, tool-callable, NPU-capable.
+- Install via: `winget install Microsoft.FoundryLocal` then `foundry model run phi-4-mini`.
+
 ### Ollama (`type: ollama`)
 
 - Targets the OpenAI-compatible endpoint Ollama exposes at
@@ -67,8 +78,9 @@ returns a compact intent label (e.g. `simple-chat`, `github-actions`, `launch-ap
 
 - **Single processor invariant.** At most one connection has `isProcessor = true`. Setting
   it on one model automatically clears it on every other model (enforced server-side).
-- **Default.** The seeded `ollama llama3.1` (`llama3.1:8b`) connection is the processor, so
-  classification runs locally and cheaply by default.
+- **Default.** A fresh database seeds `foundry local phi-4-mini` (`phi-4-mini` via FoundryLocalProxy)
+  as the processor. Ollama is seeded alongside but with `isProcessor = false`. Any model type can be
+  made the processor — see [Processor Model Setup](./Processor_Model_Setup.md).
 - **Real LLM call with deterministic fallback.** The processor is invoked per request via
   its provider. If it is disabled, missing, unreachable, times out, or returns an
   off-vocabulary/unparseable answer, the harness falls back to a fast built-in

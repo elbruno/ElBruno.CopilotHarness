@@ -181,6 +181,7 @@ public sealed record RoutedRequestView(
     string ClassificationComplexity,
     string ClassifierSource = "deterministic",
     string? ProcessorModel = null,
+    string? ProcessorModelType = null,
     double ClassificationConfidence = 0,
     int TotalPromptCharacters = 0,
     bool HasSystemMessage = false,

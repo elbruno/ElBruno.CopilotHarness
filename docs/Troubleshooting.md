@@ -182,18 +182,17 @@ already cleared. See [Model Registry → Temperature capability](Model_Registry.
 ## Intent classification fell back to deterministic
 
 On the **Live Routing** page the *classifier source* shows `deterministic` instead of
-`processor-model`. This means the processor model (default `ollama llama3.1`) could not be
+`processor-model`. This means the processor model (default `foundry local phi-4-mini`) could not be
 used to classify the prompt, so the built-in keyword classifier was used as a fallback.
 Routing still works, but intent quality is lower. Common causes:
 
-- The Ollama server (or whichever model is flagged as processor) is not running/reachable.
+- The Foundry Local service (or whichever model is flagged as processor) is not running/reachable.
 - No model is flagged as the processor in the registry.
 - The processor call timed out (`Classifier:TimeoutMs`, default 4000 ms) or returned an
   unparseable answer.
 
-Start the processor model (`ollama pull llama3.1:8b` + run Ollama), confirm exactly one model
-has the processor flag on the **Models** page, and the source returns to `processor-model`.
-See [Model Registry → Processor model](Model_Registry.md#processor-model).
+Start the processor model (see [Processor Model Setup](./Processor_Model_Setup.md)), confirm exactly
+one model has the processor flag on the **Models** page, and the source returns to `processor-model`.
 
 ## Short prompts (like `hi`) route to the cloud model
 
@@ -256,3 +255,65 @@ Kestrel rejected the response.
 ellipsis) are mapped to ASCII and any other non-printable/non-ASCII character is dropped. The
 full, unmodified reason is still available in the routing trace and on the
 [Live Routing](Live_Routing.md) page.
+
+---
+
+## Foundry Local / phi-4-mini {#foundry-local}
+
+### phi-4-mini not detected — health check shows Unhealthy
+
+**Symptom.** The `/health` endpoint reports `foundry-local-endpoint: Unhealthy`. Live Routing
+shows `⚙️ Keyword/heuristic fallback` (deterministic classifier) instead of `🧠 Decided by local model`.
+
+**Cause.** Foundry Local (or FoundryLocalProxy) is not running at the configured endpoint
+(`http://localhost:5101` by default).
+
+**Fix — option 1 (Foundry Local CLI):**
+```
+winget install Microsoft.FoundryLocal
+foundry model run phi-4-mini
+```
+
+**Fix — option 2 (FoundryLocalProxy):**
+```
+cd samples/FoundryLocalProxy
+dotnet run
+```
+
+Verify it is reachable:
+```
+curl http://localhost:5101/v1/models
+```
+
+### Custom endpoint
+
+If you run Foundry Local on a different port, override in `appsettings.json` or as an environment variable:
+```json
+"FoundryLocal": { "Endpoint": "http://localhost:55588" }
+```
+Or as an environment variable: `FoundryLocal__Endpoint=http://localhost:55588`.
+
+### Processor model still shows as Ollama after migration
+
+If the Admin UI's **Setup** page still shows an Ollama model as the processor:
+
+1. Open **Model Registry** (`/models`).
+2. Find `foundry local phi-4-mini` — enable **Is Processor** and click Save.
+3. Find the Ollama model — disable **Is Processor** and click Save.
+
+On a fresh database the seed takes care of this automatically; on an upgraded database you may
+need to flip the flags manually (the `foundry local phi-4-mini` entry is inserted automatically
+by the upgrade migration, but `IsProcessor` is not automatically toggled to avoid unexpected
+behavior changes on existing systems).
+
+### Intent classification still shows `deterministic` after starting Foundry Local
+
+Common causes:
+
+- The `FoundryLocal.Endpoint` in `appsettings.json` does not match the running instance's port.
+- No model in the registry has `IsProcessor = true` — check the Models page.
+- The classifier timed out (`Classifier:TimeoutMs`, default 4000 ms) — increase if phi-4-mini
+  is slow to load the first time.
+- phi-4-mini returned an off-schema response — this can happen on first load while the model
+  warms up. Retry after a few seconds.
+

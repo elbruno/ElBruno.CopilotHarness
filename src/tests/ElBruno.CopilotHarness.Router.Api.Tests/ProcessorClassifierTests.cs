@@ -74,6 +74,42 @@ public sealed class ProcessorClassifierTests
         Assert.Equal("deterministic", result.Source);
     }
 
+    [Theory]
+    [InlineData(ModelProviderType.FoundryLocal, "foundry-local-phi4")]
+    [InlineData(ModelProviderType.Ollama, "ollama-llama31")]
+    [InlineData(ModelProviderType.AzureOpenAI, "gpt5mini-proc")]
+    public async Task ProcessorClassifier_WorksWithAnyProviderType_WhenIsProcessorTrue(
+        ModelProviderType providerType, string profileKey)
+    {
+        var json = """{"choices":[{"message":{"content":"{\"intent\":\"code-task\",\"complexity\":\"high\",\"confidence\":0.9,\"reasoning\":\"test\"}"}}]}""";
+        var provider = new StubProvider(HttpStatusCode.OK, json, providerType);
+
+        var profiles = new Dictionary<string, ModelProfileOptions>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["gpt5mini"] = new() { Deployment = "gpt-5-mini", Enabled = true, SupportsCustomTemperature = false },
+            [profileKey] = new() { Type = providerType, Deployment = "some-model", Enabled = true, IsProcessor = true }
+        };
+        var options = new RoutingOptions
+        {
+            DefaultProfile = "gpt5mini",
+            Profiles = profiles,
+            Rules = new BasicRulesOptions { BigPromptCharacterThreshold = 2500 }
+        };
+
+        var factory = new ChatCompletionsProviderFactory(new IChatCompletionsProvider[] { provider });
+        var agent = new ProcessorModelClassificationAgent(
+            factory,
+            new DeterministicClassificationAgent(),
+            Options.Create(new ClassifierOptions { Enabled = true, PreviewChars = 200, TimeoutMs = 4000 }),
+            NullLogger<ProcessorModelClassificationAgent>.Instance);
+
+        var result = await agent.ClassifyAsync(Body("refactor the module"), new RoutingContext([]), options, CancellationToken.None);
+
+        Assert.Equal("processor-model", result.Source);
+        Assert.Equal(ClassifierIntentNames.CodeTask, result.Intent);
+        Assert.Equal(profileKey, result.ProcessorModel);
+    }
+
     private static ClassificationResult Classify(string prompt, RoutingOptions options) =>
         DeterministicClassificationAgent.Classify(Body(prompt), new RoutingContext([]), options);
 
@@ -113,9 +149,12 @@ public sealed class ProcessorClassifierTests
             ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = prompt })
         };
 
-    private sealed class StubProvider(HttpStatusCode status, string body) : IChatCompletionsProvider
+    private sealed class StubProvider(
+        HttpStatusCode status,
+        string body,
+        ModelProviderType providerType = ModelProviderType.Ollama) : IChatCompletionsProvider
     {
-        public ModelProviderType ProviderType => ModelProviderType.Ollama;
+        public ModelProviderType ProviderType => providerType;
 
         public Task<HttpResponseMessage> SendChatCompletionsAsync(
             JsonObject payload,

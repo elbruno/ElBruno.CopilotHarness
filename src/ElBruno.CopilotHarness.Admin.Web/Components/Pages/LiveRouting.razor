@@ -202,6 +202,17 @@ else
                             <span class="stage-sub">
                                 @(string.IsNullOrWhiteSpace(request.ProcessorModel) ? request.ClassificationComplexity : request.ProcessorModel)
                                 · @request.ClassificationConfidence.ToString("0.00")
+                                @if (!string.IsNullOrWhiteSpace(request.ProcessorModelType))
+                                {
+                                    <span class="provider-badge provider-badge-@request.ProcessorModelType.ToLowerInvariant()" title="Processor model provider type">
+                                        @(request.ProcessorModelType switch {
+                                            "FoundryLocal" => "Foundry Local",
+                                            "Ollama" => "Ollama",
+                                            "AzureOpenAI" => "Azure",
+                                            _ => request.ProcessorModelType
+                                        })
+                                    </span>
+                                }
                             </span>
                             @if (!string.IsNullOrWhiteSpace(request.ClassificationIntent))
                             {
