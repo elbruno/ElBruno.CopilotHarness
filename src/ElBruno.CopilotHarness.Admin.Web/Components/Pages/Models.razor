@@ -61,7 +61,7 @@ else
                         <td class="muted">@(string.IsNullOrWhiteSpace(model.Endpoint) ? "(shared Foundry)" : model.Endpoint)</td>
                         <td>@model.ModelName</td>
                         <td>
-                            @if (model.Type == "ollama")
+                            @if (model.Type == "ollama" || model.Type == "foundry-local")
                             {
                                 <span class="muted">n/a</span>
                             }
@@ -144,19 +144,20 @@ else
                         <InputSelect @bind-Value="_editor.Type">
                             <option value="azure-openai">Azure OpenAI / Foundry</option>
                             <option value="ollama">Ollama</option>
+                            <option value="foundry-local">Foundry Local</option>
                         </InputSelect>
                     </label>
                     <label class="span-2">
                         Endpoint
                         <InputText @bind-Value="_editor.Endpoint"
-                                   placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
+                                   placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : _editor.Type == "foundry-local" ? "http://localhost:5101" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
                     </label>
                     <label>
-                        @(_editor.Type == "ollama" ? "Model name" : "Deployment name")
+                        @(_editor.Type == "ollama" || _editor.Type == "foundry-local" ? "Model name" : "Deployment name")
                         <InputText @bind-Value="_editor.ModelName"
-                                   placeholder="@(_editor.Type == "ollama" ? "llama3.1:8b" : "gpt-5-mini")" />
+                                   placeholder="@(_editor.Type == "ollama" ? "llama3.1:8b" : _editor.Type == "foundry-local" ? "phi-4-mini" : "gpt-5-mini")" />
                     </label>
-                    @if (_editor.Type != "ollama")
+                    @if (_editor.Type != "ollama" && _editor.Type != "foundry-local")
                     {
                         <label>
                             API version
@@ -340,6 +341,7 @@ else
         {
             "ollama" => "Ollama",
             "azure-openai" => "Azure OpenAI / Foundry",
+            "foundry-local" => "Foundry Local",
             _ => type
         };
 

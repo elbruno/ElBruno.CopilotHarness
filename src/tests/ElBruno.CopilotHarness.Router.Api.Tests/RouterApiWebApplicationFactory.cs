@@ -76,6 +76,10 @@ public sealed class RouterApiWebApplicationFactory : WebApplicationFactory<Progr
                 .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(CreateResponse));
 
             services
+                .AddHttpClient("foundry-local-health")
+                .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(CreateResponse));
+
+            services
                 .AddHttpClient<FoundryChatCompletionsClient>()
                 .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(CreateResponse));
 

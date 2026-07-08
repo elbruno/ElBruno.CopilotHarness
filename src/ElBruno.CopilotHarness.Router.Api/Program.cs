@@ -208,8 +208,14 @@ builder.Services.AddHttpClient("foundry-health", (_, client) =>
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 
+builder.Services.AddHttpClient("foundry-local-health", (_, client) =>
+{
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+
 builder.Services.AddHealthChecks()
-    .AddCheck<FoundryEndpointHealthCheck>("foundry-endpoint", HealthStatus.Degraded, ["ready"]);
+    .AddCheck<FoundryEndpointHealthCheck>("foundry-endpoint", HealthStatus.Degraded, ["ready"])
+    .AddCheck<FoundryLocalEndpointHealthCheck>("foundry-local-endpoint", HealthStatus.Degraded, ["ready"]);
 builder.Services.AddSingleton<IBackgroundJobQueue, ChannelBackgroundJobQueue>();
 builder.Services.AddSingleton<BackendWarmupJob>();
 builder.Services.AddHostedService<QueuedBackgroundJobProcessor>();

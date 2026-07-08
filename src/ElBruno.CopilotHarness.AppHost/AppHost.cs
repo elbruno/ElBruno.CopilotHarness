@@ -5,6 +5,11 @@ var foundryApiKey = builder.AddParameter("FoundryApiKey", secret: true);
 var adminApiKey = builder.AddParameter("AdminApiKey", secret: true);
 var judgeDbPath = builder.AddParameter("JudgeDbPath", @"App_Data\copilotharness-judge.db");
 
+// FoundryLocal endpoint — where the FoundryLocalProxy (or Foundry Local SDK) is listening.
+// Default: http://localhost:5101 (matches FoundryLocalProxy sample).
+// Override: set Parameters:FoundryLocalEndpoint in apphost appsettings.json or launchSettings.
+var foundryLocalEndpoint = builder.Configuration["Parameters:FoundryLocalEndpoint"] ?? "http://localhost:5101";
+
 // UseContainers=true wires PostgreSQL + Redis (requires Docker).
 // Default is false so the harness works with aspire run and no container runtime.
 var useContainers = builder.Configuration["UseContainers"] == "true";
@@ -15,6 +20,7 @@ const string sharedSqlitePath = @"App_Data\copilotharness-admin.db";
 var routerApi = builder.AddProject<Projects.ElBruno_CopilotHarness_Router_Api>("router-api")
     .WithEnvironment("Foundry__Endpoint", foundryEndpoint)
     .WithEnvironment("Foundry__ApiKey", foundryApiKey)
+    .WithEnvironment("FoundryLocal__Endpoint", foundryLocalEndpoint)
     .WithEnvironment("Telemetry__CapturePromptText", "true")
     .WithEnvironment("ResponseAnnotation__Enabled", "true")
     .WithEnvironment("Backend__Auth__AdminApiKey", adminApiKey);

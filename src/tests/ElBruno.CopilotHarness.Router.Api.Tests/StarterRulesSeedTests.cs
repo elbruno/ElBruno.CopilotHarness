@@ -5,15 +5,15 @@ namespace ElBruno.CopilotHarness.Router.Api.Tests;
 
 /// <summary>
 /// Locks in the tuned "start from zero" starter rule set produced by
-/// <c>GenerateStarterRulesAsync</c>. A fresh database ships two seeded models
-/// (<c>ollama llama3.1</c> = local/small, <c>foundry gpt-5-mini</c> = cloud/large),
-/// so the wizard must emit exactly the 8 golden rules documented in
-/// <c>docs/Rules_Engine.md</c>. Uses its own isolated factory (fresh DB) so the
+/// <c>GenerateStarterRulesAsync</c>. A fresh database ships three seeded models
+/// (<c>foundry local phi-4-mini</c> = processor/local, <c>ollama llama3.1</c> = alternative local,
+/// <c>foundry gpt-5-mini</c> = cloud/large), so the wizard must emit exactly the golden rules
+/// documented in <c>docs/Rules_Engine.md</c>. Uses its own isolated factory (fresh DB) so the
 /// assertion is not affected by other tests mutating the shared fixture.
 /// </summary>
 public sealed class StarterRulesSeedTests
 {
-    private const string LocalModel = "ollama llama3.1";
+    private const string LocalModel = "foundry local phi-4-mini";
     private const string CloudModel = "foundry gpt-5-mini";
 
     [Fact]
