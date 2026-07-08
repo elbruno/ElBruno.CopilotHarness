@@ -26,6 +26,7 @@ public sealed record ModelConnectionDto(
     bool HasApiKey,
     bool Enabled,
     bool IsProcessor,
+    bool IsShadowProcessor,
     bool SupportsCustomTemperature,
     bool SupportsToolCalling,
     DateTimeOffset UpdatedAtUtc);
@@ -39,6 +40,7 @@ public sealed record ModelConnectionUpsertRequest(
     string? ApiKey,
     bool Enabled,
     bool IsProcessor = false,
+    bool IsShadowProcessor = false,
     bool SupportsCustomTemperature = true,
     bool SupportsToolCalling = true);
 
@@ -46,6 +48,18 @@ public sealed record ModelConnectionTestResponse(
     bool Success,
     string Message,
     double LatencyMs);
+
+/// <summary>
+/// Lightweight availability status for a local model endpoint (Foundry Local / Ollama).
+/// Unlike the full test (which fires a chat completion), the status check just probes
+/// <c>GET /v1/models</c> and verifies the model name appears in the response.
+/// </summary>
+public sealed record ModelStatusDto(
+    /// <summary>"healthy" | "unreachable" | "model-not-found" | "unavailable"</summary>
+    string Status,
+    bool IsEndpointReachable,
+    bool IsModelAvailable,
+    string Details);
 
 // ── Condition-based routing rules ────────────────────────────────────────────
 
@@ -199,7 +213,11 @@ public sealed record RoutedRequestView(
     long? TokensIn = null,
     long? TokensOut = null,
     long? TokensTotal = null,
-    string? ResponseModel = null);
+    string? ResponseModel = null,
+    // Shadow processor A/B fields
+    string? ShadowIntent = null,
+    string? ShadowProcessorModel = null,
+    bool? ShadowAgreement = null);
 
 public sealed record RoutingFeedResponse(
     DateTimeOffset GeneratedAtUtc,
@@ -399,3 +417,37 @@ public sealed record AdminRuleConfidenceDto(
     DateTimeOffset LastEvaluatedAtUtc);
 
 public sealed record RulesConfidenceResponse(IReadOnlyList<AdminRuleConfidenceDto> Items);
+
+// ── A/B Classifier comparison ──────────────────────────────────────────────
+
+public sealed record AbIntentPairDto(
+    string PrimaryIntent,
+    string ShadowIntent,
+    int Count,
+    bool Agrees);
+
+public sealed record AbClassifierSummaryResponse(
+    int TotalTracesInWindow,
+    int TracesWithShadow,
+    int AgreementCount,
+    int DisagreementCount,
+    double? AgreementRate,
+    IReadOnlyList<AbIntentPairDto> IntentBreakdown);
+
+// ── Foundry Local SDK catalog ──────────────────────────────────────────────
+
+public sealed record FoundryLocalSdkStatusDto(
+    bool IsInitialized,
+    string? WebServiceUrl,
+    string? InitError);
+
+public sealed record FoundryCatalogModelDto(
+    string Alias,
+    string DisplayName,
+    string? Description,
+    string ModelId,
+    bool IsCached,
+    bool IsLoaded,
+    float? DownloadProgress);
+
+public sealed record FoundryLocalDownloadRequest(string Alias);

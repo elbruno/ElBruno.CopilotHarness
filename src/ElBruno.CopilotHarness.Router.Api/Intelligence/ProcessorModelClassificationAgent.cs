@@ -93,6 +93,13 @@ public sealed class ProcessorModelClassificationAgent(
         var previewChars = _options.PreviewChars <= 0 ? 200 : _options.PreviewChars;
         var preview = promptText.Length > previewChars ? promptText[..previewChars] : promptText;
 
+        // Start shadow classification in parallel if a shadow processor is configured.
+        Task<ClassificationResult?> shadowTask = Task.FromResult<ClassificationResult?>(null);
+        if (TryResolveShadowProcessorModel(routingOptions, out var shadowProcessorName, out var shadowProcessor))
+        {
+            shadowTask = ClassifyWithModelAsync(shadowProcessorName, shadowProcessor, preview, cancellationToken);
+        }
+
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -114,10 +121,12 @@ public sealed class ProcessorModelClassificationAgent(
             var content = await response.Content.ReadAsStringAsync(timeoutCts.Token);
             if (TryParseClassification(content, out var intent, out var complexity, out var confidence, out var reasoning))
             {
+                var shadowResult = await shadowTask.ConfigureAwait(false);
                 return new ClassificationResult(intent, complexity, confidence, reasoning)
                 {
                     Source = "processor-model",
-                    ProcessorModel = processorName
+                    ProcessorModel = processorName,
+                    ShadowResult = shadowResult
                 };
             }
 
@@ -138,6 +147,47 @@ public sealed class ProcessorModelClassificationAgent(
         }
     }
 
+    private async Task<ClassificationResult?> ClassifyWithModelAsync(
+        string modelName,
+        ModelProfileOptions model,
+        string preview,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_options.TimeoutMs <= 0 ? 4000 : _options.TimeoutMs);
+
+            var payload = BuildClassificationPayload(model.Deployment, preview, model.SupportsCustomTemperature);
+            var provider = providerFactory.GetProvider(model);
+
+            using var response = await provider.SendChatCompletionsAsync(payload, model, stream: false, timeoutCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogDebug(
+                    "Shadow processor '{Model}' returned {Status}; shadow result discarded.",
+                    modelName, (int)response.StatusCode);
+                return null;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            if (TryParseClassification(content, out var intent, out var complexity, out var confidence, out var reasoning))
+            {
+                return new ClassificationResult(intent, complexity, confidence, reasoning)
+                {
+                    Source = "processor-model",
+                    ProcessorModel = modelName
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Shadow processor '{Model}' classification failed; shadow result discarded.", modelName);
+        }
+
+        return null;
+    }
+
     private static bool TryResolveProcessorModel(
         RoutingOptions routingOptions,
         out string processorName,
@@ -155,6 +205,26 @@ public sealed class ProcessorModelClassificationAgent(
 
         processorName = string.Empty;
         processor = null!;
+        return false;
+    }
+
+    private static bool TryResolveShadowProcessorModel(
+        RoutingOptions routingOptions,
+        out string shadowProcessorName,
+        out ModelProfileOptions shadowProcessor)
+    {
+        foreach (var entry in routingOptions.Profiles)
+        {
+            if (entry.Value is { IsShadowProcessor: true, Enabled: true })
+            {
+                shadowProcessorName = entry.Key;
+                shadowProcessor = entry.Value;
+                return true;
+            }
+        }
+
+        shadowProcessorName = string.Empty;
+        shadowProcessor = null!;
         return false;
     }
 

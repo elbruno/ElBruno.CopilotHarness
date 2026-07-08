@@ -220,10 +220,39 @@
     color: #166534;
 }
 
+.provider-badge-foundrylocalsdk {
+    background: #f3e8ff;
+    border-color: #7c3aed;
+    color: #4c1d95;
+}
+
 .provider-badge-azureopenai {
     background: #fff8e1;
     border-color: #f0a500;
     color: #7d4700;
+}
+
+.shadow-badge {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 0.03rem 0.45rem;
+    border: 1px solid transparent;
+    cursor: help;
+}
+
+.shadow-agree {
+    background: #f0fdf4;
+    border-color: #2ea44f;
+    color: #166534;
+}
+
+.shadow-disagree {
+    background: #fdf2f2;
+    border-color: #cf222e;
+    color: #86181d;
 }
 
 .stage-context {

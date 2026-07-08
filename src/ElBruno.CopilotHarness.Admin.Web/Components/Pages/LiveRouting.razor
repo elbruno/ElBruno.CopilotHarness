@@ -204,9 +204,10 @@ else
                                 · @request.ClassificationConfidence.ToString("0.00")
                                 @if (!string.IsNullOrWhiteSpace(request.ProcessorModelType))
                                 {
-                                    <span class="provider-badge provider-badge-@request.ProcessorModelType.ToLowerInvariant()" title="Processor model provider type">
+                                    <span class="provider-badge provider-badge-@request.ProcessorModelType.ToLowerInvariant().Replace("-", "")" title="Processor model provider type">
                                         @(request.ProcessorModelType switch {
                                             "FoundryLocal" => "Foundry Local",
+                                            "FoundryLocalSdk" => "Foundry Local SDK",
                                             "Ollama" => "Ollama",
                                             "AzureOpenAI" => "Azure",
                                             _ => request.ProcessorModelType
@@ -218,6 +219,14 @@ else
                             {
                                 <span class="intent-hint" title="Secondary heuristic guess about the request — NOT the rule that was chosen.">
                                     @(request.ClassifierSource == "processor-model" ? "intent (guess): " : "intent: ")@request.ClassificationIntent
+                                </span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(request.ShadowIntent))
+                            {
+                                var agree = request.ShadowAgreement ?? false;
+                                <span class="shadow-badge @(agree ? "shadow-agree" : "shadow-disagree")"
+                                      title="Shadow processor (@request.ShadowProcessorModel) classified: @request.ShadowIntent">
+                                    🔬 @(agree ? "✓" : "✗") shadow: @request.ShadowIntent
                                 </span>
                             }
                         </div>

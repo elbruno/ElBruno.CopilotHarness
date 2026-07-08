@@ -44,11 +44,12 @@ else
                     <th>Type</th>
                     <th>Endpoint</th>
                     <th>Model / Deployment</th>
+                    <th>Status</th>
                     <th>API key</th>
+                    <th>Enabled</th>
                     <th>Processor</th>
                     <th>Custom temp</th>
                     <th>Tools</th>
-                    <th>Enabled</th>
                     <th></th>
                 </tr>
             </thead>
@@ -61,7 +62,26 @@ else
                         <td class="muted">@(string.IsNullOrWhiteSpace(model.Endpoint) ? "(shared Foundry)" : model.Endpoint)</td>
                         <td>@model.ModelName</td>
                         <td>
-                            @if (model.Type == "ollama" || model.Type == "foundry-local")
+                            @if (model.Type is "ollama" or "foundry-local" or "foundry-local-sdk")
+                            {
+                                @if (_modelStatuses.TryGetValue(model.Id, out var st))
+                                {
+                                    <span class="status-pill @StatusCss(st.Status)" title="@st.Details">
+                                        @StatusEmoji(st.Status) @StatusLabel(st.Status)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="muted status-pill">checking…</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (model.Type == "ollama" || model.Type is "foundry-local" or "foundry-local-sdk")
                             {
                                 <span class="muted">n/a</span>
                             }
@@ -81,6 +101,10 @@ else
                             @if (model.IsProcessor)
                             {
                                 <span class="status-pill status-good" title="Classifier model that reads the first chars of each prompt">🧠 processor</span>
+                            }
+                            else if (model.IsShadowProcessor)
+                            {
+                                <span class="status-pill status-neutral" title="Runs in parallel with primary processor for A/B comparison — does not influence routing">🔬 shadow</span>
                             }
                             else
                             {
@@ -144,20 +168,21 @@ else
                         <InputSelect @bind-Value="_editor.Type">
                             <option value="azure-openai">Azure OpenAI / Foundry</option>
                             <option value="ollama">Ollama</option>
-                            <option value="foundry-local">Foundry Local</option>
+                            <option value="foundry-local">Foundry Local (HTTP)</option>
+                            <option value="foundry-local-sdk">Foundry Local SDK (auto-endpoint)</option>
                         </InputSelect>
                     </label>
                     <label class="span-2">
                         Endpoint
                         <InputText @bind-Value="_editor.Endpoint"
-                                   placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : _editor.Type == "foundry-local" ? "http://localhost:5101" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
+                                   placeholder="@(_editor.Type == "ollama" ? "http://localhost:11434" : _editor.Type == "foundry-local" ? "http://localhost:5101" : _editor.Type == "foundry-local-sdk" ? "(auto-discovered from Foundry Local SDK)" : "https://my-resource.openai.azure.com (blank = shared Foundry)")" />
                     </label>
                     <label>
-                        @(_editor.Type == "ollama" || _editor.Type == "foundry-local" ? "Model name" : "Deployment name")
+                        @(_editor.Type is "ollama" or "foundry-local" or "foundry-local-sdk" ? "Model name" : "Deployment name")
                         <InputText @bind-Value="_editor.ModelName"
-                                   placeholder="@(_editor.Type == "ollama" ? "llama3.1:8b" : _editor.Type == "foundry-local" ? "phi-4-mini" : "gpt-5-mini")" />
+                                   placeholder="@(_editor.Type == "ollama" ? "llama3.1:8b" : _editor.Type is "foundry-local" or "foundry-local-sdk" ? "phi-4-mini" : "gpt-5-mini")" />
                     </label>
-                    @if (_editor.Type != "ollama" && _editor.Type != "foundry-local")
+                    @if (_editor.Type is not ("ollama" or "foundry-local" or "foundry-local-sdk"))
                     {
                         <label>
                             API version
@@ -175,6 +200,10 @@ else
                     <label class="checkbox span-2">
                         <InputCheckbox @bind-Value="_editor.IsProcessor" /> Processor model (classifier)
                         <span class="field-hint">— reads the first chars of each prompt to decide intent. Only one model can be the processor.</span>
+                    </label>
+                    <label class="checkbox span-2">
+                        <InputCheckbox @bind-Value="_editor.IsShadowProcessor" /> Shadow processor (A/B evaluation)
+                        <span class="field-hint">— runs in parallel with the primary processor and records its classification for comparison. Never influences routing. Only one model can be the shadow processor.</span>
                     </label>
                     <label class="checkbox span-2">
                         <InputCheckbox @bind-Value="_editor.SupportsCustomTemperature" /> Supports custom temperature
@@ -212,6 +241,9 @@ else
     private string _editorName = string.Empty;
     private string? _confirmDeleteId;
 
+    // Live availability status for local models (loaded in background after page renders).
+    private Dictionary<string, ModelStatusDto> _modelStatuses = new();
+
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
@@ -220,7 +252,53 @@ else
         _models = (await Api.GetModelsAsync()).ToList();
         _defaultModel = (await Api.GetDefaultModelAsync()).ModelName;
         _loading = false;
+        // Trigger status checks in background after the page renders.
+        _ = LoadStatusesAsync();
     }
+
+    private async Task LoadStatusesAsync()
+    {
+        var localModels = _models.Where(m => m.Type is "ollama" or "foundry-local" or "foundry-local-sdk").ToList();
+        if (localModels.Count == 0) return;
+
+        var tasks = localModels.Select(async m =>
+        {
+            var status = await Api.GetModelStatusAsync(m.Id);
+            if (status is not null)
+            {
+                lock (_modelStatuses)
+                {
+                    _modelStatuses[m.Id] = status;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+        await Task.WhenAll(tasks);
+    }
+
+    private static string StatusCss(string status) => status switch
+    {
+        "healthy" => "status-good",
+        "unreachable" => "status-bad",
+        "model-not-found" => "status-warn",
+        _ => "status-neutral"
+    };
+
+    private static string StatusEmoji(string status) => status switch
+    {
+        "healthy" => "✅",
+        "unreachable" => "❌",
+        "model-not-found" => "📥",
+        _ => "—"
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "healthy" => "Running",
+        "unreachable" => "Not running",
+        "model-not-found" => "Not downloaded",
+        _ => status
+    };
 
     private void StartCreate()
     {
@@ -247,6 +325,7 @@ else
             ApiKey = null,
             Enabled = model.Enabled,
             IsProcessor = model.IsProcessor,
+            IsShadowProcessor = model.IsShadowProcessor,
             SupportsCustomTemperature = model.SupportsCustomTemperature,
             SupportsToolCalling = model.SupportsToolCalling
         };
@@ -272,6 +351,7 @@ else
                 _editor.ApiKey,
                 _editor.Enabled,
                 _editor.IsProcessor,
+                _editor.IsShadowProcessor,
                 _editor.SupportsCustomTemperature,
                 _editor.SupportsToolCalling);
 
@@ -342,6 +422,7 @@ else
             "ollama" => "Ollama",
             "azure-openai" => "Azure OpenAI / Foundry",
             "foundry-local" => "Foundry Local",
+            "foundry-local-sdk" => "Foundry Local SDK",
             _ => type
         };
 
@@ -355,6 +436,7 @@ else
         public string? ApiKey { get; set; }
         public bool Enabled { get; set; } = true;
         public bool IsProcessor { get; set; }
+        public bool IsShadowProcessor { get; set; }
         public bool SupportsCustomTemperature { get; set; } = true;
         public bool SupportsToolCalling { get; set; } = true;
     }

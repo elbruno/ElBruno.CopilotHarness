@@ -35,6 +35,13 @@ public sealed class ModelConnectionEntity
     public bool IsProcessor { get; set; }
 
     /// <summary>
+    /// When true, this model acts as a shadow processor: it runs in parallel with the primary processor
+    /// and its classification result is recorded for A/B comparison, but does NOT influence routing.
+    /// At most one model should be the shadow processor. Used to evaluate alternative classifier models.
+    /// </summary>
+    public bool IsShadowProcessor { get; set; }
+
+    /// <summary>
     /// When false, the router strips non-default sampling parameters (e.g. <c>temperature</c>, <c>top_p</c>)
     /// before forwarding upstream. Required for models such as gpt-5 that only accept the default temperature.
     /// </summary>

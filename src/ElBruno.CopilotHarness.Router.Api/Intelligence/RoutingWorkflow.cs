@@ -67,6 +67,9 @@ public sealed record ClassificationResult(string Intent, string Complexity, doub
 
     /// <summary>Name of the processor model that classified the request, when an LLM call was used.</summary>
     public string? ProcessorModel { get; init; }
+
+    /// <summary>Shadow processor classification result (when a shadow processor is configured). Never influences routing.</summary>
+    public ClassificationResult? ShadowResult { get; init; }
 }
 
 public interface IRuleAdvisorAgent
@@ -681,6 +684,19 @@ public sealed class MicrosoftAgentFrameworkRoutingWorkflow(
             message.Facts.Add(new RoutingContextFact(
                 "classifier.confidence",
                 message.Classification.Confidence.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
+
+            // Shadow processor A/B facts (observer-only; never influence routing).
+            var shadow = message.Classification.ShadowResult;
+            if (shadow is not null)
+            {
+                message.Facts.Add(new RoutingContextFact("shadow.intent", shadow.Intent));
+                message.Facts.Add(new RoutingContextFact("shadow.processorModel", shadow.ProcessorModel ?? string.Empty));
+                message.Facts.Add(new RoutingContextFact("shadow.confidence",
+                    shadow.Confidence.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
+                var agree = string.Equals(message.Classification.Intent, shadow.Intent, StringComparison.OrdinalIgnoreCase);
+                message.Facts.Add(new RoutingContextFact("shadow.agreement", agree.ToString()));
+            }
+
             message.Steps.Add(new RoutingWorkflowStep(
                 "classification-agent",
                 $"{message.Classification.Intent} / {message.Classification.Complexity} ({message.Classification.Source})"));

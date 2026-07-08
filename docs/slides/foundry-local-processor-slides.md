@@ -107,23 +107,79 @@ Admin UI → Models → toggle `IsProcessor` — takes effect immediately.
 
 ---
 
-## Slide 9 — Results
+## Slide 8B — Phase B: Shadow A/B Evaluation
 
-- ✅ 199 tests pass (10 new)
-- ✅ phi-4-mini seeds as default processor
+Any model can be a "shadow processor" — runs in parallel, never affects routing.
+
+```
+User prompt
+    ↓
+[Primary processor] → rule match → cloud model
+[Shadow processor]  → parallel classification → stored for comparison
+                                ↑
+                    Live Routing: 🟢 agree / 🔴 disagree badge
+```
+
+`GET /admin/benchmarks/ab-classifier` → agreement stats per intent pair.
+
+---
+
+## Slide 8C — Phase C: SDK Service + Catalog
+
+`FoundryLocalSdkService` starts the Foundry Local embedded web server at startup.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /admin/foundry-local/status` | SDK initialized, URL, version |
+| `GET /admin/foundry-local/catalog` | Available + cached models |
+| `POST /admin/foundry-local/download` | Download model (fire and forget) |
+| `GET /admin/foundry-local/progress` | Download progress % |
+
+Admin.Web "Foundry Local" page: status badge, model table, progress bars, guidance card.
+
+---
+
+## Slide 8D — Phase D: Zero-Config SDK Provider
+
+New `ModelProviderType.FoundryLocalSdk = 3`:
+- No endpoint to configure — auto-discovered from SDK at runtime
+- `FoundryLocalSdkChatCompletionsProvider` delegates to the SDK's HTTP server
+- Purple badge in Live Routing
+- Seed: `phi-4-mini` via SDK (promote to processor via Admin UI)
+
+```
+User toggles model type to "foundry-local-sdk"
+→ No endpoint field needed
+→ Router discovers SDK port automatically
+→ Works on any machine where Foundry Local SDK is running
+```
+
+---
+
+## Slide 9 — Results (after Phases A/B/C/D)
+
+| Phase | Highlights |
+|---|---|
+| A — Model Status UI | Per-model health check endpoint + guided setup cards |
+| B — Shadow A/B Evaluation | Parallel shadow processor, agreement badge in Live Routing |
+| C — SDK Service + Catalog | Embedded SDK web server, catalog page, download progress |
+| D — Zero-Config SDK Provider | `FoundryLocalSdk` type: auto-discovers port, no endpoint config |
+
+- ✅ 220 tests pass (+21 since Plan B)
+- ✅ phi-4-mini seeds as default processor (Foundry Local HTTP)
+- ✅ phi-4-mini SDK variant seeds as zero-config option
 - ✅ Ollama support unchanged (opt-in)
-- ✅ Azure GPT as processor also works
-- ✅ Live Routing shows provider type badge
-- ✅ Health check added for Foundry Local endpoint
+- ✅ Azure GPT as processor still works
+- ✅ Live Routing: purple badge for Foundry Local SDK
 
 ---
 
 ## Slide 10 — Next Steps
 
-- [ ] Direct Foundry Local SDK integration (no proxy needed)
-- [ ] Multi-processor support (A/B evaluation)
-- [ ] Model download progress in Admin UI
-- [ ] Benchmark dashboard: Foundry Local vs Ollama accuracy
+- [ ] Set `seed-foundry-local-sdk-phi4mini` IsProcessor=true by default after user validation
+- [ ] Benchmark dashboard: Foundry Local SDK vs HTTP vs Ollama accuracy comparison
+- [ ] Multi-model A/B batch evaluation report in Admin UI
+- [ ] Phase 9 (see `docs/PRD.md`)
 
 ---
 

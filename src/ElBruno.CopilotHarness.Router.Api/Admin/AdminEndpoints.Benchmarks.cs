@@ -48,5 +48,53 @@ public static partial class AdminEndpoints
                 s.RecordedAtUtc)).ToList();
             return Results.Ok(new RulesConfidenceResponse(dtos));
         });
+
+        group.MapGet("/benchmarks/ab-classifier", (
+            IExecutionTraceStore traceStore,
+            int? limit) =>
+        {
+            var normalizedLimit = Math.Clamp(limit ?? 200, 1, 500);
+            var traces = traceStore.GetRecent(normalizedLimit);
+
+            var withShadow = traces
+                .Where(t => GetContextValue(t, "shadow.intent") is not null)
+                .ToList();
+
+            if (withShadow.Count == 0)
+            {
+                return Results.Ok(new AbClassifierSummaryResponse(
+                    TotalTracesInWindow: traces.Count,
+                    TracesWithShadow: 0,
+                    AgreementCount: 0,
+                    DisagreementCount: 0,
+                    AgreementRate: null,
+                    IntentBreakdown: []));
+            }
+
+            var agreed = withShadow.Count(t =>
+                string.Equals(GetContextValue(t, "shadow.agreement"), "true", StringComparison.OrdinalIgnoreCase));
+            var disagreed = withShadow.Count - agreed;
+            var agreementRate = withShadow.Count > 0 ? (double)agreed / withShadow.Count : 0;
+
+            var breakdown = withShadow
+                .GroupBy(t => $"{t.Classification.Intent}→{GetContextValue(t, "shadow.intent") ?? "?"}")
+                .Select(g => new AbIntentPairDto(
+                    PrimaryIntent: g.First().Classification.Intent,
+                    ShadowIntent: GetContextValue(g.First(), "shadow.intent") ?? "?",
+                    Count: g.Count(),
+                    Agrees: string.Equals(g.First().Classification.Intent,
+                        GetContextValue(g.First(), "shadow.intent"),
+                        StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(d => d.Count)
+                .ToList();
+
+            return Results.Ok(new AbClassifierSummaryResponse(
+                TotalTracesInWindow: traces.Count,
+                TracesWithShadow: withShadow.Count,
+                AgreementCount: agreed,
+                DisagreementCount: disagreed,
+                AgreementRate: agreementRate,
+                IntentBreakdown: breakdown));
+        });
     }
 }

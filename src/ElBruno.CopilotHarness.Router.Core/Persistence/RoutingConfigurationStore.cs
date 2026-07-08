@@ -42,6 +42,7 @@ public sealed class RoutingConfigurationStore(
                 ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
                 Enabled = model.Enabled,
                 IsProcessor = model.IsProcessor,
+                IsShadowProcessor = model.IsShadowProcessor,
                 SupportsCustomTemperature = model.SupportsCustomTemperature,
                 SupportsToolCalling = model.SupportsToolCalling
             },
@@ -170,6 +171,7 @@ public sealed class RoutingConfigurationStore(
             ApiKey = apiKeyProtector.Unprotect(model.ApiKeyProtected),
             Enabled = model.Enabled,
             IsProcessor = model.IsProcessor,
+            IsShadowProcessor = model.IsShadowProcessor,
             SupportsCustomTemperature = model.SupportsCustomTemperature,
             SupportsToolCalling = model.SupportsToolCalling
         };
@@ -202,6 +204,7 @@ public sealed class RoutingConfigurationStore(
         entity.ApiVersion = string.IsNullOrWhiteSpace(request.ApiVersion) ? "2024-10-21" : request.ApiVersion.Trim();
         entity.Enabled = request.Enabled;
         entity.IsProcessor = request.IsProcessor;
+        entity.IsShadowProcessor = request.IsShadowProcessor;
         entity.SupportsCustomTemperature = request.SupportsCustomTemperature;
         entity.SupportsToolCalling = request.SupportsToolCalling;
         entity.UpdatedAtUtc = now;
@@ -227,6 +230,24 @@ public sealed class RoutingConfigurationStore(
                 foreach (var other in others)
                 {
                     other.IsProcessor = false;
+                    other.UpdatedAtUtc = now;
+                }
+
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        // Single shadow-processor invariant: at most one shadow processor.
+        if (entity.IsShadowProcessor)
+        {
+            var others = await dbContext.Models
+                .Where(model => model.Id != entity.Id && model.IsShadowProcessor)
+                .ToListAsync(cancellationToken);
+            if (others.Count > 0)
+            {
+                foreach (var other in others)
+                {
+                    other.IsShadowProcessor = false;
                     other.UpdatedAtUtc = now;
                 }
 
@@ -668,6 +689,7 @@ public sealed class RoutingConfigurationStore(
             !string.IsNullOrEmpty(model.ApiKeyProtected),
             model.Enabled,
             model.IsProcessor,
+            model.IsShadowProcessor,
             model.SupportsCustomTemperature,
             model.SupportsToolCalling,
             model.UpdatedAtUtc);

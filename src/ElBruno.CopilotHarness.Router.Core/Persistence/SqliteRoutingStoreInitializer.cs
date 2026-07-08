@@ -16,6 +16,7 @@ public sealed class SqliteRoutingStoreInitializer(
     private const string SeedFoundryLocalModelName = "foundry local phi-4-mini";
     private const string SeedFoundryLocalModelDeployment = "phi-4-mini";
     private const string SeedFoundryLocalModelEndpoint = "http://localhost:5101";
+    private const string SeedFoundryLocalSdkModelName = "foundry local sdk phi-4-mini";
 
     private static IEnumerable<(string Id, string Name, int ProviderType, string Endpoint, string ModelName, string ApiVersion, bool Enabled, bool IsProcessor, bool SupportsCustomTemperature, bool SupportsToolCalling)> SeedModels()
     {
@@ -46,6 +47,21 @@ public sealed class SqliteRoutingStoreInitializer(
             "2024-10-21",
             true,
             false,  // not processor by default; promote via Admin UI if Foundry Local is unavailable
+            true,   // supports custom temperature
+            true);  // tool-calling capable
+
+        // FoundryLocalSdk phi-4-mini — uses the Microsoft.AI.Foundry.Local SDK directly.
+        // No endpoint configuration needed: the SDK auto-starts and exposes its own web service.
+        // Use this as the processor when you want zero-config Foundry Local (no proxy required).
+        yield return (
+            "seed-foundry-local-sdk-phi4mini",
+            SeedFoundryLocalSdkModelName,
+            (int)ModelProviderType.FoundryLocalSdk,
+            string.Empty,              // endpoint is auto-discovered from the SDK at runtime
+            SeedFoundryLocalModelDeployment,
+            string.Empty,
+            true,
+            false,  // not processor by default; promote via Admin UI to replace the HTTP-based entry
             true,   // supports custom temperature
             true);  // tool-calling capable
 
@@ -113,6 +129,8 @@ public sealed class SqliteRoutingStoreInitializer(
         // default model (llama3.1:8b) is a capable tool-caller, so we no longer force Ollama rows to 0 on
         // upgrade — the tool-calling size guard reroutes oversized agentic payloads to the cloud regardless.
         await AddColumnIfMissingAsync("Models", "SupportsToolCalling", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
+        // Shadow processor: runs in parallel with the primary processor for A/B classifier comparison.
+        await AddColumnIfMissingAsync("Models", "IsShadowProcessor", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
 
         await dbContext.Database.ExecuteSqlRawAsync(
             """
