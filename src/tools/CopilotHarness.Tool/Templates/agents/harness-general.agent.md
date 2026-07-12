@@ -43,7 +43,7 @@ Sub-agents use **phi-4-mini locally** via the FoundryLocalProxy — free, offlin
 
 Sub-agents need FoundryLocalProxy running:
 ```bash
-cd src/proxies/FoundryLocalProxy && dotnet run
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy && dotnet run
 ```
 The proxy auto-downloads phi-4-mini on first run (~2.5 GB) then is cached.
 If the proxy is not running, tell the user and provide the command above.

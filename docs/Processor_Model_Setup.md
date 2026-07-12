@@ -39,9 +39,9 @@ any particular provider.
    ```
    foundry model run phi-4-mini
    ```
-3. Optionally run the FoundryLocalProxy (port 5101) from `samples/FoundryLocalProxy`:
+3. Optionally run the FoundryLocalProxy (port 5101) from `ElBruno.LLMProxies/src/proxies/FoundryLocalProxy`:
    ```
-   cd samples/FoundryLocalProxy
+   cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy
    dotnet run
    ```
 4. The harness seeds `foundry local phi-4-mini` as the default processor on a fresh database.

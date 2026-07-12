@@ -18,8 +18,6 @@ public sealed class HarnessDbContext(DbContextOptions<HarnessDbContext> options)
     public DbSet<ApprovalRequestEntity> ApprovalRequests => Set<ApprovalRequestEntity>();
     public DbSet<TeamProfileEntity> TeamProfiles => Set<TeamProfileEntity>();
     public DbSet<ProjectProfileEntity> ProjectProfiles => Set<ProjectProfileEntity>();
-    public DbSet<UsageTelemetryEventEntity> UsageTelemetryEvents => Set<UsageTelemetryEventEntity>();
-    public DbSet<UsagePricingCardEntity> UsagePricingCards => Set<UsagePricingCardEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -139,36 +137,5 @@ public sealed class HarnessDbContext(DbContextOptions<HarnessDbContext> options)
         project.Property(e => e.DisplayName).HasMaxLength(128);
         project.Property(e => e.DefaultProfile).HasMaxLength(64);
         project.HasIndex(e => e.TeamId);
-
-        var usageEvents = modelBuilder.Entity<UsageTelemetryEventEntity>();
-        usageEvents.ToTable("UsageTelemetryEvents");
-        usageEvents.HasKey(e => e.Id);
-        usageEvents.Property(e => e.Id).ValueGeneratedOnAdd();
-        usageEvents.Property(e => e.IdempotencyKey).HasMaxLength(128);
-        usageEvents.Property(e => e.Proxy).HasMaxLength(64);
-        usageEvents.Property(e => e.Provider).HasMaxLength(64);
-        usageEvents.Property(e => e.RequestModel).HasMaxLength(128);
-        usageEvents.Property(e => e.ResponseModel).HasMaxLength(128);
-        usageEvents.Property(e => e.TraceId).HasMaxLength(64);
-        usageEvents.Property(e => e.SpanId).HasMaxLength(32);
-        usageEvents.Property(e => e.Operation).HasMaxLength(32);
-        usageEvents.HasIndex(e => e.IdempotencyKey).IsUnique();
-        usageEvents.HasIndex(e => e.OccurredAtUtc);
-        usageEvents.HasIndex(e => new { e.Proxy, e.Provider, e.OccurredAtUtc });
-
-        var usagePricing = modelBuilder.Entity<UsagePricingCardEntity>();
-        usagePricing.ToTable("UsagePricingCards");
-        usagePricing.HasKey(e => e.Id);
-        usagePricing.Property(e => e.Id).ValueGeneratedOnAdd();
-        usagePricing.Property(e => e.Provider).HasMaxLength(64);
-        usagePricing.Property(e => e.Model).HasMaxLength(128);
-        usagePricing.Property(e => e.Operation).HasMaxLength(32);
-        usagePricing.Property(e => e.SourceType).HasMaxLength(64);
-        usagePricing.Property(e => e.SourceReference).HasMaxLength(512);
-        usagePricing.Property(e => e.SourceMetadataJson).HasMaxLength(4096);
-        usagePricing.Property(e => e.UpdatedBy).HasMaxLength(128);
-        usagePricing.HasIndex(e => new { e.Provider, e.Model, e.Operation, e.EffectiveFromUtc, e.IsOverride })
-            .IsUnique();
-        usagePricing.HasIndex(e => new { e.Provider, e.Model, e.EffectiveFromUtc });
     }
 }

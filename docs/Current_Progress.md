@@ -1,6 +1,6 @@
 # Current Progress
 
-Last updated: 2026-07-11
+Last updated: 2026-07-01
 
 ## Status
 
@@ -9,8 +9,8 @@ Last updated: 2026-07-11
 - Phase 2: complete
 - Phase 3: complete
 - Phase 4: complete
-- Phase 5: analytics AppHost wiring complete
-- Phase 6: analytics hardening complete
+- Phase 5: core complete
+- Phase 6: backend foundations in place
 - Phase 7: VS Code Extension
 - Phase 8: complete (UI + backend plumbing)
 

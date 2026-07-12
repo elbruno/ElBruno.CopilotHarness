@@ -390,65 +390,6 @@ public sealed class SqliteRoutingStoreInitializer(
         await dbContext.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS IX_ProjectProfiles_TeamId ON ProjectProfiles (TeamId);",
             cancellationToken);
-
-        await dbContext.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TABLE IF NOT EXISTS UsageTelemetryEvents (
-                Id INTEGER NOT NULL CONSTRAINT PK_UsageTelemetryEvents PRIMARY KEY AUTOINCREMENT,
-                IdempotencyKey TEXT NOT NULL,
-                OccurredAtUtc TEXT NOT NULL,
-                IngestedAtUtc TEXT NOT NULL,
-                Proxy TEXT NOT NULL,
-                Provider TEXT NOT NULL,
-                RequestModel TEXT NOT NULL,
-                ResponseModel TEXT NULL,
-                TraceId TEXT NULL,
-                SpanId TEXT NULL,
-                Operation TEXT NOT NULL,
-                StatusCode INTEGER NULL,
-                Succeeded INTEGER NOT NULL DEFAULT 1,
-                InputTokens INTEGER NOT NULL DEFAULT 0,
-                OutputTokens INTEGER NOT NULL DEFAULT 0,
-                TotalTokens INTEGER NOT NULL DEFAULT 0
-            );
-            """,
-            cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "CREATE UNIQUE INDEX IF NOT EXISTS IX_UsageTelemetryEvents_IdempotencyKey ON UsageTelemetryEvents (IdempotencyKey);",
-            cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS IX_UsageTelemetryEvents_OccurredAtUtc ON UsageTelemetryEvents (OccurredAtUtc);",
-            cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS IX_UsageTelemetryEvents_Proxy_Provider_OccurredAtUtc ON UsageTelemetryEvents (Proxy, Provider, OccurredAtUtc);",
-            cancellationToken);
-
-        await dbContext.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TABLE IF NOT EXISTS UsagePricingCards (
-                Id INTEGER NOT NULL CONSTRAINT PK_UsagePricingCards PRIMARY KEY AUTOINCREMENT,
-                Provider TEXT NOT NULL,
-                Model TEXT NOT NULL,
-                Operation TEXT NOT NULL,
-                InputUsdPer1MToken REAL NOT NULL,
-                OutputUsdPer1MToken REAL NOT NULL,
-                EffectiveFromUtc TEXT NOT NULL,
-                EffectiveToUtc TEXT NULL,
-                SourceType TEXT NOT NULL,
-                SourceReference TEXT NOT NULL,
-                SourceMetadataJson TEXT NULL,
-                IsOverride INTEGER NOT NULL DEFAULT 0,
-                UpdatedBy TEXT NOT NULL,
-                UpdatedAtUtc TEXT NOT NULL
-            );
-            """,
-            cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "CREATE UNIQUE INDEX IF NOT EXISTS IX_UsagePricingCards_Provider_Model_Operation_EffectiveFromUtc_IsOverride ON UsagePricingCards (Provider, Model, Operation, EffectiveFromUtc, IsOverride);",
-            cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS IX_UsagePricingCards_Provider_Model_EffectiveFromUtc ON UsagePricingCards (Provider, Model, EffectiveFromUtc);",
-            cancellationToken);
     }
 
     private async Task<bool> AddColumnIfMissingAsync(string table, string column, string definition, CancellationToken cancellationToken)

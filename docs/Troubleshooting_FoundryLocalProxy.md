@@ -73,7 +73,7 @@ Use the actual BYOK model ID (`phi-4-mini`) for both utility settings.
 
 ### Cause A - Proxy not running
 ```
-cd src/proxies/FoundryLocalProxy && dotnet run
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy && dotnet run
 ```
 First run downloads phi-4-mini (~2.5 GB). Subsequent runs start in seconds (cached).
 
@@ -116,7 +116,7 @@ SDK downloads to %USERPROFILE%\.foundry\cache. Requires ~2.5 GB free and interne
 If download stalls:
 ```
 rd /s /q %USERPROFILE%\.foundry\cache
-cd src/proxies/FoundryLocalProxy && dotnet run
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy && dotnet run
 ```
 
 ---
@@ -137,4 +137,3 @@ Stop-Process -Id <PID> -Force
   There is no auto-fallback to the main model. Issue: github.com/microsoft/vscode/issues/324007
 - phi-4-mini supports single-turn tool calling; complex multi-turn agent reasoning
   works better with a cloud model.
-

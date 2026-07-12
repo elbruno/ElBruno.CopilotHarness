@@ -10,7 +10,7 @@
 
 ```bash
 # Terminal 1: Start Foundry Local proxy
-cd samples/FoundryLocalProxy
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy
 dotnet run
 
 # Terminal 2: Start harness

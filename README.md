@@ -9,6 +9,9 @@
 
 > **Intelligent BYOK harness for GitHub Copilot** — built with .NET 10, .NET Aspire, and Microsoft Agent Framework.
 
+> 📦 **Proxy scenarios migrated:** The proxy-focused stack now lives in the separate [`ElBruno.LLMProxies`](https://github.com/elbruno/ElBruno.LLMProxies) repository.
+> This repository remains focused on the Copilot Harness platform.
+
 Route every GitHub Copilot request through your own infrastructure. Choose which model handles each request, inspect every decision, benchmark quality over time, and enforce rules — all without touching your IDE.
 
 ![Admin — Live Routing (prompt → model → rule → explanation)](docs/images/admin-live-routing.png)
@@ -197,10 +200,10 @@ The **agents pattern** is a second way to use this repo. Instead of routing ever
 harness init   # copies .github/agents/ into your repo AND auto-writes chatLanguageModels.json
                # to your VS Code user config folder — no manual file placement needed
 
-# Step 2 — Start FoundryLocalProxy (serves phi-4-mini locally)
-cd src/proxies/FoundryLocalProxy && dotnet run
-# Easiest alternative: aspire start from src/proxies/
-cd proxies && aspire start
+# Step 2 — Start FoundryLocalProxy from ElBruno.LLMProxies (serves phi-4-mini locally)
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy && dotnet run
+# Easiest alternative: aspire start from C:\src\ElBruno.LLMProxies\src\proxies
+cd C:\src\ElBruno.LLMProxies\src\proxies && aspire start
 
 # Step 3 — Validate the full setup
 harness doctor

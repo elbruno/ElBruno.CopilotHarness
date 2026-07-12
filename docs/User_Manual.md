@@ -9,7 +9,6 @@ ElBruno.CopilotHarness is a BYOK harness for GitHub Copilot with:
 - Admin UI for routing, models, rules, and validation
 - Multi-client telemetry for VS Code, Copilot CLI, and Copilot App
 - Judge app for prompt replay, multi-model benchmarks, and evaluation reports
-- Separate usage analytics site for token totals and estimated USD (hosted in the proxies AppHost)
 - VS Code extension for routing explanations and dashboard links
 
 ## Install and run
@@ -168,8 +167,6 @@ See [Rules Engine](Rules_Engine.md) for full details.
 - Judge manual controls: `/manual`
 - Judge manual benchmark: `/judge/benchmarks/manual`
 - Judge reports: `/judge/benchmarks/runs` and `/judge/reports/{runId}`
-- Usage analytics site: `http://localhost:5103` when running `cd src/proxies && aspire start`; direct run of `src/harness/ElBruno.CopilotHarness.Analytics.Web` still works
-- Analytics health endpoint: `http://localhost:5103/health/analytics`
 - Phase 7 extension docs: `docs/Phase7_VSCode_Extension.md`
 
 ## What to look at first

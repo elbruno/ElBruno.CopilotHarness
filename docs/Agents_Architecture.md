@@ -56,7 +56,7 @@ model for those agents. `phi-4-mini` must be registered in VS Code settings (see
 
 ## FoundryLocalProxy — the local model backend
 
-The sub-agents use **phi-4-mini** via **FoundryLocalProxy** (`src/proxies/FoundryLocalProxy`).
+The sub-agents use **phi-4-mini** via **FoundryLocalProxy** in `ElBruno.LLMProxies` (`C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy`).
 
 ### How it works
 
@@ -90,7 +90,7 @@ The SDK ships everything it needs as NuGet dependencies.
 ### Starting the proxy
 
 ```bash
-cd src/proxies/FoundryLocalProxy
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy
 dotnet run
 ```
 
@@ -162,12 +162,12 @@ Then add the utility model reference to your **`settings.json`** (this setting s
 }
 ```
 
-A ready-to-use `chatLanguageModels.json` template is at `proxies/FoundryLocalProxy/chatLanguageModels.json`.
+A ready-to-use `chatLanguageModels.json` template is in `ElBruno.LLMProxies/src/proxies/FoundryLocalProxy`.
 
 ### Step 2 — Start the proxy
 
 ```bash
-cd src/proxies/FoundryLocalProxy && dotnet run
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy && dotnet run
 ```
 
 ### Step 3 — Use the agents
@@ -186,7 +186,7 @@ The general agent routes the first three to local sub-agents; the fourth it hand
 
 ## Adding more models
 
-Edit `src/proxies/FoundryLocalProxy/appsettings.json`:
+Edit `C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy\appsettings.json`:
 
 ```json
 {

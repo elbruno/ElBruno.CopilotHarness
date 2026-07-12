@@ -276,7 +276,7 @@ foundry model run phi-4-mini
 
 **Fix — option 2 (FoundryLocalProxy):**
 ```
-cd samples/FoundryLocalProxy
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy
 dotnet run
 ```
 
@@ -316,4 +316,3 @@ Common causes:
   is slow to load the first time.
 - phi-4-mini returned an off-schema response — this can happen on first load while the model
   warms up. Retry after a few seconds.
-

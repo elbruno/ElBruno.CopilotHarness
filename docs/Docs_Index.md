@@ -9,6 +9,7 @@
 | Doc | Description |
 |---|---|
 | [README](../README.md) | Project overview, fast start, and BYOK setup |
+| [ElBruno.LLMProxies](https://github.com/elbruno/ElBruno.LLMProxies) | Standalone proxy stack repository (FoundryProxy, FoundryLocalProxy, OllamaProxy, analytics) |
 | [Current Progress](Current_Progress.md) | Phase status at a glance — what's done, what's next |
 | [User Manual](User_Manual.md) | Full walkthrough: install, configure, and operate the harness |
 | [Architecture](Architecture.md) | System design, component boundaries, and data flow |
@@ -27,7 +28,6 @@
 | [Model Registry](Model_Registry.md) | Multi-provider LLM connections (Ollama, Azure OpenAI/Foundry), fields, API-key encryption, CRUD + test |
 | [Rules Engine](Rules_Engine.md) | Condition-based routing rules, priority/default, first-run wizard, and rule testing |
 | [Live Routing](Live_Routing.md) | Visual prompt → model → rule → explanation feed (dashboard + VS Code), opt-in prompt capture |
-| [Usage Analytics Web](Phase4_Usage_Analytics_Web.md) | Separate analytics site for token usage, pricing snapshots, and estimated USD |
 
 ---
 

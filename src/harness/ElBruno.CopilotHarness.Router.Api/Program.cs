@@ -63,10 +63,6 @@ builder.Services
     .Bind(builder.Configuration.GetSection(TelemetryOptions.SectionName));
 
 builder.Services
-    .AddOptions<UsageTelemetryAnalyticsOptions>()
-    .Bind(builder.Configuration.GetSection(UsageTelemetryAnalyticsOptions.SectionName));
-
-builder.Services
     .AddOptions<ClassifierOptions>()
     .Bind(builder.Configuration.GetSection(ClassifierOptions.SectionName));
 
@@ -157,10 +153,6 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddScoped<IRoutingConfigurationStore, RoutingConfigurationStore>();
-builder.Services.AddScoped<IUsageTelemetryStore, UsageTelemetryStore>();
-builder.Services.AddScoped<IUsagePricingCatalogStore, UsagePricingCatalogStore>();
-builder.Services.AddSingleton<IUsageCostEstimator, UsageCostEstimator>();
-builder.Services.AddScoped<IUsagePricingRefreshService, UsagePricingRefreshService>();
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<IApiKeyProtector, DataProtectionApiKeyProtector>();
 builder.Services.AddScoped<SqliteRoutingStoreInitializer>();
@@ -204,12 +196,6 @@ builder.Services.AddHttpClient<FoundryChatCompletionsClient>((serviceProvider, c
 builder.Services.AddHttpClient("model-provider", client =>
 {
     client.Timeout = TimeSpan.FromMinutes(5);
-});
-
-builder.Services.AddHttpClient("azure-retail-prices", client =>
-{
-    client.BaseAddress = new Uri("https://prices.azure.com");
-    client.Timeout = TimeSpan.FromMinutes(2);
 });
 
 builder.Services.AddSingleton<IChatCompletionsProvider, AzureFoundryChatCompletionsProvider>();

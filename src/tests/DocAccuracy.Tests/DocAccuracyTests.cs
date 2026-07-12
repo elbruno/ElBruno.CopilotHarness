@@ -106,23 +106,19 @@ public class DocAccuracyTests
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Test 4: proxies/README.md covers all test app pages
+    // Test 4: README points proxy setup to ElBruno.LLMProxies
     // ──────────────────────────────────────────────────────────────────────────
     [Fact]
-    public void ProxiesReadme_Covers_AllTestAppPages()
+    public void Readme_ProxySetup_PointsTo_ElBrunoLlmProxies()
     {
         var root = GetRepoRoot();
-        var readmePath = Path.Combine(root, "src", "proxies", "README.md");
+        var readmePath = Path.Combine(root, "README.md");
 
         Assert.True(File.Exists(readmePath), $"File not found: {readmePath}");
 
         var content = File.ReadAllText(readmePath);
-
-        var requiredPages = new[] { "/chat", "/compare", "/models", "/history", "/setup" };
-        var missing = requiredPages.Where(p => !content.Contains(p)).ToList();
-
-        Assert.True(missing.Count == 0,
-            $"proxies/README.md is missing coverage of these test app page(s): {string.Join(", ", missing)}");
+        Assert.True(content.Contains("ElBruno.LLMProxies"),
+            "README.md should point proxy setup instructions to ElBruno.LLMProxies.");
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -581,93 +577,49 @@ public class DocAccuracyTests
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Proxies.Common — shared library exists and is wired correctly
+    // Proxy split checks — proxies now live in ElBruno.LLMProxies
     // ──────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void ProxiesCommon_ProjectFile_Exists()
+    public void HarnessRepo_DoesNotContain_LocalProxiesFolder()
     {
         var root = GetRepoRoot();
-        var filePath = Path.Combine(root, "src", "proxies", "Proxies.Common", "Proxies.Common.csproj");
+        var proxiesDir = Path.Combine(root, "src", "proxies");
 
-        Assert.True(File.Exists(filePath),
-            $"Proxies.Common project file not found — was it deleted or moved? Expected: {filePath}");
+        Assert.False(Directory.Exists(proxiesDir),
+            $"src/proxies should not exist in ElBruno.CopilotHarness after extraction. Found: {proxiesDir}");
     }
 
     [Fact]
-    public void ProxiesCommon_CopilotMessageExtractor_Exists()
+    public void Readme_References_ElBrunoLlmProxies_Repository()
     {
         var root = GetRepoRoot();
-        var filePath = Path.Combine(root, "src", "proxies", "Proxies.Common", "CopilotMessageExtractor.cs");
+        var readmePath = Path.Combine(root, "README.md");
 
-        Assert.True(File.Exists(filePath),
-            $"CopilotMessageExtractor.cs not found in Proxies.Common. Expected: {filePath}");
+        Assert.True(File.Exists(readmePath), $"File not found: {readmePath}");
+
+        var content = File.ReadAllText(readmePath);
+        Assert.True(content.Contains("ElBruno.LLMProxies"),
+            "README.md should reference the external ElBruno.LLMProxies repository.");
     }
 
     [Fact]
-    public void ProxiesCommon_CopilotMessageExtractor_HasCorrectNamespace()
+    public void AgentTemplates_Reference_ExternalFoundryLocalProxyPath()
     {
         var root = GetRepoRoot();
-        var filePath = Path.Combine(root, "src", "proxies", "Proxies.Common", "CopilotMessageExtractor.cs");
+        var agentTemplatePath = Path.Combine(root, "src", "tools", "CopilotHarness.Tool", "Templates", "agents", "harness-general.agent.md");
+        var repoAgentPath = Path.Combine(root, ".github", "agents", "harness-general.agent.md");
 
-        Assert.True(File.Exists(filePath), $"File not found: {filePath}");
+        Assert.True(File.Exists(agentTemplatePath), $"File not found: {agentTemplatePath}");
+        Assert.True(File.Exists(repoAgentPath), $"File not found: {repoAgentPath}");
 
-        var content = File.ReadAllText(filePath);
-        Assert.True(content.Contains("namespace Proxies.Common"),
-            $"CopilotMessageExtractor.cs should declare 'namespace Proxies.Common'. File: {filePath}");
-    }
+        var templateContent = File.ReadAllText(agentTemplatePath);
+        var repoAgentContent = File.ReadAllText(repoAgentPath);
 
-    [Fact]
-    public void DuplicateCopilotMessageExtractor_DoesNotExist_InProxyProjects()
-    {
-        var root = GetRepoRoot();
-        var proxyDirs = new[]
-        {
-            Path.Combine(root, "src", "proxies", "OllamaProxy"),
-            Path.Combine(root, "src", "proxies", "FoundryProxy"),
-            Path.Combine(root, "src", "proxies", "FoundryLocalProxy"),
-        };
-
-        var violations = proxyDirs
-            .Select(dir => Path.Combine(dir, "CopilotMessageExtractor.cs"))
-            .Where(File.Exists)
-            .ToList();
-
-        Assert.True(violations.Count == 0,
-            $"CopilotMessageExtractor.cs should only exist in Proxies.Common, but was found in:\n{string.Join("\n", violations)}");
-    }
-
-    [Fact]
-    public void AllThreeProxyCsproj_Reference_ProxiesCommon()
-    {
-        var root = GetRepoRoot();
-        var proxyProjects = new[]
-        {
-            Path.Combine(root, "src", "proxies", "OllamaProxy",       "OllamaProxy.csproj"),
-            Path.Combine(root, "src", "proxies", "FoundryProxy",      "FoundryProxy.csproj"),
-            Path.Combine(root, "src", "proxies", "FoundryLocalProxy", "FoundryLocalProxy.csproj"),
-        };
-
-        var missing = proxyProjects
-            .Where(p => !File.ReadAllText(p).Contains("Proxies.Common"))
-            .Select(Path.GetFileName)
-            .ToList();
-
-        Assert.True(missing.Count == 0,
-            $"These proxy .csproj files do not reference Proxies.Common:\n{string.Join("\n", missing)}");
-    }
-
-    [Fact]
-    public void ProxiesSolution_Includes_ProxiesCommon()
-    {
-        var root = GetRepoRoot();
-        var slnx = Path.Combine(root, "src", "proxies", "Proxies.slnx");
-
-        Assert.True(File.Exists(slnx), $"Proxies.slnx not found: {slnx}");
-
-        var content = File.ReadAllText(slnx);
-        Assert.True(content.Contains("Proxies.Common"),
-            $"Proxies.slnx should include Proxies.Common project but does not. File: {slnx}");
+        Assert.True(templateContent.Contains(@"C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy"),
+            "Agent template should point to FoundryLocalProxy in ElBruno.LLMProxies.");
+        Assert.True(repoAgentContent.Contains(@"C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy"),
+            "Repo agent file should point to FoundryLocalProxy in ElBruno.LLMProxies.");
     }
 
     [Fact]

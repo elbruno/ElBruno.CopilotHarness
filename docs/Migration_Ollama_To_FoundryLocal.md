@@ -27,7 +27,7 @@ Pull phi-4-mini and start it (or use FoundryLocalProxy):
 foundry model run phi-4-mini
 
 # OR via FoundryLocalProxy (keeps it running at http://localhost:5101)
-cd samples/FoundryLocalProxy && dotnet run
+cd C:\src\ElBruno.LLMProxies\src\proxies\FoundryLocalProxy && dotnet run
 ```
 
 Confirm it's reachable:
