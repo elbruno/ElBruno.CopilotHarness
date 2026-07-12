@@ -29,6 +29,12 @@ user's typed text inside a `<userRequest>` tag surrounded by `<attachments>`, `<
 and `<reminderInstructions>` blocks. Without extraction, logging and routing see ~3 KB
 of boilerplate instead of the actual ask.
 
+`Proxies.Common` also provides a shared GenAI telemetry contract/parser
+(`GenAiUsageRecord`, `GenAiUsageTelemetry`) used by all three proxies to:
+- force `stream_options.include_usage=true` on streaming requests, and
+- parse usage blocks from streaming/non-streaming OpenAI-compatible responses
+  so `LlmActivity` spans include `gen_ai.usage.*` tags.
+
 ---
 
 ## Proxies
@@ -74,6 +80,7 @@ What Aspire starts:
 | `foundry-proxy` | http://localhost:5100 | FoundryProxy |
 | `foundry-local-proxy` | http://localhost:5101 | FoundryLocalProxy |
 | `proxies-test-app` | http://localhost:5102 | Blazor test UI (see below) |
+| `analytics-web` | http://localhost:5103 | Usage analytics site for token totals and estimated USD |
 | Aspire dashboard | printed in console | Logs, health, traces for all services |
 
 To stop everything:
@@ -111,6 +118,10 @@ browser. It starts automatically with `aspire start`.
 > **FoundryLocalProxy model management:** if a model is not yet loaded, chat requests return a clear error
 > indicating the model is unavailable. Use the **Models** page to download and load the model before chatting.
 > Unloading a model frees GPU/RAM immediately; deleting it removes the cached weights from disk entirely.
+
+`Analytics.Web/` is the separate usage telemetry dashboard. It starts with the same
+`aspire start` command, listens on `http://localhost:5103`, and reads the Router.Api
+usage endpoints from `http://localhost:5117` by default.
 
 To run the test app on its own (while the proxies are already running):
 

@@ -3,6 +3,7 @@ using System;
 using ElBruno.CopilotHarness.Router.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ElBruno.CopilotHarness.Router.Core.Persistence.Migrations
 {
     [DbContext(typeof(HarnessDbContext))]
-    partial class HarnessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260711185323_AddUsageTelemetryAnalytics")]
+    partial class AddUsageTelemetryAnalytics
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -572,74 +575,6 @@ namespace ElBruno.CopilotHarness.Router.Core.Persistence.Migrations
                     b.HasKey("TeamId");
 
                     b.ToTable("TeamProfiles", (string)null);
-                });
-
-            modelBuilder.Entity("ElBruno.CopilotHarness.Router.Core.Persistence.UsagePricingCardEntity", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTimeOffset>("EffectiveFromUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("EffectiveToUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<double>("InputUsdPer1MToken")
-                        .HasColumnType("REAL");
-
-                    b.Property<bool>("IsOverride")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Model")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Operation")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<double>("OutputUsdPer1MToken")
-                        .HasColumnType("REAL");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SourceMetadataJson")
-                        .HasMaxLength(4096)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SourceReference")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SourceType")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Provider", "Model", "EffectiveFromUtc");
-
-                    b.HasIndex("Provider", "Model", "Operation", "EffectiveFromUtc", "IsOverride")
-                        .IsUnique();
-
-                    b.ToTable("UsagePricingCards", (string)null);
                 });
 
             modelBuilder.Entity("ElBruno.CopilotHarness.Router.Core.Persistence.UsageTelemetryEventEntity", b =>

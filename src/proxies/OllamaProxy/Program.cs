@@ -314,8 +314,14 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
                 Console.WriteLine($"[model rewrite] '{requestedModel}' → '{defaultModel}'");
 
                 jsonBody["model"] = defaultModel;
-                bodyText = jsonBody.ToJsonString(); // forward the modified body
             }
+
+            if (isStreaming)
+            {
+                GenAiUsageTelemetry.EnsureStreamUsageRequested(jsonBody);
+            }
+
+            bodyText = jsonBody.ToJsonString();
         }
     }
     catch (JsonException)
@@ -382,28 +388,44 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     //  Non-streaming path: read the full body and return it as JSON.
     // ------------------------------------------------------------------
     response.StatusCode = (int)ollamaResponse.StatusCode;
+    GenAiUsageRecord? usage = null;
 
     if (isStreaming)
     {
-        // Streaming: set SSE content-type and pipe bytes straight through.
-        // DO NOT buffer — that would defeat the purpose of streaming.
+        // Streaming: set SSE content-type and relay line-by-line so we can
+        // capture the final usage chunk emitted with stream_options.include_usage.
         response.ContentType = "text/event-stream; charset=utf-8";
         response.Headers["Cache-Control"] = "no-cache";
         response.Headers["X-Accel-Buffering"] = "no"; // tell nginx not to buffer either
 
         await using var ollamaStream = await ollamaResponse.Content.ReadAsStreamAsync();
-        await ollamaStream.CopyToAsync(response.Body);
+        using var reader = new StreamReader(ollamaStream);
+        var ct = request.HttpContext.RequestAborted;
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct).ConfigureAwait(false)) is not null)
+        {
+            usage ??= GenAiUsageTelemetry.TryExtractUsageFromSseDataLine(line);
+            await response.Body.WriteAsync(System.Text.Encoding.UTF8.GetBytes(line + "\n"), ct);
+            await response.Body.FlushAsync(ct);
+        }
     }
     else
     {
         // Non-streaming: return the full JSON response.
         response.ContentType = "application/json; charset=utf-8";
         var json = await ollamaResponse.Content.ReadAsStringAsync();
+        usage = GenAiUsageTelemetry.ExtractNonStreamingUsage(json);
         await response.WriteAsync(json);
     }
 
     llmSw.Stop();
-    LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds);
+    LlmActivity.SetResult(
+        llmSpan,
+        llmSw.ElapsedMilliseconds,
+        inputTokens: usage?.InputTokens,
+        outputTokens: usage?.OutputTokens,
+        totalTokens: usage?.TotalTokens,
+        responseModel: usage?.ResponseModel);
 });
 
 // ---------------------------------------------------------------------------

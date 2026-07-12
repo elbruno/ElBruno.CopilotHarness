@@ -25,6 +25,7 @@ public static partial class AdminEndpoints
         MapPlaygroundEndpoints(group);
         MapSystemEndpoints(group);
         MapTelemetryEndpoints(group);
+        MapUsageTelemetryEndpoints(group);
         MapTraceEndpoints(group);
         MapDashboardEndpoints(group);
         MapProfileEndpoints(group);

@@ -218,6 +218,51 @@ Returns recent per-request telemetry from the in-memory trace store. Query: `?li
 
 Response: `{ snapshotUtc, requests: [{ traceId, createdAtUtc, endpoint, clientId, clientDisplayName, clientVersion?, profile, deployment, reason, classificationIntent, classificationComplexity }] }`.
 
+### Durable usage telemetry analytics — `/admin/telemetry/usage`
+
+Token-usage ingestion and persistence for proxy telemetry analytics (idempotent writes + retention hook) plus estimate-only pricing cards.
+
+| Method | Route | Description |
+|---|---|---|
+| `POST` | `/admin/telemetry/usage/events` | Ingest one usage event. Body: `{ idempotencyKey, occurredAtUtc, proxy, provider, requestModel, responseModel?, traceId?, spanId?, operation, statusCode?, succeeded, inputTokens?, outputTokens?, totalTokens? }`. Duplicate `idempotencyKey` rows are accepted but ignored (`duplicate=true`). |
+| `GET` | `/admin/telemetry/usage/summary` | Aggregate persisted usage by proxy/provider/model for a time window, including estimate-only USD where pricing cards exist. Query: `fromUtc`, `toUtc`, optional `proxy`, `provider`, `model`. |
+| `POST` | `/admin/telemetry/usage/retention/run` | Execute configured retention policy once and return deleted row count. |
+| `GET` | `/admin/telemetry/usage/pricing/cards` | List persisted pricing cards. Query: optional `provider`, `model`. |
+| `POST` | `/admin/telemetry/usage/pricing/cards/override` | Upsert audited manual override card. Body: `{ provider, model, operation, inputUsdPer1MToken, outputUsdPer1MToken, effectiveFromUtc, effectiveToUtc?, updatedBy, reason, sourceReference? }`. |
+| `POST` | `/admin/telemetry/usage/pricing/refresh/azure-retail` | Refresh pricing cards from Azure Retail Prices API now (weekly scheduling is out of scope in this phase). Body: `{ updatedBy, sourceReference? }`. |
+
+Summary response shape:
+
+``{ fromUtc, toUtc, eventCount, inputTokens, outputTokens, totalTokens, estimatedUsdTotal, hasEstimateGaps, estimateDisclaimer, rows: [{ proxy, provider, model, eventCount, inputTokens, outputTokens, totalTokens, estimateAvailable, estimatedUsd?, estimateUnavailableReason? }] }`.
+
+Pricing card response shape:
+
+`{ id, provider, model, operation, inputUsdPer1MToken, outputUsdPer1MToken, effectiveFromUtc, effectiveToUtc?, sourceType, sourceReference, sourceMetadataJson?, isOverride, updatedBy, updatedAtUtc }`.
+
+Cost caveats:
+
+- `estimatedUsd*` fields are planning estimates only and are **not billed cost**.
+- Only cloud Foundry/Azure OpenAI providers are eligible for USD estimation.
+- Local providers (`ollama`, `foundry_local`) remain token-only.
+- Unknown cloud rates remain token-only (`estimateAvailable=false`, `estimateUnavailableReason="rate-not-found"`).
+- Manual overrides are authoritative over API-refresh cards for overlapping effective windows.
+
+Retention policy options (router config):
+
+```json
+{
+  "Telemetry": {
+    "UsageAnalytics": {
+      "Retention": {
+        "Enabled": true,
+        "RetentionDays": 30,
+        "MaxRowsPerRun": 5000
+      }
+    }
+  }
+}
+```
+
 ### Phase 8 — Continuous Evaluation
 
 | Method | Route | Description |

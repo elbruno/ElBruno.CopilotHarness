@@ -3,6 +3,7 @@ using System;
 using ElBruno.CopilotHarness.Router.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ElBruno.CopilotHarness.Router.Core.Persistence.Migrations
 {
     [DbContext(typeof(HarnessDbContext))]
-    partial class HarnessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260711190039_AddUsagePricingCatalogAndEstimates")]
+    partial class AddUsagePricingCatalogAndEstimates
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");

@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/harness/">
+    <Project Path="src/harness/ElBruno.CopilotHarness.Analytics.Web/ElBruno.CopilotHarness.Analytics.Web.csproj" />
     <Project Path="src/harness/ElBruno.CopilotHarness.Admin.Web/ElBruno.CopilotHarness.Admin.Web.csproj" />
     <Project Path="src/harness/ElBruno.CopilotHarness.AppHost/ElBruno.CopilotHarness.AppHost.csproj" />
     <Project Path="src/harness/ElBruno.CopilotHarness.Evaluation.Worker/ElBruno.CopilotHarness.Evaluation.Worker.csproj" />
@@ -9,8 +10,10 @@
     <Project Path="src/harness/ElBruno.CopilotHarness.ServiceDefaults/ElBruno.CopilotHarness.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="src/tests/ElBruno.CopilotHarness.Analytics.Web.Tests/ElBruno.CopilotHarness.Analytics.Web.Tests.csproj" />
     <Project Path="src/tests/DocAccuracy.Tests/DocAccuracy.Tests.csproj" />
     <Project Path="src/tests/ElBruno.CopilotHarness.Judge.Web.Tests/ElBruno.CopilotHarness.Judge.Web.Tests.csproj" />
+    <Project Path="src/tests/ElBruno.CopilotHarness.Proxies.AppHost.Tests/ElBruno.CopilotHarness.Proxies.AppHost.Tests.csproj" />
     <Project Path="src/tests/ElBruno.CopilotHarness.Router.Api.Tests/ElBruno.CopilotHarness.Router.Api.Tests.csproj" />
     <Project Path="src/tests/Proxies.Common.Tests/Proxies.Common.Tests.csproj" />
   </Folder>

@@ -17,8 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\proxies\Proxies.Common\Proxies.Common.csproj" />
-    <ProjectReference Include="..\..\..\src\proxies\Proxies.ServiceDefaults\Proxies.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\src\proxies\AppHost\AppHost.csproj" />
   </ItemGroup>
 
 </Project>

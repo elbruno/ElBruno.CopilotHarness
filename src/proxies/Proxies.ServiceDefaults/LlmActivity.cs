@@ -62,6 +62,7 @@ public static class LlmActivity
     public static void SetResult(Activity? activity, long latencyMs,
         int?    inputTokens  = null,
         int?    outputTokens = null,
+        int?    totalTokens = null,
         string? responseModel = null,
         string? error = null)
     {
@@ -72,6 +73,8 @@ public static class LlmActivity
             activity.SetTag("gen_ai.usage.input_tokens",  inputTokens.Value);
         if (outputTokens.HasValue)
             activity.SetTag("gen_ai.usage.output_tokens", outputTokens.Value);
+        if (totalTokens.HasValue)
+            activity.SetTag("gen_ai.usage.total_tokens", totalTokens.Value);
         if (responseModel is not null)
             activity.SetTag("gen_ai.response.model", responseModel);
 

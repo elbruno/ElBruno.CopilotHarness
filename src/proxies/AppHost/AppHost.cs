@@ -19,6 +19,7 @@
 //    OllamaProxy       → http://localhost:5099
 //    FoundryProxy      → http://localhost:5100
 //    FoundryLocalProxy → http://localhost:5101
+//    Analytics.Web     → http://localhost:5103
 //
 //  PRE-REQUISITES
 //  --------------
@@ -74,6 +75,9 @@ var foundryProxy = builder.AddProject<Projects.FoundryProxy>("foundry-proxy")
 var foundryLocalProxy = builder.AddProject<Projects.FoundryLocalProxy>("foundry-local-proxy")
     .WithHttpEndpoint(port: 5101, name: "http");
 
+var telemetryApiBaseUrl = builder.Configuration["Parameters:TelemetryApiBaseUrl"] ?? "http://localhost:5117";
+var telemetryApiKey = builder.Configuration["Parameters:TelemetryApiApiKey"];
+
 // ---------------------------------------------------------------------------
 // ProxiesTestApp — Blazor Server UI for testing all three proxies
 //
@@ -92,5 +96,25 @@ builder.AddProject<Projects.ProxiesTestApp>("proxies-test-app")
     .WithEnvironment("ProxyUrls__FoundryLocal", foundryLocalProxy.GetEndpoint("http"))
     .WaitFor(ollamaProxy)
     .WaitFor(foundryLocalProxy);
+
+// ---------------------------------------------------------------------------
+// Analytics.Web — usage telemetry dashboard for the three proxy samples
+//
+//  Reads the Router.Api usage endpoints from the local harness on port 5117.
+//  If admin auth is enabled, provide Parameters:TelemetryApiApiKey in the
+//  proxies AppHost configuration and the value will be forwarded as a bearer
+//  token. The site also listens on a fixed port so it is easy to open directly.
+// ---------------------------------------------------------------------------
+var analyticsWeb = builder.AddProject<Projects.ElBruno_CopilotHarness_Analytics_Web>("analytics-web")
+    .WithHttpEndpoint(port: 5103, name: "http")
+    .WithEnvironment("TelemetryApi__BaseUrl", telemetryApiBaseUrl)
+    .WaitFor(ollamaProxy)
+    .WaitFor(foundryProxy)
+    .WaitFor(foundryLocalProxy);
+
+if (!string.IsNullOrWhiteSpace(telemetryApiKey))
+{
+    analyticsWeb.WithEnvironment("TelemetryApi__ApiKey", telemetryApiKey);
+}
 
 builder.Build().Run();

@@ -18,6 +18,7 @@
     <ProjectReference Include="..\FoundryProxy\FoundryProxy.csproj" />
     <ProjectReference Include="..\FoundryLocalProxy\FoundryLocalProxy.csproj" />
     <ProjectReference Include="..\ProxiesTestApp\ProxiesTestApp.csproj" />
+    <ProjectReference Include="..\..\harness\ElBruno.CopilotHarness.Analytics.Web\ElBruno.CopilotHarness.Analytics.Web.csproj" />
   </ItemGroup>
 
 </Project>

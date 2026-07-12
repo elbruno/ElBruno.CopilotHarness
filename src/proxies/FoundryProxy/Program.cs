@@ -512,6 +512,11 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
                 }
             }
 
+            if (isStreaming && GenAiUsageTelemetry.EnsureStreamUsageRequested(jsonBody))
+            {
+                bodyModified = true;
+            }
+
             if (bodyModified)
             {
                 bodyText = jsonBody.ToJsonString(); // forward the updated body
@@ -594,6 +599,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     //  Error paths: surface friendly hints for common Azure auth failures.
     // ------------------------------------------------------------------
     response.StatusCode = (int)foundryResponse.StatusCode;
+    GenAiUsageRecord? usage = null;
 
     // Friendly hint for auth/config errors — common on first run.
     if (foundryResponse.StatusCode is System.Net.HttpStatusCode.Unauthorized
@@ -613,24 +619,39 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     if (isStreaming)
     {
         // Streaming: set SSE content-type and pipe bytes straight through.
-        // DO NOT buffer — that would defeat the purpose of streaming.
+        // Relay line-by-line so we can parse the final usage chunk.
         response.ContentType = "text/event-stream; charset=utf-8";
         response.Headers["Cache-Control"]     = "no-cache";
         response.Headers["X-Accel-Buffering"] = "no"; // tell nginx not to buffer either
 
         await using var foundryStream = await foundryResponse.Content.ReadAsStreamAsync();
-        await foundryStream.CopyToAsync(response.Body);
+        using var reader = new StreamReader(foundryStream);
+        var ct = request.HttpContext.RequestAborted;
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct).ConfigureAwait(false)) is not null)
+        {
+            usage ??= GenAiUsageTelemetry.TryExtractUsageFromSseDataLine(line);
+            await response.Body.WriteAsync(System.Text.Encoding.UTF8.GetBytes(line + "\n"), ct);
+            await response.Body.FlushAsync(ct);
+        }
     }
     else
     {
         // Non-streaming: return the full JSON response.
         response.ContentType = "application/json; charset=utf-8";
         var json = await foundryResponse.Content.ReadAsStringAsync();
+        usage = GenAiUsageTelemetry.ExtractNonStreamingUsage(json);
         await response.WriteAsync(json);
     }
 
     llmSw.Stop();
-    LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds);
+    LlmActivity.SetResult(
+        llmSpan,
+        llmSw.ElapsedMilliseconds,
+        inputTokens: usage?.InputTokens,
+        outputTokens: usage?.OutputTokens,
+        totalTokens: usage?.TotalTokens,
+        responseModel: usage?.ResponseModel);
 });
 
 // ---------------------------------------------------------------------------

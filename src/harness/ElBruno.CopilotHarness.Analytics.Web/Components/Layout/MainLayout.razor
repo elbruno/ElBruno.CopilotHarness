@@ -1,0 +1,20 @@
+@inherits LayoutComponentBase
+
+<div class="layout-shell">
+    <aside class="sidebar">
+        <h2>Copilot Harness</h2>
+        <p class="sidebar-note">Usage analytics site for token counts and estimated USD.</p>
+        <nav class="nav-menu" aria-label="Analytics navigation">
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Usage Analytics</NavLink>
+        </nav>
+    </aside>
+    <main class="content">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

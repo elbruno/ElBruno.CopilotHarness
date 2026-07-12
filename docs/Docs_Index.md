@@ -27,6 +27,7 @@
 | [Model Registry](Model_Registry.md) | Multi-provider LLM connections (Ollama, Azure OpenAI/Foundry), fields, API-key encryption, CRUD + test |
 | [Rules Engine](Rules_Engine.md) | Condition-based routing rules, priority/default, first-run wizard, and rule testing |
 | [Live Routing](Live_Routing.md) | Visual prompt → model → rule → explanation feed (dashboard + VS Code), opt-in prompt capture |
+| [Usage Analytics Web](Phase4_Usage_Analytics_Web.md) | Separate analytics site for token usage, pricing snapshots, and estimated USD |
 
 ---
 
@@ -50,4 +51,3 @@
 |---|---|
 | [PRD](PRD.md) | Product Requirements Document — goals, phases, and success criteria |
 | [Copilot Implementation Prompt](Copilot_Implementation_Prompt.md) | Authoritative phase-by-phase implementation workflow for AI assistants |
-

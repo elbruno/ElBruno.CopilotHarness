@@ -671,6 +671,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
 
             isStreaming    = jsonBody["stream"]?.GetValue<bool>() ?? false;
             requestedModel = jsonBody["model"]?.GetValue<string>() ?? defaultModel;
+            var bodyModified = false;
 
             // Resolve alias → canonical SDK id for the SDK's internal server.
             // The internal server only understands canonical ids.
@@ -691,7 +692,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             {
                 reqLogger.LogDebug("[model] alias '{Alias}' → canonical '{Canonical}'", requestedModel, canonicalId);
                 jsonBody["model"] = canonicalId;
-                bodyText = jsonBody.ToJsonString();
+                bodyModified = true;
             }
             else if (inLoadedSet)
             {
@@ -722,6 +723,16 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
                 // Unknown id (e.g. utility alias) — remap to first loaded canonical id.
                 reqLogger.LogInformation("[model] unknown '{Requested}' → fallback '{Fallback}'", requestedModel, fallbackCanonical);
                 jsonBody["model"] = fallbackCanonical;
+                bodyModified = true;
+            }
+
+            if (isStreaming && GenAiUsageTelemetry.EnsureStreamUsageRequested(jsonBody))
+            {
+                bodyModified = true;
+            }
+
+            if (bodyModified)
+            {
                 bodyText = jsonBody.ToJsonString();
             }
         }
@@ -773,6 +784,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
 
     // STEP 4: Relay the response — rewrite SSE chunks or return full JSON.
     response.StatusCode = (int)fwdResponse.StatusCode;
+    GenAiUsageRecord? usage = null;
 
     if (isStreaming)
     {
@@ -821,6 +833,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             {
                 var node = JsonNode.Parse(json) as JsonObject;
                 if (node is null) continue;
+                usage ??= GenAiUsageTelemetry.TryExtractUsageFromResponseObject(node);
 
                 // Fix model: use the alias the client requested, not the canonical SDK id.
                 node["model"] = requestedModel;
@@ -859,6 +872,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
             }
             catch (JsonException)
             {
+                usage ??= GenAiUsageTelemetry.TryExtractUsageFromSseDataLine(line);
                 // Unparseable line — forward as-is (safe fallback).
                 await response.Body.WriteAsync(enc.GetBytes($"{line}\n\n"));
                 await response.Body.FlushAsync();
@@ -875,6 +889,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     {
         response.ContentType = "application/json; charset=utf-8";
         var rawJson = await fwdResponse.Content.ReadAsStringAsync();
+        usage = GenAiUsageTelemetry.ExtractNonStreamingUsage(rawJson);
         // Fix model name in non-streaming response too.
         try
         {
@@ -886,7 +901,13 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request, HttpResponse res
     }
 
     llmSw.Stop();
-    LlmActivity.SetResult(llmSpan, llmSw.ElapsedMilliseconds);
+    LlmActivity.SetResult(
+        llmSpan,
+        llmSw.ElapsedMilliseconds,
+        inputTokens: usage?.InputTokens,
+        outputTokens: usage?.OutputTokens,
+        totalTokens: usage?.TotalTokens,
+        responseModel: usage?.ResponseModel);
 });
 
 // ---------------------------------------------------------------------------
